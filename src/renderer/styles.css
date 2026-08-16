@@ -374,6 +374,43 @@ details[open] > summary { color: var(--accent); }
 .gap-below { margin-bottom: 12px; }
 #props-hash { height: auto; max-height: 120px; display: none; }
 
+/* ------------------------------------------------------ správce relací */
+.sites-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 12px; }
+.sites-tree {
+  border: 1px solid var(--line); border-radius: 7px;
+  height: 380px; overflow: auto; padding: 4px; outline: none;
+}
+.sites-tree:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.st-row {
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 8px; border-radius: 5px; cursor: pointer;
+  font-size: 12.5px; white-space: nowrap;
+}
+.st-row:hover { background: var(--row-hover); }
+.st-row.sel { background: var(--sel-bg); }
+.sites-tree:focus-within .st-row.sel { background: var(--accent-2); color: var(--on-accent); }
+.sites-tree:focus-within .st-row.sel .st-sub { color: var(--on-accent); opacity: .8; }
+
+.st-row.folder { font-weight: 600; color: var(--fg); }
+.st-row.site { padding-left: 26px; }
+.st-row.site.top { padding-left: 8px; }
+.st-caret { width: 12px; text-align: center; color: var(--fg-dim); font-size: 10px; flex: none; }
+.st-name { overflow: hidden; text-overflow: ellipsis; }
+.st-sub { color: var(--fg-dim); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; }
+.st-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--site, transparent); }
+.st-count { color: var(--fg-dim); font-weight: 400; font-size: 11px; }
+
+.sites-detail {
+  border: 1px solid var(--line); border-radius: 7px; padding: 10px 12px;
+  font-size: 12.5px; overflow: auto; height: 380px;
+}
+.sites-detail h3 { margin: 0 0 8px; font-size: 13px; text-transform: none; letter-spacing: 0; color: var(--fg); }
+.sites-detail dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; margin: 0; }
+.sites-detail dt { color: var(--fg-dim); }
+.sites-detail dd { margin: 0; overflow-wrap: anywhere; }
+.sites-empty { color: var(--fg-dim); }
+
 /* ------------------------------------------- rozlišení relace barvou */
 /* Proužek na záložce a nad serverovým panelem. Barvu nese atribut, takže
    se dá přidat další, aniž by se sahalo do skriptu. */
@@ -393,6 +430,8 @@ details[open] > summary { color: var(--accent); }
   color: var(--site, var(--fg-dim)); font-size: 11.5px; font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%;
 }
+
+.conflict-pick { font-size: 11.5px; padding: 1px 4px; max-width: 100%; }
 
 /* --------------------------------------------------- kontextové menu */
 .ctxmenu {

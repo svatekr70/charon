@@ -1,6 +1,8 @@
 // Ověření dekodéru WinSCP hesel proti dokumentovanému formátu.
 // Sestavíme uložený řetězec přesně tak, jak ho tvoří WinSCP, a dekódujeme zpět.
-const { decryptPassword, parseWinscpFile } = require('../src/main/winscp-import.js');
+const {
+  decryptPassword, parseWinscpFile, unescapeWinscp, repairMojibake,
+} = require('../src/main/winscp-import.js');
 const fs = require('fs');
 
 const MAGIC = 0xa3;
@@ -99,6 +101,22 @@ console.log(JSON.stringify(r2, null, 2));
 check('reg format', r2.format, 'reg');
 check('reg heslo', r2.sessions[0].password, 'regheslo');
 check('reg port (0x232a=9002)', r2.sessions[0].port, 9002);
+
+// ============ diakritika v názvech
+// WinSCP escapuje neanglické znaky jako %XX — jsou to bajty UTF-8, takže se
+// musí posbírat a přečíst najednou. Znak po znaku z „Š" vznikne „Å ".
+check('escapovaná diakritika se přečte celá',
+  unescapeWinscp('%C5%A0%C3%A1rka Dvorsk%C3%A1'), 'Šárka Dvorská');
+check('značka pořadí bajtů se zahodí', unescapeWinscp('%EF%BB%BFPraha'), 'Praha');
+check('text bez escapování projde beze změny', unescapeWinscp('Ollero'), 'Ollero');
+check('escapované ASCII taky', unescapeWinscp('a%2Db'), 'a-b');
+
+// ============ náprava už uložených názvů
+check('rozsypaný název se opraví', repairMojibake('ï»¿BlaÅ¾o'), 'Blažo');
+check('a zdravý zůstane', repairMojibake('Testovací'), 'Testovací');
+check('anglický taky', repairMojibake('EverFLOW'), 'EverFLOW');
+check('prázdný vstup nespadne', repairMojibake(''), '');
+check('undefined taky ne', repairMojibake(undefined), undefined);
 
 console.log(`\n${pass} prošlo, ${fail} selhalo`);
 process.exit(fail ? 1 : 0);

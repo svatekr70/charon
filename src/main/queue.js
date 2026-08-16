@@ -151,6 +151,9 @@ class TransferQueue extends EventEmitter {
       conflictResolved: Boolean(j.conflictResolved),
       // Nastaví se u přesunu: 'local' nebo 'remote' podle toho, odkud se bere.
       moveFrom: j.moveFrom || null,
+      // Pozastaveno ručně? Takovou položku nerozeběhne ani společné
+      // „Pokračovat".
+      held: false,
       speedLimit: Math.max(0, Math.floor(j.speedLimit) || 0),
       limiter: null,
       // Cesta rozepsaného souboru, dokud přenos běží.
@@ -189,10 +192,75 @@ class TransferQueue extends EventEmitter {
   resume() {
     this.paused = false;
     for (const it of this.items) {
-      if (it.status === 'paused') it.status = 'pending';
+      // Položku, kterou uživatel pozastavil ručně, nechává společné
+      // „Pokračovat" na pokoji — jinak by se rozeběhla přesně ta jedna,
+      // které se chtěl vyhnout.
+      if (it.status === 'paused' && !it.held) it.status = 'pending';
     }
     this._emitUpdate(true);
     this._kick();
+  }
+
+  /**
+   * Pozastaví jednu položku, aniž by stála celá fronta.
+   *
+   * Běžící přenos se přeruší; rozepsaný soubor zůstává, takže se na něj dá
+   * navázat. Ostatní pracovníci jedou dál.
+   */
+  holdItem(id) {
+    const it = this.items.find((x) => x.id === id);
+    if (!it || !['pending', 'active', 'paused'].includes(it.status)) return;
+    it.held = true;
+    if (it.status === 'active') {
+      const token = this.active.get(id);
+      if (token) token.abort('pause');
+    } else {
+      it.status = 'paused';
+    }
+    this._emitUpdate(true);
+  }
+
+  /** Vrátí ručně pozastavenou položku zpátky do hry. */
+  releaseItem(id) {
+    const it = this.items.find((x) => x.id === id);
+    if (!it) return;
+    it.held = false;
+    if (it.status === 'paused' && !this.paused) it.status = 'pending';
+    this._emitUpdate(true);
+    this._kick();
+  }
+
+  /**
+   * Přesune čekající položku ve frontě.
+   *
+   * Řadí se jen mezi čekajícími — běžící přenos přeskočit nejde a hotové
+   * položky pořadí nezajímá. `to` je 'up', 'down' nebo 'top'.
+   */
+  moveItem(id, to) {
+    const cekajici = this.items
+      .map((it, i) => ({ it, i }))
+      .filter((x) => x.it.status === 'pending');
+    const kde = cekajici.findIndex((x) => x.it.id === id);
+    if (kde === -1) return false;
+
+    let cil;
+    if (to === 'top') cil = 0;
+    else if (to === 'up') cil = kde - 1;
+    else if (to === 'down') cil = kde + 1;
+    else return false;
+    if (cil < 0 || cil >= cekajici.length || cil === kde) return false;
+
+    // Prohazujeme pozice v poli, takže nečekající položky zůstanou, kde byly.
+    if (to === 'top') {
+      const [vyjmuta] = this.items.splice(cekajici[kde].i, 1);
+      this.items.splice(cekajici[0].i, 0, vyjmuta);
+    } else {
+      const a = cekajici[kde].i;
+      const b = cekajici[cil].i;
+      [this.items[a], this.items[b]] = [this.items[b], this.items[a]];
+    }
+    this._emitUpdate(true);
+    return true;
   }
 
   retry(id) {

@@ -74,6 +74,7 @@ Object.defineProperty(state, 'connected', {
 const DEFAULT_SETTINGS = {
   editor: '', doubleClick: 'edit', typeAhead: true, colOwner: false, colGroup: false,
   transferMask: '', maxConcurrent: 3, speedLimitKb: 0, commands: [], workspaces: [],
+  collapsedFolders: [],
   cacheListings: true,
   theme: 'system',
   uploadPerms: 'keep', uploadFileMode: '644', uploadDirMode: '755',
@@ -1746,6 +1747,15 @@ document.addEventListener('keydown', async (ev) => {
 
 /* ---------------------------------------------------- relace a připojení */
 
+/** Popisek tlačítka v liště podle vybrané relace. */
+function renderSiteButton() {
+  const s = state.sites.find((x) => x.id === $('#site-select').value);
+  $('#btn-sites-label').textContent = s
+    ? `${s.folder ? `${s.folder} / ` : ''}${s.name}`
+    : '— vyberte relaci —';
+  $('#btn-sites').title = s ? `${s.username ? `${s.username}@` : ''}${s.host}:${s.port}` : 'Relace (⌘K)';
+}
+
 async function refreshSites(selectId) {
   state.sites = await call(window.api.sites.list()) || [];
   const sel = $('#site-select');
@@ -1768,7 +1778,236 @@ async function refreshSites(selectId) {
     }
   }
   if (current) sel.value = current;
+  renderSiteButton();
+  if (sitesDlg.open) renderSitesTree();
 }
+
+/* ------------------------------------------------------ správce relací */
+
+/**
+ * Seznam relací jako strom se složkami.
+ *
+ * Selectbox stačil na pět relací; u sedmdesáti ve dvaceti složkách se v něm
+ * nedá nic najít. Strom drží složky pohromadě, hledání zúží seznam na to,
+ * co se hodí, a detail vpravo ukáže, kam se to vlastně připojuje — než se
+ * klikne na Připojit, ne až potom.
+ */
+const sitesDlg = $('#dlg-sites');
+const sitesUi = { query: '', selected: null, collapsed: new Set(), rows: [] };
+
+function openSites() {
+  sitesUi.query = '';
+  $('#sites-search').value = '';
+  sitesUi.selected = $('#site-select').value || null;
+  sitesUi.collapsed = new Set(state.settings.collapsedFolders || []);
+  renderSitesTree();
+  sitesDlg.showModal();
+  $('#sites-search').focus();
+}
+
+/** Relace rozdělené do složek, seřazené a případně profiltrované hledáním. */
+function siteTreeData() {
+  const q = sitesUi.query.trim().toLowerCase();
+  const sedi = (s) => !q || [s.name, s.host, s.username, s.folder, s.note]
+    .some((v) => String(v || '').toLowerCase().includes(q));
+
+  const slozky = new Map();
+  for (const s of state.sites) {
+    if (!sedi(s)) continue;
+    const key = s.folder || '';
+    if (!slozky.has(key)) slozky.set(key, []);
+    slozky.get(key).push(s);
+  }
+  for (const list of slozky.values()) list.sort((a, b) => a.name.localeCompare(b.name, 'cs'));
+
+  // Relace bez složky patří nahoru, zbytek podle abecedy.
+  return [...slozky.entries()].sort((a, b) => {
+    if (!a[0]) return -1;
+    if (!b[0]) return 1;
+    return a[0].localeCompare(b[0], 'cs');
+  });
+}
+
+function renderSitesTree() {
+  const box = $('#sites-tree');
+  const data = siteTreeData();
+  const q = sitesUi.query.trim();
+  sitesUi.rows = [];
+
+  const frag = document.createDocumentFragment();
+  for (const [folder, list] of data) {
+    // Při hledání složky rozbalujeme, jinak by výsledky zůstaly schované.
+    const sbaleno = folder && !q && sitesUi.collapsed.has(folder);
+
+    if (folder) {
+      const row = document.createElement('div');
+      row.className = 'st-row folder';
+      row.innerHTML = '<span class="st-caret"></span><span class="st-name"></span><span class="st-count"></span>';
+      row.children[0].textContent = sbaleno ? '▶' : '▼';
+      row.children[1].textContent = folder;
+      row.children[2].textContent = `${list.length}`;
+      row.addEventListener('click', () => toggleFolder(folder));
+      frag.appendChild(row);
+      sitesUi.rows.push({ kind: 'folder', folder });
+    }
+
+    if (sbaleno) continue;
+    for (const s of list) {
+      const row = document.createElement('div');
+      row.className = `st-row site${folder ? '' : ' top'}${s.id === sitesUi.selected ? ' sel' : ''}`;
+      row.dataset.id = s.id;
+      if (s.color) row.dataset.color = s.color;
+      row.innerHTML = '<span class="st-dot"></span><span class="st-name"></span><span class="st-sub"></span>';
+      row.children[1].textContent = s.name;
+      row.children[2].textContent = `${s.username ? `${s.username}@` : ''}${s.host}`;
+      row.title = `${s.protocol.toUpperCase()} · ${s.username ? `${s.username}@` : ''}${s.host}:${s.port}`
+        + (s.note ? `\n${s.note}` : '');
+      row.addEventListener('click', () => selectSite(s.id));
+      row.addEventListener('dblclick', () => connectFromManager());
+      frag.appendChild(row);
+      sitesUi.rows.push({ kind: 'site', id: s.id });
+    }
+  }
+
+  if (!sitesUi.rows.length) {
+    frag.appendChild(Object.assign(document.createElement('p'), {
+      className: 'cmd-empty',
+      textContent: state.sites.length ? 'Hledání nic nenašlo.' : 'Zatím žádné relace.',
+    }));
+  }
+  box.replaceChildren(frag);
+  const vybrana = $('#sites-tree .st-row.sel');
+  if (vybrana) vybrana.scrollIntoView({ block: 'nearest' });
+  renderSiteDetail();
+}
+
+async function toggleFolder(folder) {
+  if (sitesUi.collapsed.has(folder)) sitesUi.collapsed.delete(folder);
+  else sitesUi.collapsed.add(folder);
+  renderSitesTree();
+  // Sbalené složky si pamatujeme; u dvaceti složek je otravné je pokaždé zavírat.
+  const saved = await call(window.api.settings.set({ collapsedFolders: [...sitesUi.collapsed] }), { silent: true });
+  if (saved) state.settings = { ...state.settings, collapsedFolders: saved.collapsedFolders };
+}
+
+/**
+ * Vybere relaci ve stromu.
+ *
+ * Zvýraznění se přebarvuje na místě, ne překreslením celého stromu — druhé
+ * kliknutí by jinak dopadlo na nově vyrobený řádek a dvojklik by se
+ * neuskutečnil. Přesně tahle chyba se dřív projevila v panelech.
+ */
+function selectSite(id, { scroll = false } = {}) {
+  sitesUi.selected = id;
+  for (const row of $$('#sites-tree .st-row.site')) {
+    row.classList.toggle('sel', row.dataset.id === id);
+  }
+  if (scroll) {
+    const el = $('#sites-tree .st-row.sel');
+    if (el) el.scrollIntoView({ block: 'nearest' });
+  }
+  renderSiteDetail();
+}
+
+function renderSiteDetail() {
+  const box = $('#sites-detail');
+  const s = state.sites.find((x) => x.id === sitesUi.selected);
+  const maBarvu = s && s.color;
+  for (const b of ['#sites-connect', '#sites-edit', '#sites-del', '#sites-dup']) $(b).disabled = !s;
+
+  if (!s) {
+    box.replaceChildren(Object.assign(document.createElement('p'), {
+      className: 'sites-empty', textContent: 'Vyberte relaci vlevo.',
+    }));
+    return;
+  }
+
+  const dl = document.createElement('dl');
+  const radek = (k, v) => {
+    if (!v) return;
+    dl.appendChild(Object.assign(document.createElement('dt'), { textContent: k }));
+    dl.appendChild(Object.assign(document.createElement('dd'), { textContent: v }));
+  };
+  radek('Protokol', s.protocol.toUpperCase() + (s.ftps && s.ftps !== 'none' ? ` (${s.ftps})` : ''));
+  radek('Server', `${s.host}:${s.port}`);
+  radek('Uživatel', s.username || '(nezadán)');
+  radek('Přihlášení', s.hasPassword ? 'heslo uložené' : s.privateKeyPath ? `klíč ${s.privateKeyPath}` : 'zeptá se');
+  radek('Složka', s.folder);
+  radek('Vzdálený adresář', s.remoteDir);
+  radek('Brána', s.tunnelHost ? `${s.tunnelUsername ? `${s.tunnelUsername}@` : ''}${s.tunnelHost}:${s.tunnelPort}` : '');
+  radek('Proxy', s.proxyType && s.proxyType !== 'none' ? `${s.proxyType} ${s.proxyHost}:${s.proxyPort}` : '');
+  radek('Koš na serveru', s.useRecycleBin ? 'zapnutý' : 'vypnutý');
+  radek('Poznámka', s.note);
+
+  const nadpis = document.createElement('h3');
+  if (maBarvu) nadpis.dataset.color = s.color;
+  nadpis.textContent = s.name;
+  if (maBarvu) nadpis.style.color = 'var(--site)';
+  box.replaceChildren(nadpis, dl);
+}
+
+/** Pohyb v seznamu z klávesnice — psát a šipkou vybrat je nejrychlejší cesta. */
+function moveSiteSelection(delta) {
+  const sites = sitesUi.rows.filter((r) => r.kind === 'site');
+  if (!sites.length) return;
+  const kde = sites.findIndex((r) => r.id === sitesUi.selected);
+  const dalsi = kde === -1
+    ? (delta > 0 ? 0 : sites.length - 1)
+    : Math.min(sites.length - 1, Math.max(0, kde + delta));
+  selectSite(sites[dalsi].id, { scroll: true });
+}
+
+async function connectFromManager() {
+  if (!sitesUi.selected) return;
+  $('#site-select').value = sitesUi.selected;
+  renderSiteButton();
+  sitesDlg.close();
+  await connectSelected();
+}
+
+$('#btn-sites').addEventListener('click', openSites);
+$('#sites-close').addEventListener('click', () => sitesDlg.close());
+$('#sites-connect').addEventListener('click', connectFromManager);
+$('#sites-search').addEventListener('input', () => {
+  sitesUi.query = $('#sites-search').value;
+  renderSitesTree();
+});
+$('#sites-search').addEventListener('keydown', (ev) => {
+  if (ev.key === 'ArrowDown') { ev.preventDefault(); moveSiteSelection(1); }
+  else if (ev.key === 'ArrowUp') { ev.preventDefault(); moveSiteSelection(-1); }
+  else if (ev.key === 'Enter') { ev.preventDefault(); connectFromManager(); }
+});
+$('#sites-tree').addEventListener('keydown', (ev) => {
+  if (ev.key === 'ArrowDown') { ev.preventDefault(); moveSiteSelection(1); }
+  else if (ev.key === 'ArrowUp') { ev.preventDefault(); moveSiteSelection(-1); }
+  else if (ev.key === 'Enter') { ev.preventDefault(); connectFromManager(); }
+});
+
+$('#sites-new').addEventListener('click', () => {
+  sitesDlg.close();
+  $('#btn-new-site').click();
+});
+$('#sites-edit').addEventListener('click', () => {
+  $('#site-select').value = sitesUi.selected;
+  sitesDlg.close();
+  $('#btn-edit-site').click();
+});
+$('#sites-del').addEventListener('click', async () => {
+  $('#site-select').value = sitesUi.selected;
+  await deleteSelectedSite();
+  renderSitesTree();
+});
+$('#sites-dup').addEventListener('click', async () => {
+  const s = state.sites.find((x) => x.id === sitesUi.selected);
+  if (!s) return;
+  // Kopii dělá hlavní proces, aby se přenesla i hesla — ta se do okna nikdy
+  // neposílají a bez nich by kopie byla k ničemu.
+  const id = await call(window.api.sites.duplicate(s.id));
+  if (!id) return;
+  await refreshSites();
+  selectSite(id);
+  setLog('ok', `Vytvořena kopie relace ${s.name}`);
+});
 
 async function refreshTrashInfo() {
   // Nekontrolujeme state.connected — ten se nastavuje až z události „conn",
@@ -2009,6 +2248,8 @@ function openSiteDialog(site) {
   f.useRecycleBin.checked = site ? site.useRecycleBin !== false : true;
   f.recycleBinPath.value = site?.recycleBinPath || '';
   f.recycleBinDays.value = site?.recycleBinDays || '';
+  f.encoding.value = site?.encoding || 'auto';
+  f.timeShiftMinutes.value = site?.timeShiftMinutes || '';
   f.color.value = site?.color || '';
   f.note.value = site?.note || '';
   f.tunnelHost.value = site?.tunnelHost || '';
@@ -2059,6 +2300,8 @@ siteDlg.addEventListener('close', async () => {
     useRecycleBin: f.useRecycleBin.checked,
     recycleBinPath: f.recycleBinPath.value.trim(),
     recycleBinDays: Number(f.recycleBinDays.value) || 0,
+    encoding: f.encoding.value,
+    timeShiftMinutes: Number(f.timeShiftMinutes.value) || 0,
     color: f.color.value,
     note: f.note.value.trim(),
     tunnelHost: f.tunnelHost.value.trim(),
@@ -2260,13 +2503,16 @@ function openSync() {
     $('#sync-criteria').value = profil.criteria || $('#sync-criteria').value;
     $('#sync-mask').value = profil.mask || '';
     $('#sync-delete').checked = Boolean(profil.deleteExtra);
+    $('#sync-mode').value = profil.mode || 'diff';
+    $('#sync-existing').checked = Boolean(profil.onlyExisting);
   } else if (!$('#sync-mask').value) {
     $('#sync-mask').value = state.settings.transferMask || '';
   }
   const site = activeSite();
   $('#sync-note').textContent = site
-    ? `Směr, kritérium, maska i mazání se pamatují u relace ${site.name}.`
+    ? `Nastavení se pamatuje u relace ${site.name}; cesty ne, ty berou panely.`
     : 'Jednorázové připojení — nastavení se nikam neuloží.';
+  $('#sync-conflict-bar').hidden = true;
   $('#sync-result').replaceChildren(Object.assign(document.createElement('p'), { className: 'muted', textContent: 'Zatím neporovnáno.' }));
   $('#sync-apply').disabled = true;
   syncDlg.showModal();
@@ -2278,7 +2524,15 @@ const ACTION_TAG = {
   mkdirRemote: ['mk', '+ složka (server)'], mkdirLocal: ['mk', '+ složka (lokál)'],
   deleteRemote: ['del', '× smazat server'], deleteLocal: ['del', '× do koše'],
   rmdirRemote: ['del', '× složka server'], conflict: ['conflict', '! konflikt'],
+  touchRemote: ['mk', '⏱ čas na serveru'], touchLocal: ['mk', '⏱ čas lokálně'],
 };
+
+/** Jak se konflikt vyřeší; vybírá se u každého řádku zvlášť. */
+const CONFLICT_CHOICES = [
+  ['skip', 'přeskočit'],
+  ['upload', '↑ nahrát lokální'],
+  ['download', '↓ stáhnout ze serveru'],
+];
 
 $('#sync-compare').addEventListener('click', async () => {
   const btn = $('#sync-compare');
@@ -2294,6 +2548,8 @@ $('#sync-compare').addEventListener('click', async () => {
       criteria: $('#sync-criteria').value,
       mask: $('#sync-mask').value.trim(),
       deleteExtra: $('#sync-delete').checked,
+      mode: $('#sync-mode').value,
+      onlyExisting: $('#sync-existing').checked,
     };
     await call(window.api.sites.saveSync(site.id, sync), { silent: true });
     site.sync = sync;   // ať to platí i bez načtení seznamu relací znovu
@@ -2305,6 +2561,8 @@ $('#sync-compare').addEventListener('click', async () => {
     criteria: $('#sync-criteria').value,
     deleteExtra: $('#sync-delete').checked,
     mask: $('#sync-mask').value.trim(),
+    mode: $('#sync-mode').value,
+    onlyExisting: $('#sync-existing').checked,
   }));
   btn.disabled = false;
   btn.textContent = 'Porovnat';
@@ -2357,26 +2615,73 @@ $('#sync-compare').addEventListener('click', async () => {
     el.appendChild(sizeEl);
 
     const whyEl = document.createElement('span');
-    whyEl.textContent = a.why || '';
+    if (a.action === 'conflict') {
+      // U konfliktu se nedá rozhodnout za uživatele — obě strany se liší
+      // a čas nenapoví. Nabídneme volbu rovnou v řádku.
+      const sel = document.createElement('select');
+      sel.className = 'conflict-pick';
+      sel.dataset.index = String(i);
+      for (const [value, label] of CONFLICT_CHOICES) {
+        sel.appendChild(Object.assign(document.createElement('option'), { value, textContent: label }));
+      }
+      sel.value = a.resolve || 'skip';
+      sel.title = `${a.why}\nlokálně ${fmtSize(a.localSize)} · ${fmtDate(a.localMtime) || '?'}`
+        + `\nna serveru ${fmtSize(a.remoteSize)} · ${fmtDate(a.remoteMtime) || '?'}`;
+      sel.addEventListener('change', () => {
+        state.syncActions[i].resolve = sel.value;
+        cb.checked = sel.value !== 'skip';
+      });
+      whyEl.appendChild(sel);
+    } else {
+      whyEl.textContent = a.why || '';
+    }
     el.appendChild(whyEl);
     return el;
   });
 
   box.replaceChildren(head, ...rows);
+
+  // Lišta na hromadné rozhodnutí — u dvaceti konfliktů by klikání po jednom
+  // bylo trápení.
+  const konflikty = res.actions.filter((a) => a.action === 'conflict').length;
+  $('#sync-conflict-bar').hidden = konflikty === 0;
+  $('#sync-conflict-count').textContent = konflikty
+    ? `${konflikty} ${plural(konflikty, 'konflikt', 'konflikty', 'konfliktů')} — rozhodněte, která strana vyhraje:`
+    : '';
+
   $('#sync-apply').disabled = false;
 });
+
+/** Vyřeší všechny konflikty naráz jedním směrem. */
+function resolveAllConflicts(volba) {
+  for (const sel of $$('#sync-result .conflict-pick')) {
+    sel.value = volba;
+    sel.dispatchEvent(new Event('change'));
+  }
+}
+$('#sync-all-local').addEventListener('click', () => resolveAllConflicts('upload'));
+$('#sync-all-remote').addEventListener('click', () => resolveAllConflicts('download'));
 
 $('#sync-cancel').addEventListener('click', () => syncDlg.close());
 $('#sync-apply').addEventListener('click', async () => {
   const picked = $$('#sync-result input[type=checkbox]:checked')
-    .map((cb) => state.syncActions[Number(cb.dataset.index)]);
+    .map((cb) => state.syncActions[Number(cb.dataset.index)])
+    // Rozhodnutý konflikt je od téhle chvíle obyčejný přenos; nerozhodnutý
+    // se nedělá, i kdyby byl zaškrtnutý.
+    .map((a) => (a.action === 'conflict' && a.resolve && a.resolve !== 'skip'
+      ? { ...a, action: a.resolve, size: a.resolve === 'upload' ? a.localSize : a.remoteSize }
+      : a))
+    .filter((a) => a.action !== 'conflict');
   if (!picked.length) return;
   const destructive = picked.filter((a) => a.action.startsWith('delete') || a.action === 'rmdirRemote');
   if (destructive.length && !window.confirm(`Součástí je ${destructive.length} mazání. Pokračovat?`)) return;
 
   const r = await call(window.api.sync.apply(sid(), picked));
   if (r) {
-    setLog('ok', `Synchronizace: ${r.transfers} ${plural(r.transfers, 'přenos', 'přenosy', 'přenosů')} zařazeno`);
+    const casy = r.touched ? `, srovnáno ${r.touched} ${plural(r.touched, 'razítko', 'razítka', 'razítek')} času` : '';
+    setLog(r.failed ? 'warn' : 'ok',
+      `Synchronizace: ${r.transfers} ${plural(r.transfers, 'přenos', 'přenosy', 'přenosů')} zařazeno${casy}`
+      + (r.failed ? `, ${r.failed} × se čas srovnat nepodařilo` : ''));
     syncDlg.close();
     await loadPane('remote', state.remote.path);
     await loadPane('local', state.local.path);
@@ -2420,7 +2725,8 @@ function renderQueue(snap) {
     rate.textContent = it.status === 'error' ? it.error
       : it.status === 'active' ? fmtSpeed(it.speed)
         : ({
-          done: 'hotovo', paused: 'pauza', canceled: 'zrušeno', pending: 'čeká',
+          done: 'hotovo', paused: it.held ? 'pozastaveno ručně' : 'pauza',
+          canceled: 'zrušeno', pending: 'čeká',
           skipped: it.note ? `přeskočeno — ${it.note}` : 'přeskočeno',
         })[it.status] || '';
     rate.title = it.error || '';
@@ -2429,7 +2735,23 @@ function renderQueue(snap) {
     el.addEventListener('contextmenu', (ev) => {
       ev.preventDefault();
       const kb = it.speedLimit ? Math.round(it.speedLimit / 1024) : 0;
+      const ceka = it.status === 'pending';
+      const bezi = it.status === 'active';
       openMenu([
+        // Řadit má smysl jen u čekajících — běžící přenos přeskočit nejde.
+        ...(ceka ? [
+          { label: '⤒ Provést hned', fn: () => window.api.queue.move(sid(), it.id, 'top') },
+          { label: '↑ Posunout nahoru', fn: () => window.api.queue.move(sid(), it.id, 'up') },
+          { label: '↓ Posunout dolů', fn: () => window.api.queue.move(sid(), it.id, 'down') },
+          null,
+        ] : []),
+        ...(ceka || bezi
+          ? [{ label: '❙❙ Pozastavit tuhle položku', fn: () => window.api.queue.hold(sid(), it.id) }]
+          : []),
+        ...(it.status === 'paused'
+          ? [{ label: '▶ Pokračovat v této položce', fn: () => window.api.queue.release(sid(), it.id) }]
+          : []),
+        null,
         {
           label: kb ? `Změnit limit (nyní ${kb} kB/s)…` : 'Omezit rychlost této položky…',
           fn: () => askItemSpeed(it),
@@ -2591,14 +2913,17 @@ $('#btn-edit-site').addEventListener('click', () => {
   const s = state.sites.find((x) => x.id === $('#site-select').value);
   if (s) openSiteDialog(s); else setLog('error', 'Nejdřív vyberte relaci');
 });
-$('#btn-del-site').addEventListener('click', async () => {
+async function deleteSelectedSite() {
   const s = state.sites.find((x) => x.id === $('#site-select').value);
   if (!s) return setLog('error', 'Nejdřív vyberte relaci');
   if (!window.confirm(`Smazat relaci „${s.name}"?`)) return undefined;
   await call(window.api.sites.remove(s.id));
+  if (sitesUi.selected === s.id) sitesUi.selected = null;
+  $('#site-select').value = '';
   await refreshSites();
   return undefined;
-});
+}
+$('#btn-del-site').addEventListener('click', deleteSelectedSite);
 $('#btn-refresh').addEventListener('click', async () => {
   // Ruční obnovení jde vždycky na server, uložený výpis se přeskočí.
   await loadPane('local', state.local.path);
@@ -2663,6 +2988,7 @@ window.api.onMenu(async (cmd) => {
   else if (cmd === 'console') openConsole();
   else if (cmd === 'commands') openCommands();
   else if (cmd === 'workspaces') openWorkspaces();
+  else if (cmd === 'sites') openSites();
   else if (cmd === 'refresh') $('#btn-refresh').click();
 });
 

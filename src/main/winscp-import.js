@@ -63,10 +63,48 @@ function decryptPassword(stored, username, hostname) {
   return out;
 }
 
-/** WinSCP escapuje v názvech relací i v hodnotách znaky jako %XX. */
+/**
+ * WinSCP escapuje v názvech relací i v hodnotách znaky jako %XX.
+ *
+ * Zakódované bajty je nutné nejdřív posbírat a teprve pak přečíst jako UTF-8.
+ * Znak po znaku to nejde: `Š` je v UTF-8 dvojice bajtů `%C5%A0` a kdyby se
+ * každý přeložil zvlášť, vznikne z něj „Å " — přesně ta změť, kterou člověk
+ * pozná až v seznamu relací.
+ */
 function unescapeWinscp(value) {
   if (typeof value !== 'string' || !value.includes('%')) return value;
-  return value.replace(/%([0-9A-Fa-f]{2})/g, (m, hex) => String.fromCharCode(parseInt(hex, 16)));
+
+  const bytes = [];
+  for (let i = 0; i < value.length; i += 1) {
+    const hex = /^%([0-9A-Fa-f]{2})/.exec(value.slice(i, i + 3));
+    if (hex) {
+      bytes.push(parseInt(hex[1], 16));
+      i += 2;
+    } else {
+      bytes.push(...Buffer.from(value[i], 'utf8'));
+    }
+  }
+  // Export z Windows umí začínat značkou pořadí bajtů; v názvu nemá co dělat.
+  return Buffer.from(bytes).toString('utf8').replace(/^\uFEFF/, '');
+}
+
+/**
+ * Opraví název, který už je uložený rozsypaný.
+ *
+ * Dřívější verze importu četla escapované bajty po jednom, takže se z „Šárka"
+ * stalo „Å ÃƒÂ¡rka". Vrací opravený text, nebo původní, když si opravou nejsme
+ * jistí — přejmenovat něco, co bylo v pořádku, by bylo horší.
+ */
+function repairMojibake(text) {
+  if (typeof text !== 'string' || !text) return text;
+  const bom = text.startsWith('\uFEFF') || text.startsWith('ï»¿');
+  // Typické stopy UTF-8 přečteného po bajtech.
+  if (!bom && !/[ÃÅÄÂ][\u0080-\u00BF\u2020-\u203A\s]/.test(text)) return text;
+
+  const zpet = Buffer.from(text.replace(/^\uFEFF/, ''), 'latin1').toString('utf8');
+  // Když v převodu vznikl náhradní znak, nebyla to změť a necháme to být.
+  if (zpet.includes('\uFFFD')) return text.replace(/^(\uFEFF|ï»¿)/, '');
+  return zpet.replace(/^(\uFEFF|ï»¿)/, '');
 }
 
 // ---------------------------------------------------------------- parsování
@@ -196,4 +234,4 @@ function parseWinscpFile(filePath) {
   };
 }
 
-module.exports = { parseWinscpFile, decryptPassword, unescapeWinscp };
+module.exports = { parseWinscpFile, decryptPassword, unescapeWinscp, repairMojibake };

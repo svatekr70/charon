@@ -70,6 +70,13 @@ async function walkRemote(adapter, root, { depth = 0, base = '', mask = null, st
  * @param {object} opts
  * @param {'toRemote'|'toLocal'|'both'} opts.direction
  * @param {'time'|'size'|'timeSize'} opts.criteria
+ * @param {'diff'|'newer'|'timestamps'} opts.mode  co se má přenášet:
+ *   `diff` přenese vše, co se liší (cíl bude přesnou kopií zdroje),
+ *   `newer` jen to, co je na zdroji novější (nepřepíše čerstvější práci
+ *   na druhé straně), `timestamps` nepřenáší nic a jen srovná časy u souborů,
+ *   které se liší pouze jimi.
+ * @param {boolean} opts.onlyExisting nezakládat nic nového; aktualizovat jen to,
+ *   co má protějšek na obou stranách
  * @param {boolean} opts.deleteExtra  smazat, co na druhé straně nemá protějšek
  * @param {number} opts.toleranceMs   FTP hlásí čas často jen na minuty
  * @param {string} opts.mask          maska souborů, prázdná = bez omezení
@@ -78,6 +85,8 @@ async function compare(adapter, localRoot, remoteRoot, opts = {}) {
   const {
     direction = 'toRemote',
     criteria = 'timeSize',
+    mode = 'diff',
+    onlyExisting = false,
     deleteExtra = false,
     mask: maskText = '',
     toleranceMs = adapter.protocol === 'ftp' ? 61000 : 2000,
@@ -110,50 +119,94 @@ async function compare(adapter, localRoot, remoteRoot, opts = {}) {
   const wantsUp = direction === 'toRemote' || direction === 'both';
   const wantsDown = direction === 'toLocal' || direction === 'both';
 
+  // Režim, který jen srovnává časy, nesmí nic vytvořit ani smazat — a stejně
+  // tak režim, který má jen aktualizovat, co na obou stranách už je.
+  const jenCasy = mode === 'timestamps';
+  const zaklada = !jenCasy && !onlyExisting;
+
   // Adresáře nejdřív, aby při aplikaci existovaly dřív než soubory v nich.
-  for (const [rel, l] of local) {
-    if (l.type !== 'd' || remote.has(rel)) continue;
-    if (wantsUp) actions.push({ action: 'mkdirRemote', rel, remotePath: rPath(rel), size: 0 });
+  if (zaklada) {
+    for (const [rel, l] of local) {
+      if (l.type !== 'd' || remote.has(rel)) continue;
+      if (wantsUp) actions.push({ action: 'mkdirRemote', rel, remotePath: rPath(rel), size: 0 });
+    }
+    for (const [rel, r] of remote) {
+      if (r.type !== 'd' || local.has(rel)) continue;
+      if (wantsDown) actions.push({ action: 'mkdirLocal', rel, localPath: lPath(rel), size: 0 });
+    }
   }
-  for (const [rel, r] of remote) {
-    if (r.type !== 'd' || local.has(rel)) continue;
-    if (wantsDown) actions.push({ action: 'mkdirLocal', rel, localPath: lPath(rel), size: 0 });
-  }
+
+  const nahrat = (rel, l, why) => ({ action: 'upload', rel, localPath: lPath(rel), remotePath: rPath(rel), size: l.size, why });
+  const stahnout = (rel, r, why) => ({ action: 'download', rel, localPath: lPath(rel), remotePath: rPath(rel), size: r.size, why });
 
   for (const [rel, l] of local) {
     if (l.type !== 'f') continue;
     const r = remote.get(rel);
     if (!r) {
-      if (wantsUp) {
-        actions.push({ action: 'upload', rel, localPath: lPath(rel), remotePath: rPath(rel), size: l.size, why: 'chybí na serveru' });
-      } else if (wantsDown && deleteExtra) {
+      if (wantsUp && zaklada) {
+        actions.push(nahrat(rel, l, 'chybí na serveru'));
+      } else if (wantsDown && deleteExtra && !jenCasy) {
         actions.push({ action: 'deleteLocal', rel, localPath: lPath(rel), size: l.size, why: 'není na serveru' });
       }
       continue;
     }
     if (r.type !== 'f' || !differs(l, r)) continue;
 
+    // Srovnání času: obsah nechat být, jen dorovnat razítko. Když se liší
+    // i velikost, obsah stejný není a sahat na čas by jen zamaskovalo rozdíl.
+    if (jenCasy) {
+      if (l.size !== r.size) continue;
+      if (wantsUp && (direction !== 'both' || newerLocal(l, r))) {
+        actions.push({ action: 'touchRemote', rel, remotePath: rPath(rel), localPath: lPath(rel), size: 0, mtime: l.mtime, why: 'srovnat čas podle lokálního' });
+      } else if (wantsDown) {
+        actions.push({ action: 'touchLocal', rel, localPath: lPath(rel), remotePath: rPath(rel), size: 0, mtime: r.mtime, why: 'srovnat čas podle serveru' });
+      }
+      continue;
+    }
+
     if (direction === 'both') {
-      if (newerLocal(l, r)) actions.push({ action: 'upload', rel, localPath: lPath(rel), remotePath: rPath(rel), size: l.size, why: 'lokální je novější' });
-      else if (newerRemote(l, r)) actions.push({ action: 'download', rel, localPath: lPath(rel), remotePath: rPath(rel), size: r.size, why: 'vzdálený je novější' });
-      else actions.push({ action: 'conflict', rel, localPath: lPath(rel), remotePath: rPath(rel), size: l.size, why: 'liší se velikostí, čas je stejný' });
+      if (newerLocal(l, r)) actions.push(nahrat(rel, l, 'lokální je novější'));
+      else if (newerRemote(l, r)) actions.push(stahnout(rel, r, 'vzdálený je novější'));
+      else {
+        actions.push({
+          action: 'conflict', rel, localPath: lPath(rel), remotePath: rPath(rel),
+          size: l.size, why: 'liší se velikostí, čas je stejný',
+          localSize: l.size, remoteSize: r.size, localMtime: l.mtime, remoteMtime: r.mtime,
+        });
+      }
     } else if (wantsUp) {
-      actions.push({ action: 'upload', rel, localPath: lPath(rel), remotePath: rPath(rel), size: l.size, why: describeDiff(l, r) });
+      // Režim „jen novější" nepřepíše čerstvější práci na druhé straně;
+      // co je na cíli novější, se ohlásí jako konflikt, ne že se to ztratí.
+      if (mode === 'newer' && !newerLocal(l, r)) {
+        actions.push({
+          action: 'conflict', rel, localPath: lPath(rel), remotePath: rPath(rel),
+          size: l.size, why: newerRemote(l, r) ? 'na serveru je novější' : 'liší se, čas je stejný',
+          localSize: l.size, remoteSize: r.size, localMtime: l.mtime, remoteMtime: r.mtime,
+        });
+      } else {
+        actions.push(nahrat(rel, l, describeDiff(l, r)));
+      }
+    } else if (mode === 'newer' && !newerRemote(l, r)) {
+      actions.push({
+        action: 'conflict', rel, localPath: lPath(rel), remotePath: rPath(rel),
+        size: r.size, why: newerLocal(l, r) ? 'lokální je novější' : 'liší se, čas je stejný',
+        localSize: l.size, remoteSize: r.size, localMtime: l.mtime, remoteMtime: r.mtime,
+      });
     } else {
-      actions.push({ action: 'download', rel, localPath: lPath(rel), remotePath: rPath(rel), size: r.size, why: describeDiff(r, l) });
+      actions.push(stahnout(rel, r, describeDiff(r, l)));
     }
   }
 
   for (const [rel, r] of remote) {
     if (r.type !== 'f' || local.has(rel)) continue;
-    if (wantsDown) {
-      actions.push({ action: 'download', rel, localPath: lPath(rel), remotePath: rPath(rel), size: r.size, why: 'chybí lokálně' });
-    } else if (wantsUp && deleteExtra) {
+    if (wantsDown && zaklada) {
+      actions.push(stahnout(rel, r, 'chybí lokálně'));
+    } else if (wantsUp && deleteExtra && !jenCasy) {
       actions.push({ action: 'deleteRemote', rel, remotePath: rPath(rel), size: r.size, why: 'není lokálně' });
     }
   }
 
-  if (deleteExtra) {
+  if (deleteExtra && !jenCasy) {
     for (const [rel, r] of remote) {
       if (r.type === 'd' && !local.has(rel) && wantsUp) {
         actions.push({ action: 'rmdirRemote', rel, remotePath: rPath(rel), size: 0, why: 'není lokálně' });
@@ -162,7 +215,8 @@ async function compare(adapter, localRoot, remoteRoot, opts = {}) {
   }
 
   const order = {
-    mkdirLocal: 0, mkdirRemote: 0, upload: 1, download: 1, conflict: 2,
+    mkdirLocal: 0, mkdirRemote: 0, upload: 1, download: 1,
+    touchRemote: 1, touchLocal: 1, conflict: 2,
     deleteLocal: 3, deleteRemote: 3, rmdirRemote: 4,
   };
   actions.sort((a, b) => (order[a.action] - order[b.action]) || a.rel.localeCompare(b.rel, 'cs'));
@@ -173,6 +227,7 @@ async function compare(adapter, localRoot, remoteRoot, opts = {}) {
     remoteCount: [...remote.values()].filter((v) => v.type === 'f').length,
     skipped: stats.skipped,
     toleranceMs,
+    mode,
   };
 }
 

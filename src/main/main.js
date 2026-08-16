@@ -39,6 +39,7 @@ let settings = {
   // Práva nahraných souborů: 'keep' | 'fixed' | 'preserve'.
   uploadPerms: 'keep', uploadFileMode: '644', uploadDirMode: '755',
   cacheListings: true,
+  collapsedFolders: [],
 };
 
 // ---------------------------------------------------------------- pomocné
@@ -425,6 +426,7 @@ function buildMenu() {
         { label: 'Připojit v nové záložce…', accelerator: 'Cmd+O', click: () => send('menu', 'connect') },
         { label: 'Zavřít záložku', accelerator: 'Cmd+W', click: () => send('menu', 'closetab') },
         { label: 'Pracovní plochy…', accelerator: 'Shift+Cmd+O', click: () => send('menu', 'workspaces') },
+        { label: 'Relace…', accelerator: 'Cmd+K', click: () => send('menu', 'sites') },
         { type: 'separator' },
         { label: 'Další záložka', accelerator: 'Ctrl+Tab', click: () => send('menu', 'nexttab') },
         { label: 'Předchozí záložka', accelerator: 'Ctrl+Shift+Tab', click: () => send('menu', 'prevtab') },
@@ -486,6 +488,7 @@ function registerIpc() {
   handle('sites:save', async (site) => sites.upsert(site));
   handle('sites:delete', async (id) => { await sites.remove(id); return true; });
   handle('sites:sync', async ({ id, sync }) => { await sites.setSync(id, sync); return true; });
+  handle('sites:duplicate', async (id) => sites.duplicate(id));
 
   // --- import z WinSCP ---
   handle('winscp:pick', async () => {
@@ -786,6 +789,9 @@ function registerIpc() {
   handle('queue:cancel', async ({ sid, id }) => { sessionOf(sid).queue.cancel(id); return true; });
   handle('queue:cancelAll', async ({ sid }) => { sessionOf(sid).queue.cancelAll(); return true; });
   handle('queue:retry', async ({ sid, id }) => { sessionOf(sid).queue.retry(id); return true; });
+  handle('queue:hold', async ({ sid, id }) => { sessionOf(sid).queue.holdItem(id); return true; });
+  handle('queue:release', async ({ sid, id }) => { sessionOf(sid).queue.releaseItem(id); return true; });
+  handle('queue:move', async ({ sid, id, to }) => sessionOf(sid).queue.moveItem(id, to));
   handle('queue:clear', async ({ sid }) => { sessionOf(sid).queue.clearFinished(); return true; });
 
   /** Vrátí do fronty přenosy, které nedoběhly před zavřením aplikace. */
@@ -864,15 +870,21 @@ function registerIpc() {
   });
 
   // --- synchronizace ---
-  handle('sync:compare', async ({ sid, localDir, remoteDir, direction, criteria, deleteExtra, mask }) => {
+  handle('sync:compare', async ({
+    sid, localDir, remoteDir, direction, criteria, deleteExtra, mask, mode, onlyExisting,
+  }) => {
     const a = browseOf(sid);
-    return compare(a, localDir, remoteDir, { direction, criteria, deleteExtra, mask });
+    return compare(a, localDir, remoteDir, {
+      direction, criteria, deleteExtra, mask, mode, onlyExisting,
+    });
   });
 
   handle('sync:apply', async ({ sid, actions }) => {
     const session = sessionOf(sid);
     const a = session.requireBrowse();
     const jobs = [];
+    let touched = 0;
+    const failed = [];
     for (const act of actions) {
       switch (act.action) {
         case 'mkdirRemote':
@@ -887,13 +899,36 @@ function registerIpc() {
         case 'deleteRemote': await a.removeFile(act.remotePath); break;
         case 'rmdirRemote': await a.removeDir(act.remotePath, true); break;
         case 'deleteLocal': await shell.trashItem(act.localPath); break;
+        // Srovnání času: obsah se nepřenáší, mění se jen razítko. Když to
+        // server neumí, řekne se to — mlčky vynechat by znamenalo, že příští
+        // porovnání ukáže totéž a nikdo nebude vědět proč.
+        case 'touchRemote':
+          try {
+            await a.utimes(act.remotePath, act.mtime / 1000, act.mtime / 1000);
+            touched += 1;
+          } catch (err) {
+            failed.push(`${act.rel}: ${err.message}`);
+          }
+          break;
+        case 'touchLocal':
+          try {
+            await fsp.utimes(act.localPath, new Date(act.mtime), new Date(act.mtime));
+            touched += 1;
+          } catch (err) {
+            failed.push(`${act.rel}: ${err.message}`);
+          }
+          break;
         default: break; // 'conflict' se bez rozhodnutí uživatele nedělá
       }
     }
     session.queue.add(jobs);
     // Zakládání složek při synchronizaci mění server ještě před přenosy.
     session.listCache.clear();
-    return { transfers: jobs.length };
+    if (failed.length) {
+      log('warn', `Čas se nepodařilo srovnat u ${failed.length} ${
+        failed.length === 1 ? 'souboru' : 'souborů'}: ${failed[0]}`);
+    }
+    return { transfers: jobs.length, touched, failed: failed.length };
   });
 
   // --- editace se zpětným nahráním ---

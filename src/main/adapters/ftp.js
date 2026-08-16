@@ -15,7 +15,7 @@ const { makeThrottle } = require('../throttle');
 class FtpAdapter {
   constructor() {
     this.client = new ftp.Client(60000);
-    this.client.ftp.encoding = 'utf8';
+    this.client.ftp.encoding = encodingOf(this._cfg);
     this.connected = false;
     this.protocol = 'ftp';
     this._cfg = null;
@@ -37,6 +37,9 @@ class FtpAdapter {
    */
   async connect(cfg, hooks = {}) {
     this._cfg = cfg;
+    // Kódování názvů souborů. Starší servery UTF-8 neumí a názvy s diakritikou
+    // pak dorazí jako změť; „auto" nechá rozhodnout server podle FEAT.
+    this.client.ftp.encoding = encodingOf(cfg);
     const mode = cfg.ftps === 'implicit' ? 'implicit' : cfg.ftps === 'explicit' ? 'explicit' : 'none';
     const port = Number(cfg.port) || (mode === 'implicit' ? 990 : 21);
 
@@ -58,10 +61,17 @@ class FtpAdapter {
 
     if (mode !== 'none') await this._verifyCertificate(cfg, hooks);
 
+    const latin = encodingOf(cfg) === 'latin1';
+
     // UTF-8 zapínáme před přihlášením kvůli diakritice ve jméně nebo heslu.
-    await this.client.sendIgnoringError('OPTS UTF8 ON');
+    if (!latin) await this.client.sendIgnoringError('OPTS UTF8 ON');
     await this.client.login(cfg.username || 'anonymous', cfg.password || 'anonymous@');
     await this.client.useDefaultSettings();
+
+    // useDefaultSettings pošle „OPTS UTF8 ON" samo od sebe. Když si uživatel
+    // vyžádal latin1, musíme to vzít zpátky — jinak by server posílal názvy
+    // v UTF-8, my je četli jako latin1 a diakritika by se rozsypala.
+    if (latin) await this.client.sendIgnoringError('OPTS UTF8 OFF');
     this.connected = true;
   }
 
@@ -111,6 +121,27 @@ class FtpAdapter {
     return this.client.pwd();
   }
 
+  /**
+   * Posun času serveru v milisekundách.
+   *
+   * Starší FTP servery hlásí v textovém výpisu čas v místní zóně a bez údaje
+   * o tom, v jaké. Porovnávání podle času pak lže o celé hodiny. Ruční korekce
+   * je jediné, co s tím jde dělat.
+   */
+  get timeShiftMs() {
+    return (Number(this._cfg && this._cfg.timeShiftMinutes) || 0) * 60000;
+  }
+
+  /**
+   * Přepočte čas z textového výpisu.
+   *
+   * Schválně jen ten. `MDTM` i `MLSD` vracejí podle RFC 3659 čas v UTC, takže
+   * jsou správně samy o sobě — posunout je by z opravy udělalo chybu.
+   */
+  _shift(ms) {
+    return ms === null || ms === undefined ? ms : ms + this.timeShiftMs;
+  }
+
   async list(remotePath) {
     const raw = await this.client.list(remotePath);
     return raw.map((e) => {
@@ -122,7 +153,8 @@ class FtpAdapter {
         name: e.name,
         type: e.type === 2 ? 'd' : e.type === 3 ? 'l' : 'f',
         size: e.size,
-        mtime: precise ? e.modifiedAt.getTime() : parseListDate(e.rawModifiedAt),
+        // Posun se týká jen času z textového výpisu; MLSD je v UTC.
+        mtime: precise ? e.modifiedAt.getTime() : this._shift(parseListDate(e.rawModifiedAt)),
         mtimePrecise: precise,
         rawMtime: e.rawModifiedAt || null,
         mode: typeof e.permissions === 'object' && e.permissions
@@ -143,7 +175,7 @@ class FtpAdapter {
       if (e.type !== 'f' || e.mtimePrecise) continue;
       try {
         const full = `${dirPath.replace(/\/$/, '')}/${e.name}`;
-        e.mtime = (await this.client.lastMod(full)).getTime();
+        e.mtime = (await this.client.lastMod(full)).getTime();   // MDTM je v UTC
         e.mtimePrecise = true;
       } catch {
         e.mtime = null; // server neumí ani MDTM — porovnáváme jen podle velikosti
@@ -304,6 +336,19 @@ const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', '
  * Rozparsuje datum z textového výpisu FTP. Časová zóna v něm není, takže
  * se bere jako místní čas serveru — na zobrazení to stačí, na porovnávání ne.
  */
+/**
+ * Kódování názvů pro `basic-ftp`.
+ *
+ * Knihovna umí to, co umí `Buffer.toString` — tedy `utf8` a `latin1`. „Auto"
+ * necháváme na knihovně: zapne UTF-8, když ho server ohlásí ve FEAT.
+ */
+function encodingOf(cfg) {
+  const volba = cfg && cfg.encoding ? String(cfg.encoding) : 'auto';
+  if (volba === 'latin1') return 'latin1';
+  if (volba === 'utf8') return 'utf8';
+  return undefined; // auto — rozhodne knihovna podle serveru
+}
+
 function parseListDate(raw) {
   if (!raw) return null;
   const s = raw.trim();
@@ -341,4 +386,4 @@ function parseListDate(raw) {
   return Number.isNaN(fallback) ? null : fallback;
 }
 
-module.exports = { FtpAdapter, parseListDate };
+module.exports = { FtpAdapter, parseListDate, encodingOf };

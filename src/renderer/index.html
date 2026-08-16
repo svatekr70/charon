@@ -14,7 +14,10 @@
   <div id="app">
     <header class="toolbar">
       <div class="drag-region"></div>
-      <select id="site-select" title="Uložené relace"><option value="">— vyberte relaci —</option></select>
+      <!-- Výběr drží skrytý select, aby na něj mohl navazovat zbytek kódu;
+           uživatel k němu chodí přes správce relací. -->
+      <select id="site-select" hidden><option value="">— vyberte relaci —</option></select>
+      <button id="btn-sites" title="Relace (⌘K)"><span id="btn-sites-label">— vyberte relaci —</span> ▾</button>
       <button id="btn-connect" class="primary">Připojit</button>
       <span class="sep"></span>
       <button id="btn-new-site" title="Nová relace">＋ Relace</button>
@@ -193,6 +196,22 @@
 
       <div class="grid">
         <label class="check" data-when="ftp" hidden><input type="checkbox" name="acceptAnyCert" /> Přijmout jakýkoliv certifikát bez ptaní (nedoporučeno)</label>
+        <div class="grid" data-when="ftp" hidden>
+          <label>Kódování názvů
+            <select name="encoding">
+              <option value="auto">Automaticky (podle serveru)</option>
+              <option value="utf8">Vynutit UTF-8</option>
+              <option value="latin1">Latin-1 (starší servery)</option>
+            </select>
+          </label>
+          <label>Časový posun serveru (min)
+            <input name="timeShiftMinutes" type="number" step="15" placeholder="0" />
+          </label>
+        </div>
+        <p class="muted" data-when="ftp" hidden>Starší FTP servery hlásí čas v místní zóně
+          a bez údaje o tom, v jaké — porovnávání podle času pak lže o celé hodiny. Posun se
+          zadává v minutách (např. <code>-60</code>). Kódování řešte, až když názvy s diakritikou
+          dorazí jako změť; SFTP tyhle potíže nemá, tam je UTF-8 dané protokolem.</p>
       </div>
       <menu>
         <button value="cancel">Zrušit</button>
@@ -246,8 +265,18 @@
             <option value="size">Velikosti</option>
           </select>
         </label>
-        <label class="check"><input type="checkbox" id="sync-delete" /> Mazat, co na druhé straně chybí</label>
+        <label>Co přenášet
+          <select id="sync-mode">
+            <option value="diff">Vše, co se liší (cíl bude kopie zdroje)</option>
+            <option value="newer">Jen novější ze zdroje</option>
+            <option value="timestamps">Nic — jen srovnat časy</option>
+          </select>
+        </label>
         <button id="sync-compare" class="primary">Porovnat</button>
+      </div>
+      <div class="sync-opts">
+        <label class="check"><input type="checkbox" id="sync-delete" /> Mazat, co na druhé straně chybí</label>
+        <label class="check"><input type="checkbox" id="sync-existing" /> Jen soubory, které jsou na obou stranách</label>
       </div>
       <div class="sync-opts">
         <label class="grow">Maska souborů
@@ -255,6 +284,11 @@
         </label>
       </div>
       <p class="muted" id="sync-note"></p>
+      <div class="find-opts" id="sync-conflict-bar" hidden>
+        <span class="muted" id="sync-conflict-count"></span>
+        <button id="sync-all-local">U všech konfliktů vzít lokální</button>
+        <button id="sync-all-remote">U všech vzít ze serveru</button>
+      </div>
 
       <div class="sync-result" id="sync-result"><p class="muted">Zatím neporovnáno.</p></div>
       <menu>
@@ -368,6 +402,33 @@
         nejsou, protože se přihlašuje klíčem. Import z WinSCP je i v nabídce <em>Soubor</em>.</p>
       <menu><button value="cancel">Zrušit</button><button value="save" class="primary">Uložit</button></menu>
     </form>
+  </dialog>
+
+  <!-- správce relací -->
+  <dialog id="dlg-sites">
+    <div class="dlg wide">
+      <h2>Relace</h2>
+      <div class="find-opts">
+        <label class="grow">Hledat
+          <input id="sites-search" placeholder="název, server, uživatel nebo složka" spellcheck="false" />
+        </label>
+        <button id="sites-new">＋ Nová relace</button>
+      </div>
+
+      <div class="sites-layout">
+        <div class="sites-tree" id="sites-tree" tabindex="0"></div>
+        <div class="sites-detail" id="sites-detail"></div>
+      </div>
+
+      <menu class="wrapmenu">
+        <button id="sites-close">Zavřít</button>
+        <span class="spacer"></span>
+        <button id="sites-dup">Duplikovat</button>
+        <button id="sites-del">Smazat</button>
+        <button id="sites-edit">Upravit</button>
+        <button id="sites-connect" class="primary">Připojit</button>
+      </menu>
+    </div>
   </dialog>
 
   <!-- pracovní plochy -->

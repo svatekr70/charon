@@ -5,6 +5,7 @@ const fsp = fs.promises;
 const path = require('path');
 const crypto = require('crypto');
 const vault = require('./vault');
+const { repairMojibake } = require('./winscp-import');
 
 /**
  * Uložené relace ("záložky"). Struktura odpovídá tomu, co umí WinSCP importér,
@@ -22,7 +23,30 @@ class SiteStore {
     } catch {
       this.sites = [];
     }
+    await this._repairNames();
     return this.sites;
+  }
+
+  /**
+   * Napraví názvy rozsypané dřívějším importem z WinSCP.
+   *
+   * Escapované bajty se kdysi četly po jednom, takže se ze „Šárka" stalo
+   * „Å ÃƒÂ¡rka". Opravit to jde spolehlivě zpětným převodem, tak to uděláme
+   * jednou při načtení — ručně přejmenovat devatenáct složek by byla otrava.
+   */
+  async _repairNames() {
+    let zmeneno = 0;
+    for (const site of this.sites) {
+      for (const pole of ['name', 'folder', 'note']) {
+        const opraveno = repairMojibake(site[pole]);
+        if (opraveno !== undefined && opraveno !== site[pole]) {
+          site[pole] = opraveno;
+          zmeneno += 1;
+        }
+      }
+    }
+    if (zmeneno) await this.save();
+    return zmeneno;
   }
 
   async save() {
@@ -69,6 +93,9 @@ class SiteStore {
       tunnelHostKeyFingerprint: existing ? existing.tunnelHostKeyFingerprint || '' : '',
       tlsFingerprint: existing ? existing.tlsFingerprint || '' : '',
       // Vizuální pojistka: barva a poznámka, aby se produkce nepletla s testem.
+      // Jen pro FTP: starší servery neumí UTF-8 a hlásí čas v místní zóně.
+      encoding: site.encoding || 'auto',
+      timeShiftMinutes: Number(site.timeShiftMinutes) || 0,
       color: site.color || '',
       note: site.note || '',
       useRecycleBin: site.useRecycleBin !== undefined ? Boolean(site.useRecycleBin) : true,
@@ -157,6 +184,28 @@ class SiteStore {
     if (!site) return;
     site.tlsFingerprint = fingerprint || '';
     await this.save();
+  }
+
+  /**
+   * Kopie relace i s hesly.
+   *
+   * Dělá se to tady, a ne v okně: hesla se do okna nikdy neposílají, takže
+   * kopie sestavená tam by o ně přišla a byla by k ničemu.
+   */
+  async duplicate(id) {
+    const site = this.sites.find((s) => s.id === id);
+    if (!site) throw new Error('Relace neexistuje');
+
+    const zaklad = `${site.name} (kopie)`;
+    let name = zaklad;
+    for (let i = 2; this.sites.some((s) => s.name === name && s.folder === site.folder); i += 1) {
+      name = `${zaklad} ${i}`;
+    }
+
+    const kopie = { ...site, id: crypto.randomUUID(), name };
+    this.sites.push(kopie);
+    await this.save();
+    return kopie.id;
   }
 
   async remove(id) {

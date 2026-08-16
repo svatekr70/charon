@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('api', {
     save: (site) => invoke('sites:save', site),
     remove: (id) => invoke('sites:delete', id),
     saveSync: (id, sync) => invoke('sites:sync', { id, sync }),
+    duplicate: (id) => invoke('sites:duplicate', id),
   },
   ssh: {
     read: (file) => invoke('ssh:read', { file }),
@@ -95,6 +96,9 @@ contextBridge.exposeInMainWorld('api', {
     cancel: (sid, id) => invoke('queue:cancel', { sid, id }),
     cancelAll: (sid) => invoke('queue:cancelAll', { sid }),
     retry: (sid, id) => invoke('queue:retry', { sid, id }),
+    hold: (sid, id) => invoke('queue:hold', { sid, id }),
+    release: (sid, id) => invoke('queue:release', { sid, id }),
+    move: (sid, id, to) => invoke('queue:move', { sid, id, to }),
     clear: (sid) => invoke('queue:clear', { sid }),
     speedLimit: (sid, id, kb) => invoke('queue:speedLimit', { sid, id, kb }),
     restore: (sid) => invoke('queue:restore', { sid }),
