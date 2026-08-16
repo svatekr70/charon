@@ -14,6 +14,7 @@ const { FtpAdapter } = require('./adapters/ftp');
 const { SiteStore } = require('./sites');
 const { compare } = require('./sync');
 const { parseWinscpFile } = require('./winscp-import');
+const sshConfig = require('./ssh-config');
 const hostkeys = require('./hostkeys');
 const prompts = require('./prompts');
 const {
@@ -37,6 +38,7 @@ let settings = {
   theme: 'system',
   // Práva nahraných souborů: 'keep' | 'fixed' | 'preserve'.
   uploadPerms: 'keep', uploadFileMode: '644', uploadDirMode: '755',
+  cacheListings: true,
 };
 
 // ---------------------------------------------------------------- pomocné
@@ -481,6 +483,7 @@ function registerIpc() {
   handle('sites:list', async () => sites.list());
   handle('sites:save', async (site) => sites.upsert(site));
   handle('sites:delete', async (id) => { await sites.remove(id); return true; });
+  handle('sites:sync', async ({ id, sync }) => { await sites.setSync(id, sync); return true; });
 
   // --- import z WinSCP ---
   handle('winscp:pick', async () => {
@@ -494,6 +497,27 @@ function registerIpc() {
     });
     if (res.canceled || !res.filePaths[0]) return null;
     return { file: res.filePaths[0], ...parseWinscpFile(res.filePaths[0]) };
+  });
+
+  /**
+   * Relace z ~/.ssh/config. Když soubor neexistuje nebo v něm nic není,
+   * necháme uživatele vybrat jiný — konfigurace bývá i jinde.
+   */
+  handle('ssh:read', async ({ file } = {}) => {
+    const target = file || sshConfig.defaultPath();
+    const res = sshConfig.read(target);
+    return { ...res, total: res.sessions.length, masterPassword: false, source: 'ssh' };
+  });
+
+  handle('ssh:pick', async () => {
+    const res = await dialog.showOpenDialog(win, {
+      title: 'Vyberte konfiguraci OpenSSH',
+      defaultPath: path.dirname(sshConfig.defaultPath()),
+      properties: ['openFile', 'showHiddenFiles'],
+    });
+    if (res.canceled || !res.filePaths.length) return null;
+    const out = sshConfig.read(res.filePaths[0]);
+    return { ...out, total: out.sessions.length, masterPassword: false, source: 'ssh' };
   });
 
   handle('winscp:import', async ({ sessions: found, overwrite }) => {
@@ -570,17 +594,38 @@ function registerIpc() {
   });
 
   // --- vzdálený souborový systém ---
-  handle('remote:list', async ({ sid, path: remotePath }) => {
+  handle('remote:list', async ({ sid, path: remotePath, refresh }) => {
+    const session = sessionOf(sid);
     const a = browseOf(sid);
-    const target = remotePath || await a.home();
+    const target = normalizeRemote(remotePath || await a.home());
+
+    // Ruční obnovení se paměti neptá — od toho tam ta klávesa je.
+    if (!refresh) {
+      const cached = session.listCache.get(target);
+      if (cached) return { path: target, entries: cached, cached: true };
+    }
+
     const entries = await a.list(target);
-    return { path: normalizeRemote(target), entries };
+    session.listCache.set(target, entries);
+    return { path: target, entries };
   });
 
   handle('remote:home', async ({ sid }) => browseOf(sid).home());
-  handle('remote:mkdir', async ({ sid, path: p }) => { await browseOf(sid).mkdir(p, true); return true; });
-  handle('remote:rename', async ({ sid, from, to }) => { await browseOf(sid).rename(from, to); return true; });
-  handle('remote:chmod', async ({ sid, remotePath, mode }) => { await browseOf(sid).chmod(remotePath, mode); return true; });
+  handle('remote:mkdir', async ({ sid, path: p }) => {
+    await browseOf(sid).mkdir(p, true);
+    sessionOf(sid).listCache.clear();
+    return true;
+  });
+  handle('remote:rename', async ({ sid, from, to }) => {
+    await browseOf(sid).rename(from, to);
+    sessionOf(sid).listCache.clear();
+    return true;
+  });
+  handle('remote:chmod', async ({ sid, remotePath, mode }) => {
+    await browseOf(sid).chmod(remotePath, mode);
+    sessionOf(sid).listCache.clear();
+    return true;
+  });
   handle('remote:dirSize', async ({ sid, path: p }) => remoteDirSize(browseOf(sid), p));
 
   /** Podklady pro dialog vlastností. */
@@ -639,6 +684,7 @@ function registerIpc() {
         stats.owners += 1;
       }
     }
+    sessionOf(sid).listCache.clear();
     return stats;
   });
 
@@ -669,6 +715,7 @@ function registerIpc() {
       else if (await remoteIsDir(a, p)) await a.removeDir(p, true);
       else await a.removeFile(p);
     }
+    session.listCache.clear();
     return { toTrash: Boolean(trash), count: paths.length };
   });
 
@@ -684,6 +731,7 @@ function registerIpc() {
     const trash = sessionOf(sid).getTrash();
     if (!trash) throw new Error('Koš na serveru není u této relace zapnutý');
     const removed = await trash.empty();
+    sessionOf(sid).listCache.clear();
     log('ok', removed ? `Koš na serveru vysypán (${removed} dnů)` : 'Koš na serveru byl prázdný');
     return { removed };
   });
@@ -841,6 +889,8 @@ function registerIpc() {
       }
     }
     session.queue.add(jobs);
+    // Zakládání složek při synchronizaci mění server ještě před přenosy.
+    session.listCache.clear();
     return { transfers: jobs.length };
   });
 

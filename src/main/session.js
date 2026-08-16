@@ -9,6 +9,7 @@ const { FolderWatcher } = require('./watcher');
 const { AdapterPool } = require('./pool');
 const { RemoteTrash } = require('./trash');
 const { Finder } = require('./browse');
+const { ListCache } = require('./listcache');
 
 /**
  * Jedno připojení se vším, co k němu patří.
@@ -50,6 +51,9 @@ class Session {
     // Dokud se nerozhodne, co s frontou z minula, nesmíme ji přepsat. Prázdná
     // fronta nové relace by ji jinak smazala dřív, než se stačíme zeptat.
     this.queueAdopted = false;
+    // Výpisy složek; po každém zápisu na server se zahazují celé.
+    this.listCache = new ListCache();
+    this._doneSeen = 0;
 
     const settings = deps.settings();
 
@@ -63,7 +67,14 @@ class Session {
     this.queue.setSpeedLimit((settings.speedLimitKb || 0) * 1024);
     this.queue.setTempName(settings.tempName !== false, (settings.tempNameMinKb || 0) * 1024);
     this.queue.setPermissions(settings);
+    this.listCache.setEnabled(settings.cacheListings !== false);
     this.queue.on('update', (snap) => {
+      // Dokončený přenos změnil obsah serveru — uložené výpisy už neplatí.
+      const hotovo = snap.items.filter((i) => i.status === 'done').length;
+      if (hotovo !== this._doneSeen) {
+        this._doneSeen = hotovo;
+        this.listCache.clear();
+      }
       this.emit('queue', snap);
       // Nedokončené přenosy si pamatujeme, aby přežily zavření aplikace.
       if (deps.rememberQueue && this.queueAdopted) {
@@ -113,6 +124,8 @@ class Session {
       host: this.config.host,
       username: this.config.username,
       protocol: this.config.protocol,
+      color: this.config.color || '',
+      note: this.config.note || '',
       useRecycleBin: Boolean(this.config.useRecycleBin),
     };
   }
@@ -229,6 +242,7 @@ class Session {
     this.queue.setSpeedLimit((settings.speedLimitKb || 0) * 1024);
     this.queue.setTempName(settings.tempName !== false, (settings.tempNameMinKb || 0) * 1024);
     this.queue.setPermissions(settings);
+    this.listCache.setEnabled(settings.cacheListings !== false);
     if (this.pool && !this.pool.closed) this.pool.setMax(settings.maxConcurrent || 1);
   }
 

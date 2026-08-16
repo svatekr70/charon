@@ -27,6 +27,14 @@
      naopak světlejší než pozadí — jinak by splynula. */
   --pop: light-dark(#ffffff, #2a2e38);
 
+  /* Rozlišení relací. Barvy jsou tlumené schválně — mají odlišovat, ne křičet. */
+  --site-red: light-dark(#c22c2c, #e5645c);
+  --site-amber: light-dark(#a9700a, #dda23c);
+  --site-green: light-dark(#1c7a3e, #4bbd6e);
+  --site-blue: light-dark(#1e63d6, #5b95ff);
+  --site-violet: light-dark(#7a35b8, #b98ae8);
+  --site-gray: light-dark(#6b7280, #8d94a3);
+
   --dir: light-dark(#1a56bd, #8fb8ff);
   --link: light-dark(#7a35b8, #c39bea);
   --violet: light-dark(#7a35b8, #d0a5ff);
@@ -365,6 +373,26 @@ details[open] > summary { color: var(--accent); }
 .fixed-160 { flex: 0 0 160px; }
 .gap-below { margin-bottom: 12px; }
 #props-hash { height: auto; max-height: 120px; display: none; }
+
+/* ------------------------------------------- rozlišení relace barvou */
+/* Proužek na záložce a nad serverovým panelem. Barvu nese atribut, takže
+   se dá přidat další, aniž by se sahalo do skriptu. */
+[data-color="red"] { --site: var(--site-red); }
+[data-color="amber"] { --site: var(--site-amber); }
+[data-color="green"] { --site: var(--site-green); }
+[data-color="blue"] { --site: var(--site-blue); }
+[data-color="violet"] { --site: var(--site-violet); }
+[data-color="gray"] { --site: var(--site-gray); }
+
+.tab[data-color] { box-shadow: inset 3px 0 0 var(--site); }
+.tab[data-color].active { box-shadow: inset 3px 0 0 var(--site), inset 0 2px 0 var(--accent); }
+.pane[data-color] .pane-head { box-shadow: inset 0 3px 0 var(--site); }
+.pane[data-color] .pane-title { color: var(--site); }
+
+.site-note {
+  color: var(--site, var(--fg-dim)); font-size: 11.5px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%;
+}
 
 /* --------------------------------------------------- kontextové menu */
 .ctxmenu {

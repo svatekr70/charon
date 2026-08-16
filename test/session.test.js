@@ -102,6 +102,20 @@ async function main() {
   truthy('po rozhodnutí už ano', zapsano.length > 0);
   check('a ukládá se pod klíčem relace', zapsano[zapsano.length - 1].key, 'site-q');
 
+  // ============ dokončený přenos zahodí uložené výpisy
+  // Nahraný soubor mění obsah složky. Kdyby paměť zůstala, panel by ho po
+  // obnovení neukázal a člověk by nahrával podruhé.
+  session.listCache.set('/www', [{ name: 'index.php', type: 'f' }]);
+  check('výpis je uložený', Boolean(session.listCache.get('/www')), true);
+
+  const [idPrenosu] = session.queue.add([{ direction: 'up', localPath: '/x', remotePath: '/www/x', size: 1 }]);
+  check('samotné zařazení paměť neruší', Boolean(session.listCache.get('/www')), true);
+
+  const polozka = session.queue.items.find((i) => i.id === idPrenosu);
+  polozka.status = 'done';
+  session.queue._emitUpdate(true);
+  check('dokončený přenos ji zahodí', session.listCache.get('/www'), null);
+
   console.log(`\n${pass} prošlo, ${fail} selhalo`);
   process.exit(fail ? 1 : 0);
 }

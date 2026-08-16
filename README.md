@@ -44,6 +44,12 @@ předlohy vozí i zpátky.
 | Pracovní plochy — uložená sada otevřených záložek | ✅ |
 | Světlý, tmavý a systémový motiv | ✅ |
 | Ikony souborů a složek podle typu | ✅ |
+| Odhad zbývajícího času a celková velikost | ✅ |
+| Práva nahraných souborů | ✅ |
+| Uložené nastavení synchronizace u relace | ✅ |
+| Import z `~/.ssh/config` včetně bran | ✅ |
+| Barva a poznámka u relace | ✅ |
+| Vyrovnávací paměť výpisů | ✅ |
 
 Nepodporuje SCP, WebDAV ani S3 — relace v těchto protokolech se při importu
 zobrazí, ale nejdou naimportovat.
@@ -120,10 +126,23 @@ ve které stojíte — obvykle se pracuje na jednom projektu a jen střídají s
 Zavřít záložku s běžícími přenosy jde, ale aplikace se zeptá. Bez otevřené
 záložky zůstává použitelný aspoň lokální panel.
 
-## Import z WinSCP
+## Import relací
 
-Je v **Nastavení → Relace** a v nabídce *Soubor*. V liště tlačítko nemá —
-importuje se obvykle jednou a pak už nikdy.
+Obojí je v **Nastavení → Relace**; v liště tlačítko nemají, protože se importuje
+obvykle jednou a pak už nikdy.
+
+### Z `~/.ssh/config`
+
+Přirozenější zdroj pro Mac: vezmou se servery, uživatelé, porty, klíče
+i brány (`ProxyJump`). Hesla tam nejsou — přihlašuje se klíčem.
+
+Napodobujeme pravidla OpenSSH v rozsahu, který je k něčemu: platí **první**
+nalezená hodnota (takže `Host *` funguje jako výchozí nastavení, ne jako
+přepis), vzory se zástupnými znaky jsou šablony a samy se neimportují,
+`Include` se načítá včetně hvězdičky v názvu. Bloky `Match` neumíme — jejich
+podmínky nejde vyhodnotit bez skutečného spojení, tak se přeskakují.
+
+### Z WinSCP
 
 WinSCP hesla nešifruje, jen obfuskuje reverzibilním algoritmem, jehož klíčem je
 `UserName + HostName`. Importér je proto umí přenést včetně hesel.
@@ -342,6 +361,21 @@ aniž by musely existovat dvakrát. Na 924 položkách je vykreslení stejně ry
 jako bez nich (16,5 vs. 16,6 ms) — dvacet různých tvarů si prohlížeč
 dekóduje jednou.
 
+## Rozlišení relací
+
+V dialogu relace je sekce **Rozlišení relace**: barva a poznámka. Barva obarví
+záložku i hlavičku serverového panelu, poznámka se v hlavičce vypíše. Se
+záložkami, kde je otevřeno víc serverů naráz, je to nejlevnější pojistka proti
+smazání něčeho na špatném stroji.
+
+## Paměť výpisů
+
+Návrat do složky, kterou jste právě viděli, je okamžitý. Uložený výpis platí
+půl minuty a **jakýkoliv zápis na server ho zahodí celý** — přejmenování, mazání
+i dokončený přenos. Zahazuje se schválně víc, než by bylo nutné: nejhorší, co se
+tím stane, je jedno načtení navíc, kdežto zastaralý výpis vede k mazání souboru,
+který už neexistuje. `⌘R` se paměti neptá nikdy. Vypnout se dá v nastavení.
+
 ## Klávesové zkratky
 
 | Klávesa | Akce |
@@ -421,6 +455,25 @@ verze zdroje.
 Vypnout jde v *Nastavení → Přenosy*; tam se dá nastavit i spodní hranice
 velikosti. Přejmenování je jedno kolo navíc na soubor, takže u tisíců drobných
 souborů přes pomalou linku se vyplatí ho pro ně přeskočit.
+
+## Odhad zbývajícího času
+
+Fronta hlásí, kolik toho zbývá a jak dlouho to potrvá. Rychlost se měří jako
+průtok celé fronty v posuvném okně osmi vteřin — rychlost jednotlivé položky je
+průměr od jejího začátku, takže po dokončení ze součtu zmizí a odhad by poskočil.
+
+Když u některé položky neznáme velikost, odhad se neukáže a napíše se, kolika
+položek se to týká. Odhad, který nemůže vyjít, je horší než žádný.
+
+## Práva nahraných souborů
+
+**Nastavení → Přenosy → Práva nahraných souborů**: nechat na serveru (výchozí),
+nastavit pevně, nebo zachovat lokální. U složek zachovávat není co — vznikají až
+na serveru — takže se řídí pevnou hodnotou vedle.
+
+Práva se nastavují až na konečné cestě, aby to dopadlo stejně s dočasným názvem
+i bez něj. Když je server nastavit neumí (starší FTP bez `SITE CHMOD`), přenos
+kvůli tomu neselže a jen se to připíše k položce.
 
 ## Omezení rychlosti
 
@@ -577,6 +630,12 @@ potvrzení se cokoliv přenese. Směr může být jednosměrný i obousměrný, 
 lze podle času, velikosti nebo obojího. Mazání je volitelné a před provedením se
 na něj aplikace ještě jednou zeptá.
 
+Směr, kritérium, maska i mazání se **pamatují u relace** — naklikává se pořád
+totéž, tak proč pokaždé znovu. Ukládá se při porovnání a platí jen pro uložené
+relace; u jednorázového připojení není kam. Cesty se nepamatují schválně: ty
+určují panely, ve kterých zrovna stojíte, a předvyplnit je odjinud by znamenalo
+synchronizovat něco jiného, než na co se díváte.
+
 Aby opakovaná synchronizace nehlásila pořád tytéž soubory, přenáší se i čas
 změny — přes `SETSTAT` u SFTP a `MFMT` u FTP.
 
@@ -627,6 +686,18 @@ npm test
 - `test/filekind.test.js` — rozpoznání typu souboru. Hlídá hlavně případy, kde
   přípona mate, a to, že každá škatulka má nakreslenou ikonu — bez pravidla ve
   stylu by položka dostala výchozí ikonu a nikdo by si toho nevšiml
+- `test/eta.test.js` — odhad zbývajícího času proti skutečnému přenosu se
+  známou rychlostí; ověřuje se i to, že na pauze a při stojícím přenosu odhad
+  zmizí místo aby zamrzl na poslední hodnotě
+- `test/uploadperms.test.js` — práva nahraných souborů. Kontroluje se, co má
+  soubor na druhé straně, ne že jsme zavolali chmod; a že přenos nepadá, když
+  server chmod neumí
+- `test/sshconfig.test.js` — čtení `~/.ssh/config`. Hlavně pravidlo „první
+  hodnota vyhrává", vzory, `ProxyJump` a `Include` včetně kruhového odkazu
+- `test/listcache.test.js` — paměť výpisů: platnost, zahazování a to, že se
+  nezahodí zrovna složka, kterou člověk právě používá
+- `test/siteprofile.test.js` — nastavení synchronizace uložené u relace;
+  hlavně že ho nesmaže úprava relace
 - `test/session.test.js` — správce záložek: pořadí, přepínání a úklid
 - `test/editconflict.test.js` — detekce cizí změny při ukládání z editoru
 - `test/properties.test.js` — rekurzivní práva a kontrolní součty proti

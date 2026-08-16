@@ -68,6 +68,9 @@ class SiteStore {
       hostKeyFingerprint: existing ? existing.hostKeyFingerprint || '' : '',
       tunnelHostKeyFingerprint: existing ? existing.tunnelHostKeyFingerprint || '' : '',
       tlsFingerprint: existing ? existing.tlsFingerprint || '' : '',
+      // Vizuální pojistka: barva a poznámka, aby se produkce nepletla s testem.
+      color: site.color || '',
+      note: site.note || '',
       useRecycleBin: site.useRecycleBin !== undefined ? Boolean(site.useRecycleBin) : true,
       recycleBinPath: site.recycleBinPath || '',
       recycleBinDays: Number(site.recycleBinDays) || 0,
@@ -80,6 +83,8 @@ class SiteStore {
       proxyHost: site.proxyHost || '',
       proxyPort: Number(site.proxyPort) || 0,
       proxyUsername: site.proxyUsername || '',
+      // Naposledy použité nastavení synchronizace; mění ho jen setSync.
+      sync: existing ? existing.sync || null : null,
       tunnelPassword: existing ? existing.tunnelPassword : '',
       proxyPassword: existing ? existing.proxyPassword : '',
       password: existing ? existing.password : '',
@@ -116,6 +121,25 @@ class SiteStore {
     const site = this.sites.find((s) => s.id === id);
     if (!site) return;
     site.hostKeyFingerprint = fingerprint || '';
+    await this.save();
+  }
+
+  /**
+   * Zapamatuje si nastavení synchronizace u relace.
+   *
+   * Ukládá se směr, kritérium, maska a mazání — ne cesty. Ty určují panely,
+   * ve kterých člověk zrovna stojí, a předvyplnit je odjinud by znamenalo
+   * synchronizovat něco jiného, než na co se dívá.
+   */
+  async setSync(id, sync) {
+    const site = this.sites.find((s) => s.id === id);
+    if (!site) return;
+    site.sync = sync ? {
+      direction: String(sync.direction || ''),
+      criteria: String(sync.criteria || ''),
+      mask: String(sync.mask || ''),
+      deleteExtra: Boolean(sync.deleteExtra),
+    } : null;
     await this.save();
   }
 
@@ -180,6 +204,10 @@ class SiteStore {
         privateKeyPath: convertWindowsKeyPath(s.privateKeyPath),
         remoteDir: s.remoteDir,
         localDir: '', // windowsová cesta na Macu nedává smysl
+        // Bránu zná import z ~/.ssh/config (ProxyJump); z WinSCP nechodí.
+        tunnelHost: s.tunnelHost || '',
+        tunnelPort: s.tunnelPort || 22,
+        tunnelUsername: s.tunnelUsername || '',
       });
       added += 1;
     }

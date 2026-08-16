@@ -74,6 +74,7 @@ Object.defineProperty(state, 'connected', {
 const DEFAULT_SETTINGS = {
   editor: '', doubleClick: 'edit', typeAhead: true, colOwner: false, colGroup: false,
   transferMask: '', maxConcurrent: 3, speedLimitKb: 0, commands: [], workspaces: [],
+  cacheListings: true,
   theme: 'system',
   uploadPerms: 'keep', uploadFileMode: '644', uploadDirMode: '755',
   tempName: true, tempNameMinKb: 0,
@@ -169,10 +170,10 @@ const localParent = (p) => posixParent(p);
  * @param {boolean} [opts.fromHistory] navigace tlačítky zpět/vpřed —
  *   nesmí do historie přidávat další záznam, jinak by se z ní nedalo vyjít
  */
-async function loadPane(side, targetPath, { fromHistory = false } = {}) {
+async function loadPane(side, targetPath, { fromHistory = false, refresh = false } = {}) {
   const data = await call(side === 'local'
     ? window.api.local.list(targetPath)
-    : window.api.remote.list(sid(), targetPath));
+    : window.api.remote.list(sid(), targetPath, refresh));
   if (!data) return;
   const st = state[side];
 
@@ -806,7 +807,7 @@ function showContextMenu(side, x, y) {
     label: state[side].filterText ? 'Zrušit filtr' : 'Filtrovat…',
     fn: () => toggleFilter(side),
   });
-  items.push({ label: 'Obnovit', key: '⌘R', fn: () => loadPane(side, state[side].path) });
+  items.push({ label: 'Obnovit', key: '⌘R', fn: () => loadPane(side, state[side].path, { refresh: true }) });
   items.push({
     label: state[side].showHidden ? 'Skrýt skryté soubory' : 'Zobrazit skryté soubory',
     fn: () => { state[side].showHidden = !state[side].showHidden; renderPane(side); },
@@ -1846,7 +1847,11 @@ function renderTabs() {
 
     const tab = document.createElement('button');
     tab.className = `tab${id === state.activeId ? ' active' : ''}${off ? ' off' : ''}${busy ? ' busy' : ''}`;
-    tab.title = `${info.username ? `${info.username}@` : ''}${info.host || ''}`;
+    // Barva a poznámka relace: nejlevnější pojistka proti tomu, aby člověk
+    // mazal na produkci v domnění, že je na testu.
+    if (info.color) tab.dataset.color = info.color;
+    tab.title = `${info.username ? `${info.username}@` : ''}${info.host || ''}`
+      + (info.note ? `\n${info.note}` : '');
     tab.addEventListener('click', () => switchTo(id));
 
     const dot = document.createElement('span');
@@ -1951,6 +1956,18 @@ function applyConnState() {
   const info = active().info;
   const badge = $('#conn-status');
 
+  // Barva a poznámka relace se drží u serverového panelu — tam, kam se člověk
+  // dívá, když maže. Panel bez připojení nemá co obarvovat.
+  const barva = info && state.connected ? info.color || '' : '';
+  if (barva) panes.remote.dataset.color = barva;
+  else delete panes.remote.dataset.color;
+
+  const note = $('#remote-note');
+  const text = info && state.connected ? info.note || '' : '';
+  note.textContent = text;
+  note.hidden = !text;
+  note.title = text;
+
   if (info && info.status === 'connecting') {
     badge.className = 'badge wait';
     badge.textContent = `Obnovuji spojení k ${info.host}…`;
@@ -1992,6 +2009,8 @@ function openSiteDialog(site) {
   f.useRecycleBin.checked = site ? site.useRecycleBin !== false : true;
   f.recycleBinPath.value = site?.recycleBinPath || '';
   f.recycleBinDays.value = site?.recycleBinDays || '';
+  f.color.value = site?.color || '';
+  f.note.value = site?.note || '';
   f.tunnelHost.value = site?.tunnelHost || '';
   f.tunnelPort.value = site?.tunnelPort || 22;
   f.tunnelUsername.value = site?.tunnelUsername || '';
@@ -2006,6 +2025,7 @@ function openSiteDialog(site) {
   f.proxyPassword.placeholder = site?.hasProxyPassword ? 'uloženo — nechte prázdné' : '';
   // Rozbalíme jen když se něco takového používá; jinak ať nepřekáží.
   $('#site-path').open = Boolean(site?.tunnelHost || (site?.proxyType && site.proxyType !== 'none'));
+  $('#site-look').open = Boolean(site?.color || site?.note);
   f.acceptAnyCert.checked = site ? site.rejectUnauthorized === false : false;
   f.password.placeholder = site?.hasPassword ? 'uloženo — nechte prázdné' : '';
   f.passphrase.placeholder = site?.hasPassphrase ? 'uloženo — nechte prázdné' : '';
@@ -2039,6 +2059,8 @@ siteDlg.addEventListener('close', async () => {
     useRecycleBin: f.useRecycleBin.checked,
     recycleBinPath: f.recycleBinPath.value.trim(),
     recycleBinDays: Number(f.recycleBinDays.value) || 0,
+    color: f.color.value,
+    note: f.note.value.trim(),
     tunnelHost: f.tunnelHost.value.trim(),
     tunnelPort: Number(f.tunnelPort.value) || 22,
     tunnelUsername: f.tunnelUsername.value.trim(),
@@ -2105,13 +2127,17 @@ function renderImport(data) {
     cb.disabled = !s.supported;
     cb.dataset.index = String(i);
 
+    // Poznámku si zdroj může určit sám (tak to dělá ~/.ssh/config);
+    // u WinSCP ji skládáme z toho, co se nepodařilo přenést.
     const note = !s.supported
       ? `<span class="tag bad">${s.rawProtocol.toUpperCase()} nepodporován</span>`
-      : s.passwordFailed
-        ? '<span class="tag bad">heslo nešlo přečíst</span>'
-        : s.privateKeyPath
-          ? '<span class="tag mk">klíč .ppk — doplnit ručně</span>'
-          : '';
+      : s.note !== undefined
+        ? (s.note ? `<span class="tag mk">${escapeHtml(s.note)}</span>` : '')
+        : s.passwordFailed
+          ? '<span class="tag bad">heslo nešlo přečíst</span>'
+          : s.privateKeyPath
+            ? '<span class="tag mk">klíč .ppk — doplnit ručně</span>'
+            : '';
 
     el.appendChild(cb);
     const rest = document.createElement('span');
@@ -2121,7 +2147,7 @@ function renderImport(data) {
     hostEl.textContent = `${s.username ? `${s.username}@` : ''}${s.host}:${s.port}`;
     el.appendChild(hostEl);
     const protoEl = document.createElement('span');
-    protoEl.textContent = s.protocol.toUpperCase() + (s.ftps !== 'none' ? ` (${s.ftps})` : '');
+    protoEl.textContent = s.protocol.toUpperCase() + (s.ftps && s.ftps !== 'none' ? ` (${s.ftps})` : '');
     el.appendChild(protoEl);
     const pwEl = document.createElement('span');
     pwEl.textContent = s.password ? '✓ ano' : '—';
@@ -2135,14 +2161,42 @@ function renderImport(data) {
   list.replaceChildren(head, ...rows);
   const usable = data.sessions.filter((s) => s.supported).length;
   $('#import-go').disabled = usable === 0;
-  $('#import-hint').textContent = `Soubor: ${data.file} — nalezeno ${data.total} ${plural(data.total, 'relace', 'relace', 'relací')}, `
-    + `${usable} podporovaných, hesel přečteno: ${data.sessions.filter((s) => s.password).length}.`;
+  const pocet = `${data.total} ${plural(data.total, 'relace', 'relace', 'relací')}`;
+  $('#import-hint').textContent = data.source === 'ssh'
+    // Konfigurace OpenSSH hesla neobsahuje, tak jimi nemá smysl strašit.
+    ? `Soubor: ${data.file} — nalezeno ${pocet}. Hesla tu nejsou; přihlašuje se klíčem,`
+      + ' případně je doplňte u relace ručně.'
+    : `Soubor: ${data.file} — nalezeno ${pocet}, `
+      + `${usable} podporovaných, hesel přečteno: ${data.sessions.filter((s) => s.password).length}.`;
 }
 
 function openImport() {
   $('#import-list').replaceChildren();
   $('#import-go').disabled = true;
+  $('#import-hint').textContent = 'Vyberte WinSCP.ini nebo .reg export z Windows.';
+  $('#import-warning').hidden = true;
+  $('#import-pick').hidden = false;
+  $('#import-ssh-pick').hidden = true;
   importDlg.showModal();
+}
+
+/** Import z konfigurace OpenSSH — jiný zdroj, stejný dialog. */
+async function openSshImport() {
+  $('#import-list').replaceChildren();
+  $('#import-go').disabled = true;
+  $('#import-warning').hidden = true;
+  $('#import-pick').hidden = true;
+  $('#import-ssh-pick').hidden = false;
+  importDlg.showModal();
+
+  const data = await call(window.api.ssh.read());
+  if (!data) return;
+  if (!data.sessions.length) {
+    $('#import-hint').textContent = `V ${data.file} žádné servery nejsou (nebo soubor neexistuje).`
+      + ' Zkuste vybrat jiný soubor.';
+    return;
+  }
+  renderImport(data);
 }
 
 $('#btn-import').addEventListener('click', () => {
@@ -2152,6 +2206,14 @@ $('#btn-import').addEventListener('click', () => {
   openImport();
 });
 $('#import-cancel').addEventListener('click', () => importDlg.close());
+$('#import-ssh-pick').addEventListener('click', async () => {
+  const data = await call(window.api.ssh.pick());
+  if (data) renderImport(data);
+});
+$('#btn-import-ssh').addEventListener('click', () => {
+  setDlg.close();
+  openSshImport();
+});
 $('#import-pick').addEventListener('click', async () => {
   const data = await call(window.api.winscp.pick());
   if (data) renderImport(data);
@@ -2172,11 +2234,39 @@ $('#import-go').addEventListener('click', async () => {
 
 const syncDlg = $('#dlg-sync');
 
+/** Uložená relace, ke které patří aktivní záložka. */
+function activeSite() {
+  const s = active();
+  const id = s && s.info && s.info.siteId;
+  return id ? (state.sites || []).find((x) => x.id === id) || null : null;
+}
+
+/** Nastavení synchronizace, které si relace pamatuje z minula. */
+function syncProfile() {
+  const site = activeSite();
+  return (site && site.sync) || null;
+}
+
 function openSync() {
   if (!state.connected) return setLog('error', 'Nejste připojeni');
+  // Cesty berou panely — synchronizovat se má to, na co se člověk dívá.
   $('#sync-local').value = state.local.path;
   $('#sync-remote').value = state.remote.path;
-  if (!$('#sync-mask').value) $('#sync-mask').value = state.settings.transferMask || '';
+
+  // Zbytek si relace pamatuje z minula; pořád dokola to naklikávat je otrava.
+  const profil = syncProfile();
+  if (profil) {
+    $('#sync-direction').value = profil.direction || $('#sync-direction').value;
+    $('#sync-criteria').value = profil.criteria || $('#sync-criteria').value;
+    $('#sync-mask').value = profil.mask || '';
+    $('#sync-delete').checked = Boolean(profil.deleteExtra);
+  } else if (!$('#sync-mask').value) {
+    $('#sync-mask').value = state.settings.transferMask || '';
+  }
+  const site = activeSite();
+  $('#sync-note').textContent = site
+    ? `Směr, kritérium, maska i mazání se pamatují u relace ${site.name}.`
+    : 'Jednorázové připojení — nastavení se nikam neuloží.';
   $('#sync-result').replaceChildren(Object.assign(document.createElement('p'), { className: 'muted', textContent: 'Zatím neporovnáno.' }));
   $('#sync-apply').disabled = true;
   syncDlg.showModal();
@@ -2194,6 +2284,20 @@ $('#sync-compare').addEventListener('click', async () => {
   const btn = $('#sync-compare');
   btn.disabled = true;
   btn.textContent = 'Porovnávám…';
+
+  // Nastavení si relace zapamatuje. Ukládáme při porovnání, ne až při
+  // provedení — i porovnání samo je platný způsob, jak se sem chodit dívat.
+  const site = activeSite();
+  if (site) {
+    const sync = {
+      direction: $('#sync-direction').value,
+      criteria: $('#sync-criteria').value,
+      mask: $('#sync-mask').value.trim(),
+      deleteExtra: $('#sync-delete').checked,
+    };
+    await call(window.api.sites.saveSync(site.id, sync), { silent: true });
+    site.sync = sync;   // ať to platí i bez načtení seznamu relací znovu
+  }
   const res = await call(window.api.sync.compare(sid(), {
     localDir: $('#sync-local').value.trim(),
     remoteDir: $('#sync-remote').value.trim(),
@@ -2408,6 +2512,7 @@ $('#btn-settings').addEventListener('click', () => {
   f.maxConcurrent.value = cur.maxConcurrent || 3;
   f.speedLimitKb.value = cur.speedLimitKb || 0;
   f.tempName.checked = cur.tempName !== false;
+  f.cacheListings.checked = cur.cacheListings !== false;
   f.tempNameMinKb.value = cur.tempNameMinKb || 0;
   f.doubleClick.value = cur.doubleClick;
   f.theme.value = cur.theme || 'system';
@@ -2429,6 +2534,7 @@ setDlg.addEventListener('close', async () => {
     maxConcurrent: Math.max(1, Math.min(16, Number(f.maxConcurrent.value) || 1)),
     speedLimitKb: Math.max(0, Number(f.speedLimitKb.value) || 0),
     tempName: f.tempName.checked,
+    cacheListings: f.cacheListings.checked,
     tempNameMinKb: Math.max(0, Number(f.tempNameMinKb.value) || 0),
     doubleClick: f.doubleClick.value,
     theme: f.theme.value,
@@ -2494,8 +2600,9 @@ $('#btn-del-site').addEventListener('click', async () => {
   return undefined;
 });
 $('#btn-refresh').addEventListener('click', async () => {
+  // Ruční obnovení jde vždycky na server, uložený výpis se přeskočí.
   await loadPane('local', state.local.path);
-  if (state.connected) await loadPane('remote', state.remote.path);
+  if (state.connected) await loadPane('remote', state.remote.path, { refresh: true });
 });
 $('#btn-sync').addEventListener('click', openSync);
 $('#site-select').addEventListener('dblclick', connectSelected);

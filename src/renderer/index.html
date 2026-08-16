@@ -61,6 +61,7 @@
       <section class="pane" id="pane-remote" data-side="remote">
         <div class="pane-head">
           <span class="pane-title">Server</span>
+          <span class="site-note" id="remote-note" hidden></span>
           <button class="icon" data-act="back" title="Zpět (⌘[)" disabled>‹</button>
           <button class="icon" data-act="fwd" title="Vpřed (⌘])" disabled>›</button>
           <button class="icon" data-act="up" title="O úroveň výš">↑</button>
@@ -141,6 +142,29 @@
         <label class="check" data-when="sftp"><input type="checkbox" name="useAgent" /> Použít ssh-agent</label>
       </div>
 
+      <details id="site-look">
+        <summary>Rozlišení relace — barva a poznámka</summary>
+        <div class="grid">
+          <label>Barva
+            <select name="color">
+              <option value="">Bez barvy</option>
+              <option value="red">Červená — produkce</option>
+              <option value="amber">Oranžová — pozor</option>
+              <option value="green">Zelená</option>
+              <option value="blue">Modrá</option>
+              <option value="violet">Fialová</option>
+              <option value="gray">Šedá</option>
+            </select>
+          </label>
+          <label>Poznámka
+            <input name="note" placeholder="např. ostrý web, zálohovat před nasazením" />
+          </label>
+        </div>
+        <p class="muted">Barva obarví záložku i serverový panel, poznámka se ukáže
+          v jeho hlavičce. Se záložkami, kde je otevřeno víc serverů naráz, je to
+          nejlevnější pojistka proti smazání něčeho na špatném stroji.</p>
+      </details>
+
       <details data-when="sftp" id="site-path">
         <summary>Cesta k serveru — brána nebo proxy</summary>
         <p class="muted">Jen pro SFTP. FTP potřebuje kromě řídicího i datová spojení
@@ -193,6 +217,7 @@
       <menu>
         <button id="import-cancel">Zavřít</button>
         <button id="import-pick">Vybrat soubor…</button>
+        <button id="import-ssh-pick" hidden>Vybrat jiný soubor…</button>
         <button id="import-go" class="primary" disabled>Importovat vybrané</button>
       </menu>
     </div>
@@ -229,6 +254,8 @@
           <input id="sync-mask" placeholder="prázdné = vše; např. *.php; *.css | .git/; node_modules/" spellcheck="false" />
         </label>
       </div>
+      <p class="muted" id="sync-note"></p>
+
       <div class="sync-result" id="sync-result"><p class="muted">Zatím neporovnáno.</p></div>
       <menu>
         <button id="sync-cancel">Zavřít</button>
@@ -311,6 +338,11 @@
       <p class="muted">„Podle systému" se přepne sám, když si Mac v noci přepne na tmavý
         vzhled. Volba platí i pro systémové dialogy a rám okna.</p>
 
+      <label class="check"><input type="checkbox" name="cacheListings" /> Pamatovat si výpisy navštívených složek</label>
+      <p class="muted">Návrat do složky, kterou jste právě viděli, je pak okamžitý — na pomalé
+        lince je to nejvíc znát. Záznam platí půl minuty a jakýkoliv zápis na server ho zahodí;
+        <kbd>⌘R</kbd> se paměti neptá nikdy.</p>
+
       <h3>Ovládání</h3>
       <label>Dvojklik na soubor
         <select name="doubleClick">
@@ -326,10 +358,14 @@
       <label class="check"><input type="checkbox" name="colGroup" /> Zobrazit skupinu</label>
 
       <h3>Relace</h3>
-      <button type="button" id="btn-import">Import z WinSCP…</button>
-      <p class="muted">Načte relace i s hesly z <code>WinSCP.ini</code> nebo z exportu
-        registru. Dělá se to obvykle jednou, proto to sedí tady a ne v liště.
-        Je to i v nabídce <em>Soubor</em>.</p>
+      <div class="row">
+        <button type="button" id="btn-import">Import z WinSCP…</button>
+        <button type="button" id="btn-import-ssh">Import z ~/.ssh/config…</button>
+      </div>
+      <p class="muted">Z WinSCP se načtou relace i s hesly (<code>WinSCP.ini</code> nebo
+        export registru) — to je cesta pro přechod z Windows. Z <code>~/.ssh/config</code>
+        se vezmou servery, uživatelé, klíče i brány (<code>ProxyJump</code>); hesla tam
+        nejsou, protože se přihlašuje klíčem. Import z WinSCP je i v nabídce <em>Soubor</em>.</p>
       <menu><button value="cancel">Zrušit</button><button value="save" class="primary">Uložit</button></menu>
     </form>
   </dialog>

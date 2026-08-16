@@ -27,6 +27,11 @@ contextBridge.exposeInMainWorld('api', {
     list: () => invoke('sites:list'),
     save: (site) => invoke('sites:save', site),
     remove: (id) => invoke('sites:delete', id),
+    saveSync: (id, sync) => invoke('sites:sync', { id, sync }),
+  },
+  ssh: {
+    read: (file) => invoke('ssh:read', { file }),
+    pick: () => invoke('ssh:pick'),
   },
   winscp: {
     pick: () => invoke('winscp:pick'),
@@ -39,7 +44,7 @@ contextBridge.exposeInMainWorld('api', {
     activate: (sid) => invoke('sessions:activate', sid),
   },
   remote: {
-    list: (sid, path) => invoke('remote:list', { sid, path }),
+    list: (sid, path, refresh) => invoke('remote:list', { sid, path, refresh }),
     home: (sid) => invoke('remote:home', { sid }),
     mkdir: (sid, path) => invoke('remote:mkdir', { sid, path }),
     rename: (sid, from, to) => invoke('remote:rename', { sid, from, to }),
