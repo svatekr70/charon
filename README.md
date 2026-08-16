@@ -50,6 +50,12 @@ předlohy vozí i zpátky.
 | Import z `~/.ssh/config` včetně bran | ✅ |
 | Barva a poznámka u relace | ✅ |
 | Vyrovnávací paměť výpisů | ✅ |
+| Správce relací se stromem složek a hledáním | ✅ |
+| Režimy synchronizace a řešení konfliktů | ✅ |
+| Řazení a řízení položek ve frontě | ✅ |
+| Kódování názvů a časový posun u starších FTP | ✅ |
+| Hromadné přejmenování s náhledem | ✅ |
+| Otevření Terminálu v aktuální cestě | ✅ |
 
 Nepodporuje SCP, WebDAV ani S3 — relace v těchto protokolech se při importu
 zobrazí, ale nejdou naimportovat.
@@ -105,6 +111,19 @@ přitom nesmí běžet.
 Automatické aktualizace by potřebovaly někde vystavené vydání (typicky GitHub
 Releases) a `electron-updater`. Dokud je Charon jen pro tebe, je `install-app`
 jednodušší.
+
+## Správce relací
+
+`⌘K` nebo tlačítko vlevo v liště. Strom složek, hledání podle názvu, serveru,
+uživatele i poznámky, detail vybrané relace vpravo. Připojíte dvojklikem nebo
+Enterem, šipkami se dá procházet rovnou z pole hledání. Sbalené složky si
+aplikace pamatuje.
+
+Rozbalovací seznam, který tu byl původně, stačil na pět relací; u sedmdesáti
+ve dvaceti složkách se v něm nedalo nic najít.
+
+**Duplikovat** vytvoří kopii včetně hesla — kopie se skládá v hlavním procesu,
+protože do okna se hesla nikdy neposílají.
 
 ## Záložky
 
@@ -376,6 +395,30 @@ půl minuty a **jakýkoliv zápis na server ho zahodí celý** — přejmenován
 i dokončený přenos. Zahazuje se schválně víc, než by bylo nutné: nejhorší, co se
 tím stane, je jedno načtení navíc, kdežto zastaralý výpis vede k mazání souboru,
 který už neexistuje. `⌘R` se paměti neptá nikdy. Vypnout se dá v nastavení.
+
+## Hromadné přejmenování
+
+Vyberte víc položek a v kontextovém menu zvolte hromadné přejmenování. Najít
+a nahradit, volitelně regulárním výrazem, jen na jméně / jen na příponě / na
+celém názvu, a `{n}` vloží pořadové číslo (od kolika, po kolika, na kolik míst).
+
+Náhled se přepočítává při každé změně a **přejmenovat nejde, dokud v něm je
+konflikt**: dva soubory pod stejným názvem, lomítko v názvu nebo název, který
+už ve složce je. Přejmenování je nevratné, takže se radši nedělá nic.
+
+Kroky se navíc řadí tak, aby se nic nepřepsalo ani při posunu názvů
+(`1 → 2` a zároveň `2 → 3`): kolidující soubor se nejdřív odklidí pod dočasný
+název. Z rozhraní se takový případ vyrobit skoro nedá, ale modul počítá plán
+pro kohokoliv, kdo ho použije.
+
+## Terminál
+
+V kontextovém menu panelu je **Otevřít Terminál zde**. Lokálně se otevře
+v dané složce. U serveru se sestaví příkaz `ssh` (včetně portu, klíče a brány)
+a **vloží se do schránky** — spustit ho za vás by znamenalo psát příkazy do
+cizího shellu a heslo bychom tam stejně nedostali. Název složky se uzavírá do
+apostrofů; že z něj nemůže vzniknout příkaz, hlídá `test/terminal.test.js`
+skutečným `/bin/sh`.
 
 ## Klávesové zkratky
 
@@ -699,6 +742,17 @@ npm test
   nezahodí zrovna složka, kterou člověk právě používá
 - `test/siteprofile.test.js` — nastavení synchronizace uložené u relace;
   hlavně že ho nesmaže úprava relace
+- `test/syncmodes.test.js` — režimy synchronizace. Testuje se hlavně to, co se
+  přenést **nesmí**: „jen novější" nesmí přepsat čerstvější soubor na cíli
+  a „jen srovnat časy" nesmí sáhnout na obsah ani nic smazat
+- `test/queueorder.test.js` — řazení fronty a pozastavení jedné položky;
+  hlavně že ji společné „Pokračovat" nerozeběhne
+- `test/ftpquirks.test.js` — kódování názvů a časový posun proti skutečnému
+  FTP serveru, včetně toho, že se posun netýká času z `MDTM` (ten je v UTC)
+- `test/rename.test.js` — plán hromadného přejmenování: kolize, prázdné názvy
+  a pořadí kroků, ve kterém se nic nepřepíše
+- `test/terminal.test.js` — uzavírání cesty do apostrofů. Ověřuje skutečný
+  `/bin/sh`, že ze složky `'; touch OVLADNUTO` vznikne argument, ne příkaz
 - `test/session.test.js` — správce záložek: pořadí, přepínání a úklid
 - `test/editconflict.test.js` — detekce cizí změny při ukládání z editoru
 - `test/properties.test.js` — rekurzivní práva a kontrolní součty proti

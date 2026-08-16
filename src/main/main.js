@@ -1,6 +1,8 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme } = require('electron');
+const {
+  app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme, clipboard,
+} = require('electron');
 const fs = require('fs');
 const fsp = fs.promises;
 const os = require('os');
@@ -25,6 +27,9 @@ const perms = require('./perms');
 const { Session, SessionManager, isDir: remoteIsDir } = require('./session');
 const { QueueStore } = require('./queue-store');
 const { expand, findPrompts, runLocal } = require('./commands');
+const { sshCommand } = require('./terminal');
+const { promisify } = require('util');
+const execFileAsync = promisify(require('child_process').execFile);
 
 let win = null;
 let sites = null;
@@ -489,6 +494,60 @@ function registerIpc() {
   handle('sites:delete', async (id) => { await sites.remove(id); return true; });
   handle('sites:sync', async ({ id, sync }) => { await sites.setSync(id, sync); return true; });
   handle('sites:duplicate', async (id) => sites.duplicate(id));
+
+  /**
+   * Hromadné přejmenování. Kroky přicházejí spočítané z okna včetně pořadí,
+   * ve kterém se nic nepřepíše; tady se jen provedou a spočítá se, co selhalo.
+   * Jeden nepovedený krok ostatní nezastaví — polovina přejmenovaná a půlka ne
+   * je horší než jasně ohlášená chyba u konkrétních souborů.
+   */
+  /**
+   * Otevře Terminál.
+   *
+   * Lokálně stačí složka. U serveru sestavíme příkaz `ssh` z údajů relace
+   * a necháme uživatele, ať ho odešle sám — heslo mu do terminálu psát
+   * nebudeme a tiše spouštět příkazy jeho jménem taky ne. U FTP není co
+   * otevírat, tam žádný shell není.
+   */
+  handle('term:open', async ({ sid, side, dir }) => {
+    if (side === 'local') {
+      await execFileAsync('open', ['-a', 'Terminal', dir]);
+      return { opened: 'local' };
+    }
+
+    const session = sessionOf(sid);
+    const cfg = session.config;
+    if (cfg.protocol !== 'sftp') throw new Error('Terminál umí jen SFTP — FTP žádný shell nemá');
+
+    const prikaz = sshCommand(cfg, dir);
+
+    clipboard.writeText(prikaz);
+    await execFileAsync('open', ['-a', 'Terminal', os.homedir()]);
+    return { opened: 'remote', command: prikaz };
+  });
+
+  handle('files:renameMany', async ({ sid, side, dir, steps }) => {
+    const failed = [];
+    let renamed = 0;
+
+    for (const krok of steps) {
+      try {
+        if (side === 'local') {
+          await fsp.rename(path.join(dir, krok.from), path.join(dir, krok.to));
+        } else {
+          const a = browseOf(sid);
+          await a.rename(posix.join(dir, krok.from), posix.join(dir, krok.to));
+        }
+        // Dočasné odklizení se do počtu nepočítá, to je jen mezikrok.
+        if (!krok.temp) renamed += 1;
+      } catch (err) {
+        failed.push(`${krok.from}: ${err.message}`);
+      }
+    }
+
+    if (side !== 'local' && manager.has(sid)) sessionOf(sid).listCache.clear();
+    return { renamed, failed };
+  });
 
   // --- import z WinSCP ---
   handle('winscp:pick', async () => {

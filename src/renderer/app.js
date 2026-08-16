@@ -778,6 +778,7 @@ function showContextMenu(side, x, y) {
     }
     items.push(null);
     if (sel.length === 1) items.push({ label: 'Přejmenovat…', key: 'F2', fn: () => renameSelected(side) });
+    if (sel.length > 1) items.push({ label: `Hromadně přejmenovat ${sel.length} položek…`, fn: () => openBulkRename(side) });
     const toTrash = side === 'local' || state.trash.enabled;
     items.push({
       label: `${toTrash ? 'Smazat do koše' : 'Smazat'} ${sel.length > 1 ? `(${sel.length})` : ''}`,
@@ -809,6 +810,7 @@ function showContextMenu(side, x, y) {
     fn: () => toggleFilter(side),
   });
   items.push({ label: 'Obnovit', key: '⌘R', fn: () => loadPane(side, state[side].path, { refresh: true }) });
+  items.push({ label: '⌨ Otevřít Terminál zde', fn: () => openTerminal(side) });
   items.push({
     label: state[side].showHidden ? 'Skrýt skryté soubory' : 'Zobrazit skryté soubory',
     fn: () => { state[side].showHidden = !state[side].showHidden; renderPane(side); },
@@ -1781,6 +1783,132 @@ async function refreshSites(selectId) {
   renderSiteButton();
   if (sitesDlg.open) renderSitesTree();
 }
+
+/**
+ * Otevře Terminál v aktuální cestě.
+ *
+ * U serveru se příkaz `ssh` jen připraví do schránky. Spustit ho za uživatele
+ * by znamenalo psát mu do cizího shellu příkazy, o kterých neví — a heslo
+ * bychom tam stejně nedostali.
+ */
+async function openTerminal(side) {
+  const r = await call(window.api.files.openTerminal(sid(), side, state[side].path));
+  if (!r) return;
+  if (r.opened === 'remote') {
+    setLog('ok', `Terminál otevřen; příkaz máte ve schránce: ${r.command}`);
+  } else {
+    setLog('ok', 'Terminál otevřen v této složce');
+  }
+}
+
+/* -------------------------------------------- hromadné přejmenování */
+
+const bulkDlg = $('#dlg-bulk');
+const bulkState = { side: 'remote', names: [], existing: [], rows: [] };
+
+function openBulkRename(side) {
+  const sel = selectedEntries(side);
+  if (sel.length < 2) return setLog('warn', 'Vyberte aspoň dvě položky; jednu přejmenujete přes F2');
+
+  bulkState.side = side;
+  bulkState.names = sel.map((e) => e.name);
+  // Názvy ve složce potřebujeme, abychom poznali, že by nový název přepsal
+  // něco, co se samo nepřejmenovává.
+  bulkState.existing = (state[side].view || []).map((e) => e.name);
+
+  $('#bulk-what').textContent = `${bulkState.names.length} ${
+    plural(bulkState.names.length, 'položka', 'položky', 'položek')} v ${
+    side === 'local' ? 'lokálním panelu' : 'serverovém panelu'}`;
+  for (const id of ['#bulk-find', '#bulk-replace']) $(id).value = '';
+  renderBulkPreview();
+  bulkDlg.showModal();
+  $('#bulk-find').focus();
+  return undefined;
+}
+
+function bulkOptions() {
+  return {
+    find: $('#bulk-find').value,
+    replace: $('#bulk-replace').value,
+    regex: $('#bulk-regex').checked,
+    caseSensitive: $('#bulk-case').checked,
+    target: $('#bulk-target').value,
+    start: Number($('#bulk-start').value) || 0,
+    step: Number($('#bulk-step').value) || 1,
+    pad: Number($('#bulk-pad').value) || 1,
+    existing: bulkState.existing,
+  };
+}
+
+/** Náhled se přepočítává při každé změně — přejmenování je nevratné. */
+function renderBulkPreview() {
+  const rows = window.BulkRename.plan(bulkState.names, bulkOptions());
+  bulkState.rows = rows;
+  const box = $('#bulk-preview');
+
+  const head = document.createElement('div');
+  head.className = 'sr head';
+  head.style.gridTemplateColumns = 'minmax(0,1fr) 24px minmax(0,1fr)';
+  head.innerHTML = '<span>Původní název</span><span></span><span>Nový název</span>';
+
+  const el = rows.map((r) => {
+    const row = document.createElement('div');
+    row.className = 'sr';
+    row.style.gridTemplateColumns = 'minmax(0,1fr) 24px minmax(0,1fr)';
+
+    const from = document.createElement('span');
+    from.textContent = r.from;
+    const sip = document.createElement('span');
+    sip.textContent = r.changed && !r.error ? '→' : '';
+
+    const to = document.createElement('span');
+    if (r.error) {
+      to.innerHTML = '<span class="tag bad"></span>';
+      to.firstChild.textContent = r.error;
+    } else if (!r.changed) {
+      to.textContent = 'beze změny';
+      to.className = 'muted';
+    } else {
+      to.textContent = r.to;
+    }
+    row.append(from, sip, to);
+    return row;
+  });
+
+  box.replaceChildren(head, ...el);
+
+  const proveditelne = window.BulkRename.applicable(rows).length;
+  const chyby = rows.filter((r) => r.error).length;
+  $('#bulk-go').disabled = proveditelne === 0 || chyby > 0;
+  $('#bulk-go').textContent = chyby
+    ? `Nejdřív opravte ${chyby} ${plural(chyby, 'konflikt', 'konflikty', 'konfliktů')}`
+    : `Přejmenovat ${proveditelne}`;
+}
+
+for (const id of ['#bulk-find', '#bulk-replace', '#bulk-start', '#bulk-step', '#bulk-pad']) {
+  $(id).addEventListener('input', renderBulkPreview);
+}
+for (const id of ['#bulk-target', '#bulk-regex', '#bulk-case']) {
+  $(id).addEventListener('change', renderBulkPreview);
+}
+$('#bulk-cancel').addEventListener('click', () => bulkDlg.close());
+
+$('#bulk-go').addEventListener('click', async () => {
+  const kroky = window.BulkRename.steps(bulkState.rows);
+  if (!kroky.length) return;
+  const dir = state[bulkState.side].path;
+
+  const r = await call(window.api.files.renameMany(sid(), {
+    side: bulkState.side, dir, steps: kroky,
+  }));
+  if (!r) return;
+
+  bulkDlg.close();
+  await loadPane(bulkState.side, dir, { refresh: true });
+  setLog(r.failed.length ? 'warn' : 'ok',
+    `Přejmenováno ${r.renamed} ${plural(r.renamed, 'položka', 'položky', 'položek')}`
+    + (r.failed.length ? `; ${r.failed.length} se nepovedlo: ${r.failed[0]}` : ''));
+});
 
 /* ------------------------------------------------------ správce relací */
 

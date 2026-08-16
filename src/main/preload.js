@@ -23,6 +23,10 @@ contextBridge.exposeInMainWorld('api', {
     get: () => invoke('settings:get'),
     set: (patch) => invoke('settings:set', patch),
   },
+  files: {
+    renameMany: (sid, opts) => invoke('files:renameMany', { sid, ...opts }),
+    openTerminal: (sid, side, dir) => invoke('term:open', { sid, side, dir }),
+  },
   sites: {
     list: () => invoke('sites:list'),
     save: (site) => invoke('sites:save', site),
