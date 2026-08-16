@@ -8,6 +8,12 @@ const { EventEmitter } = require('events');
 
 const { RateLimiter } = require('./throttle');
 
+/**
+ * Přípona rozepsaného souboru. Stejnou používá WinSCP, takže když se přenos
+ * nedokončí, je i z jiného klienta na první pohled vidět, co se stalo.
+ */
+const TEMP_SUFFIX = '.filepart';
+
 /** Jednoduchý přerušovací token — adaptéry na něj čekají přes .once('abort'). */
 class AbortToken extends EventEmitter {
   constructor() {
@@ -73,6 +79,25 @@ class TransferQueue extends EventEmitter {
     this._conflictChain = Promise.resolve();
     /** Sdílený globální limit rychlosti; 0 = bez omezení. */
     this.limiter = new RateLimiter(0);
+    /**
+     * Přenášet přes dočasný název a nahradit cíl až po dokončení. Na živém
+     * webu jinak může návštěvník trefit poloviční soubor.
+     */
+    this.useTempName = true;
+    /** Od jaké velikosti dočasný název používat; 0 = vždy. */
+    this.tempNameMinBytes = 0;
+  }
+
+  setTempName(enabled, minBytes = 0) {
+    this.useTempName = Boolean(enabled);
+    this.tempNameMinBytes = Math.max(0, Math.floor(minBytes) || 0);
+  }
+
+  /** Rozhodne, jestli se konkrétní přenos povede přes dočasný název. */
+  _tempFor(size) {
+    if (!this.useTempName) return null;
+    if (this.tempNameMinBytes && (size || 0) < this.tempNameMinBytes) return null;
+    return TEMP_SUFFIX;
   }
 
   setConcurrency(n) {
@@ -114,6 +139,8 @@ class TransferQueue extends EventEmitter {
       moveFrom: j.moveFrom || null,
       speedLimit: Math.max(0, Math.floor(j.speedLimit) || 0),
       limiter: null,
+      // Cesta rozepsaného souboru, dokud přenos běží.
+      tempPath: null,
       note: null,
     }));
     this.items.push(...created);
@@ -279,6 +306,9 @@ class TransferQueue extends EventEmitter {
         if (err && err.aborted) {
           // Rozlišíme pauzu (položka se vrátí do fronty) od zrušení.
           item.status = token.reason === 'pause' ? 'paused' : 'canceled';
+          // Po pauze rozepsaný soubor necháme — je z čeho navázat. Po zrušení
+          // by po sobě jen zbyl nepořádek, tak ho uklidíme.
+          if (item.status === 'canceled') await this._dropPartial(item, adapter);
         } else {
           item.status = 'error';
           item.error = err ? err.message : 'Neznámá chyba';
@@ -306,42 +336,74 @@ class TransferQueue extends EventEmitter {
       const local = await fsp.stat(item.localPath);
       item.size = local.size;
 
+      const suffix = this._tempFor(local.size);
       const decision = await this._checkConflict(adapter, item, {
         size: local.size, mtime: local.mtimeMs,
-      });
+      }, suffix ? item.remotePath + suffix : item.remotePath);
       if (decision === 'skipped') return 'skipped';
 
-      const startAt = await this._resumeOffsetForUpload(adapter, item, local.size);
+      // Cestu k zápisu skládáme až po dotazu: volba „přejmenovat" cíl mění,
+      // a kdybychom ji spočítali dřív, zapsalo by se na původní jméno —
+      // tedy přesně do souboru, který měl zůstat nedotčený.
+      const writePath = suffix ? item.remotePath + suffix : item.remotePath;
+      item.tempPath = suffix ? writePath : null;
+
+      const startAt = await this._resumeOffset(item, local.size, () => adapter.stat(writePath));
       item.transferred = startAt;
 
       const parent = posixDirname(item.remotePath);
       if (parent && parent !== '.') await adapter.mkdir(parent, true).catch(() => {});
 
-      if (startAt >= local.size && local.size > 0) return 'done'; // už je celý nahraný
-      await adapter.upload(item.localPath, item.remotePath, { startAt, onProgress, signal: token, limiters });
+      if (startAt < local.size || local.size === 0) {
+        await adapter.upload(item.localPath, writePath, { startAt, onProgress, signal: token, limiters });
+      }
 
-      // Přeneseme i čas změny, jinak by synchronizace soubor příště zase
-      // označila za rozdílný. Server to nemusí umět — pak jen mlčky přeskočíme.
-      await adapter.utimes(item.remotePath, local.atimeMs, local.mtimeMs).catch(() => {});
+      // Čas změny nastavujeme ještě na rozepsaném souboru — přejmenování ho
+      // zachová a ušetří se tím jedno kolo navíc. Bez něj by synchronizace
+      // soubor příště zase označila za rozdílný; server to ale umět nemusí.
+      await adapter.utimes(writePath, local.atimeMs, local.mtimeMs).catch(() => {});
+
+      if (suffix) {
+        try {
+          await adapter.replace(writePath, item.remotePath);
+        } catch (err) {
+          throw new Error(`Soubor se přenesl, ale nešlo ho přejmenovat z ${posixBasename(writePath)}`
+            + ` na ${posixBasename(item.remotePath)}: ${err.message}.`
+            + ' Zkuste vypnout přenos přes dočasný název v nastavení.');
+        }
+        item.tempPath = null;
+      }
     } else {
       const remote = await adapter.stat(item.remotePath);
       item.size = remote.size;
 
+      const suffix = this._tempFor(remote.size);
       const decision = await this._checkConflict(adapter, item, {
         size: remote.size, mtime: remote.mtime,
-      });
+      }, suffix ? item.localPath + suffix : item.localPath);
       if (decision === 'skipped') return 'skipped';
 
+      // Až po dotazu — „přejmenovat" mění cíl, viz nahrávání výš.
+      const writePath = suffix ? item.localPath + suffix : item.localPath;
+      item.tempPath = suffix ? writePath : null;
+
       await fsp.mkdir(path.dirname(item.localPath), { recursive: true });
-      const startAt = await this._resumeOffsetForDownload(item, remote.size);
+      const startAt = await this._resumeOffset(item, remote.size, () => fsp.stat(writePath));
       item.transferred = startAt;
 
-      if (startAt >= remote.size && remote.size > 0) return 'done';
-      await adapter.download(item.remotePath, item.localPath, { startAt, onProgress, signal: token, limiters });
+      if (startAt < remote.size || remote.size === 0) {
+        await adapter.download(item.remotePath, writePath, { startAt, onProgress, signal: token, limiters });
+      }
 
       if (remote.mtime) {
         const t = new Date(remote.mtime);
-        await fsp.utimes(item.localPath, t, t).catch(() => {});
+        await fsp.utimes(writePath, t, t).catch(() => {});
+      }
+
+      // Lokálně přejmenování přes existující soubor funguje vždycky.
+      if (suffix) {
+        await fsp.rename(writePath, item.localPath);
+        item.tempPath = null;
       }
     }
     return 'done';
@@ -354,13 +416,20 @@ class TransferQueue extends EventEmitter {
    *
    * @returns {Promise<'proceed'|'skipped'>}
    */
-  async _checkConflict(adapter, item, source) {
+  async _checkConflict(adapter, item, source, writePath) {
     if (item.conflictResolved || item.transferred > 0) return 'proceed';
     if (!this.onConflict && !this.policy) return 'proceed';
     if (this.policy === 'overwrite') return 'proceed'; // ušetříme dotaz na server
 
-    const target = await this._statTarget(adapter, item);
+    const finalPath = item.direction === 'up' ? item.remotePath : item.localPath;
+    const target = await this._statPath(adapter, item.direction, finalPath);
     if (!target) return 'proceed'; // cíl neexistuje, není co řešit
+
+    // Při přenosu přes dočasný název leží rozepsaná data jinde než v cíli,
+    // takže navázat jde na ně, ne na hotový soubor pod cílovým jménem.
+    const partial = writePath && writePath !== finalPath
+      ? await this._statPath(adapter, item.direction, writePath)
+      : target;
 
     let choice = this.policy;
     if (!choice) {
@@ -370,7 +439,7 @@ class TransferQueue extends EventEmitter {
         remotePath: item.remotePath,
         source,
         target,
-        canResume: target.size > 0 && target.size < source.size,
+        canResume: Boolean(partial && partial.size > 0 && partial.size < source.size),
       });
       choice = (answer && answer.action) || 'skip';
       if (answer && answer.applyToAll) this.policy = choice;
@@ -381,8 +450,8 @@ class TransferQueue extends EventEmitter {
         return 'proceed';
 
       case 'resume':
-        // Navázání řeší _resumeOffsetFor*, kterým stačí transferred > 0.
-        item.transferred = target.size;
+        // Navázání řeší _resumeOffset, kterému stačí transferred > 0.
+        item.transferred = partial ? partial.size : 0;
         return 'proceed';
 
       case 'newer': {
@@ -410,6 +479,16 @@ class TransferQueue extends EventEmitter {
     }
   }
 
+  /** Smaže rozepsaný soubor; selhání úklidu nesmí přebít původní důvod konce. */
+  async _dropPartial(item, adapter) {
+    if (!item.tempPath) return;
+    try {
+      if (item.direction === 'up') await adapter?.removeFile(item.tempPath);
+      else await fsp.unlink(item.tempPath);
+    } catch { /* nevadí, zůstane po něm jen soubor navíc */ }
+    item.tempPath = null;
+  }
+
   /**
    * Dotazy na konflikt jdou jeden po druhém. Se souběžnými přenosy by jinak
    * vyskočily dva dialogy naráz — a druhý by se ptal na něco, o čem uživatel
@@ -424,16 +503,16 @@ class TransferQueue extends EventEmitter {
     return next;
   }
 
-  /** Vlastnosti cílového souboru, nebo null když neexistuje. */
-  async _statTarget(adapter, item) {
+  /** Vlastnosti souboru na dané cestě, nebo null když neexistuje. */
+  async _statPath(adapter, direction, target) {
     try {
-      if (item.direction === 'up') {
-        const st = await adapter.stat(item.remotePath);
+      if (direction === 'up') {
         // FTP na adresáři SIZE neumí a vrátí chybu — sem se tedy dostane
         // jen skutečný soubor.
+        const st = await adapter.stat(target);
         return { size: st.size, mtime: st.mtime };
       }
-      const st = await fsp.stat(item.localPath);
+      const st = await fsp.stat(target);
       return { size: st.size, mtime: st.mtimeMs };
     } catch {
       return null;
@@ -464,26 +543,26 @@ class TransferQueue extends EventEmitter {
     throw new Error('Nepodařilo se najít volný název');
   }
 
-  /** Kolik bajtů už na serveru leží a dá se na ně navázat. */
-  async _resumeOffsetForUpload(adapter, item, localSize) {
-    if (item.transferred <= 0) return 0; // nová položka — přepisujeme od začátku
-    try {
-      const remote = await adapter.stat(item.remotePath);
-      return remote.size > 0 && remote.size <= localSize ? remote.size : 0;
-    } catch {
-      return 0;
-    }
-  }
-
-  async _resumeOffsetForDownload(item, remoteSize) {
+  /**
+   * Kolik bajtů rozepsaného souboru se dá použít.
+   *
+   * Navazuje se jen tam, kde už něco přeneseno bylo (transferred > 0) —
+   * u nové položky se píše od začátku. Cizí rozepsaný soubor z dřívějška
+   * tedy nikdy nepoužijeme mlčky; mohl by pocházet z jiné verze zdroje.
+   */
+  async _resumeOffset(item, sourceSize, statTarget) {
     if (item.transferred <= 0) return 0;
     try {
-      const local = await fsp.stat(item.localPath);
-      return local.size > 0 && local.size <= remoteSize ? local.size : 0;
+      const st = await statTarget();
+      return st.size > 0 && st.size <= sourceSize ? st.size : 0;
     } catch {
       return 0;
     }
   }
+}
+
+function posixBasename(p) {
+  return p.slice(p.lastIndexOf('/') + 1);
 }
 
 function posixDirname(p) {
@@ -491,4 +570,4 @@ function posixDirname(p) {
   return i <= 0 ? '/' : p.slice(0, i);
 }
 
-module.exports = { TransferQueue, AbortToken, posixDirname };
+module.exports = { TransferQueue, AbortToken, posixDirname, TEMP_SUFFIX };

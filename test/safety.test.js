@@ -131,6 +131,9 @@ async function main() {
     getAdapter: async () => accepted,
     onConflict: async () => { asked += 1; return answer; },
   });
+  // Bez dočasného názvu, ať volba „navázat" míří na cílový soubor.
+  // Navázání na rozepsaný soubor testuje tempname.test.js.
+  q.setTempName(false);
 
   // -- přeskočit
   await writeRemote('puvodni');
@@ -212,6 +215,7 @@ async function main() {
     getAdapter: async () => accepted,
     onMoveSource: async (item) => { movedSources.push(item.localPath || item.remotePath); },
   });
+  qm.setTempName(false);
 
   const movable = path.join(localRoot, 'presun.txt');
   await fsp.writeFile(movable, 'obsah k presunu');

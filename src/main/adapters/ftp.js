@@ -181,6 +181,17 @@ class FtpAdapter {
     await this.client.rename(from, to);
   }
 
+  /** Přejmenování přes existující cíl; ne každý server RNTO na obsazené jméno pustí. */
+  async replace(from, to) {
+    try {
+      await this.client.rename(from, to);
+      return;
+    } catch { /* cíl nejspíš existuje */ }
+
+    await this.client.remove(to, true);
+    await this.client.rename(from, to);
+  }
+
   async chmod(remotePath, mode) {
     // Není součástí FTP standardu; většina serverů rozumí SITE CHMOD.
     await this.client.send(`SITE CHMOD ${mode.toString(8).padStart(3, '0')} ${remotePath}`);

@@ -31,6 +31,7 @@ let finder = null;
 let settings = {
   editor: '', localDir: os.homedir(), transferMask: '',
   maxConcurrent: 3, speedLimitKb: 0,
+  tempName: true, tempNameMinKb: 0,
 };
 let pool = null;
 
@@ -440,6 +441,9 @@ function registerIpc() {
     if (patch.speedLimitKb !== undefined) {
       queue.setSpeedLimit((settings.speedLimitKb || 0) * 1024);
     }
+    if (patch.tempName !== undefined || patch.tempNameMinKb !== undefined) {
+      queue.setTempName(settings.tempName !== false, (settings.tempNameMinKb || 0) * 1024);
+    }
     return settings;
   });
 
@@ -781,6 +785,7 @@ app.whenReady().then(async () => {
   queue.on('update', (snap) => send('queue', snap));
 
   queue.setSpeedLimit((settings.speedLimitKb || 0) * 1024);
+  queue.setTempName(settings.tempName !== false, (settings.tempNameMinKb || 0) * 1024);
 
   prompts.register();
   registerIpc();

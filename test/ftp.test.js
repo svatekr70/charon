@@ -85,6 +85,9 @@ async function main() {
   await fsp.writeFile(bigLocal, payload);
 
   const queue = new TransferQueue({ getAdapter: async () => adapter });
+  // Navázání přes REST/APPE se testuje na cílovém souboru; dočasný název
+  // má vlastní test.
+  queue.setTempName(false);
 
   await queue.addAndWait({ direction: 'up', localPath: bigLocal, remotePath: '/www/big.bin' });
   const uploaded = await fsp.readFile(path.join(serverRoot, 'www', 'big.bin'));

@@ -229,6 +229,15 @@
         když další nepovolí, Charon se sám zmenší a napíše to do stavového řádku.
         Limit rychlosti platí dohromady pro všechny přenosy.</p>
 
+      <label class="check"><input type="checkbox" name="tempName" /> Přenášet přes dočasný název <code>.filepart</code></label>
+      <label>Dočasný název až od velikosti (kB)
+        <input name="tempNameMinKb" type="number" min="0" placeholder="0 = vždy" />
+      </label>
+      <p class="muted">Soubor se nahraje pod dočasným jménem a na cílové se přejmenuje až po
+        dokončení. Na živém webu tak návštěvník nikdy netrefí poloviční soubor. Stojí to jedno
+        přejmenování navíc na soubor — u tisíců drobných souborů přes pomalou linku se vyplatí
+        nastavit spodní hranici.</p>
+
       <label>Výchozí maska pro přenosy
         <input name="transferMask" placeholder="prázdné = přenášet vše" spellcheck="false" />
       </label>

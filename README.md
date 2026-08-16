@@ -32,6 +32,7 @@ předlohy vozí i zpátky.
 | Sloupce vlastníka a skupiny, nastavitelný dvojklik | ✅ |
 | Masky souborů pro přenosy i synchronizaci | ✅ |
 | Souběžné přenosy a omezení rychlosti | ✅ |
+| Přenos přes dočasný název | ✅ |
 
 Nepodporuje SCP, WebDAV ani S3 — relace v těchto protokolech se při importu
 zobrazí, ale nejdou naimportovat.
@@ -253,6 +254,34 @@ Servery počet spojení z jedné adresy často omezují. Když další nepovolí
 Charon se sám zmenší na to, co prošlo, napíše to do stavového řádku a pokračuje
 — přenosy kvůli tomu neselžou.
 
+## Přenos přes dočasný název
+
+Soubor se přenáší pod jménem `<název>.filepart` a na cílové se **přejmenuje až
+po dokončení**. Do té chvíle zůstává původní soubor nedotčený — na živém webu
+tak návštěvník nikdy netrefí poloviční PHP soubor. Stejná přípona jako ve
+WinSCP, takže je i z jiného klienta na první pohled vidět, co se stalo.
+
+Přejmenování se dělá přes rozšíření `posix-rename@openssh.com`, které cíl
+nahradí jedním krokem a bez okamžiku, kdy soubor neexistuje. Když ho server
+nemá, zbývá smazat a přejmenovat.
+
+Co se stane při přerušení:
+
+| Situace | Rozepsaný soubor |
+| --- | --- |
+| **Pauza** | zůstane — je z čeho navázat |
+| **Chyba** | zůstane — opakování na něj naváže |
+| **Zrušení** | uklidí se, aby po sobě nenechal nepořádek |
+
+Cizí rozepsaný soubor z dřívějška se nikdy nepoužije mlčky. Dialog při přepisu
+navázání **nabídne** (a počítá s velikostí rozepsaného souboru, ne hotového
+pod cílovým jménem), ale rozhodnutí necháme na vás — mohl by pocházet z jiné
+verze zdroje.
+
+Vypnout jde v *Nastavení → Přenosy*; tam se dá nastavit i spodní hranice
+velikosti. Přejmenování je jedno kolo navíc na soubor, takže u tisíců drobných
+souborů přes pomalou linku se vyplatí ho pro ně přeskočit.
+
 ## Omezení rychlosti
 
 Nastavuje se v *Nastavení → Přenosy* v kB/s, nebo pravým tlačítkem na položku
@@ -354,6 +383,8 @@ npm test
 - `test/browse.test.js` — dopočítání velikosti složek a hledání souborů
 - `test/transfer-mask.test.js` — masky u přenosů a synchronizace, včetně toho,
   že vyloučená složka neprojde ani jako ručně vybraný kořen
+- `test/tempname.test.js` — přenos přes dočasný název; hlavně to, že cílový
+  soubor zůstane během přenosu nedotčený
 - `test/parallel.test.js` — souběžné přenosy, zásoba spojení a omezení
   rychlosti. Rychlost se měří proti hodinkám, ne proti počítadlu omezovače;
   zrychlení souběžností se ověřuje proti serveru s umělou latencí, protože

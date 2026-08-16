@@ -67,6 +67,10 @@ async function main() {
   });
 
   const queue = new TransferQueue({ getAdapter: async () => adapter });
+  // Tenhle soubor testuje navázání do cílového souboru. S přenosem přes
+  // dočasný název by se psalo jinam a testy níž by procházely, aniž by
+  // navázání vůbec proběhlo. Varianta s dočasným názvem má vlastní test.
+  queue.setTempName(false);
   await queue.addAndWait({ direction: 'up', localPath: bigLocal, remotePath: '/www/big.bin' });
   adapter.upload = realUpload;
   const uploaded = await fsp.readFile(path.join(serverRoot, 'www', 'big.bin'));
@@ -134,6 +138,7 @@ async function main() {
 
   const pausePath = path.join(localRoot, 'pause.bin');
   const q2 = new TransferQueue({ getAdapter: async () => adapter });
+  q2.setTempName(false);
   const [pid] = q2.add([{ direction: 'down', remotePath: '/www/huge.bin', localPath: pausePath }]);
 
   // Pauzu spustíme, jakmile přenos prokazatelně běží.
@@ -202,6 +207,7 @@ async function main() {
 
   // ------------------------------------------------------ aplikace synchronizace
   const q3 = new TransferQueue({ getAdapter: async () => adapter });
+  q3.setTempName(false);
   for (const a of up.actions.filter((x) => x.action === 'mkdirRemote')) await adapter.mkdir(a.remotePath, true);
   for (const a of up.actions.filter((x) => x.action === 'upload')) {
     await q3.addAndWait({ direction: 'up', localPath: a.localPath, remotePath: a.remotePath });
@@ -225,6 +231,7 @@ async function main() {
   const dlDir = path.join(tmp, 'mtime-down');
   await fsp.mkdir(dlDir, { recursive: true });
   const q4 = new TransferQueue({ getAdapter: async () => adapter });
+  q4.setTempName(false);
   await q4.addAndWait({ direction: 'down', remotePath: '/sync/a.txt', localPath: path.join(dlDir, 'a.txt') });
   const backMtime = (await fsp.stat(path.join(dlDir, 'a.txt'))).mtimeMs;
   truthy('čas změny přenesen při stahování (±1 s)', Math.abs(backMtime - remoteMtime) < 1000);

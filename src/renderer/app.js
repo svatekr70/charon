@@ -34,6 +34,7 @@ const state = {
 const DEFAULT_SETTINGS = {
   editor: '', doubleClick: 'edit', typeAhead: true, colOwner: false, colGroup: false,
   transferMask: '', maxConcurrent: 3, speedLimitKb: 0,
+  tempName: true, tempNameMinKb: 0,
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -1565,6 +1566,8 @@ $('#btn-settings').addEventListener('click', () => {
   f.transferMask.value = cur.transferMask || '';
   f.maxConcurrent.value = cur.maxConcurrent || 3;
   f.speedLimitKb.value = cur.speedLimitKb || 0;
+  f.tempName.checked = cur.tempName !== false;
+  f.tempNameMinKb.value = cur.tempNameMinKb || 0;
   f.doubleClick.value = cur.doubleClick;
   f.typeAhead.checked = cur.typeAhead !== false;
   f.colOwner.checked = Boolean(cur.colOwner);
@@ -1580,6 +1583,8 @@ setDlg.addEventListener('close', async () => {
     transferMask: f.transferMask.value.trim(),
     maxConcurrent: Math.max(1, Math.min(16, Number(f.maxConcurrent.value) || 1)),
     speedLimitKb: Math.max(0, Number(f.speedLimitKb.value) || 0),
+    tempName: f.tempName.checked,
+    tempNameMinKb: Math.max(0, Number(f.tempNameMinKb.value) || 0),
     doubleClick: f.doubleClick.value,
     typeAhead: f.typeAhead.checked,
     colOwner: f.colOwner.checked,

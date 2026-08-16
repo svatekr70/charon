@@ -143,6 +143,29 @@ class SftpAdapter {
     await this.client.rename(from, to);
   }
 
+  /**
+   * Přejmenování přes existující cíl.
+   *
+   * Obyčejné SFTP rename podle specifikace selže, když cíl existuje — proto
+   * nejdřív zkusíme rozšíření posix-rename@openssh.com, které umí nahradit
+   * jedním krokem a bez okamžiku, kdy soubor neexistuje. Když ho server nemá,
+   * zbývá smazat a přejmenovat.
+   */
+  async replace(from, to) {
+    try {
+      await this.client.posixRename(from, to);
+      return;
+    } catch { /* server rozšíření nemá */ }
+
+    try {
+      await this.client.rename(from, to);
+      return;
+    } catch { /* cíl nejspíš existuje */ }
+
+    await this.client.delete(to, true);
+    await this.client.rename(from, to);
+  }
+
   async chmod(remotePath, mode) {
     await this.client.chmod(remotePath, mode);
   }
