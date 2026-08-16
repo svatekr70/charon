@@ -12,7 +12,6 @@
       <div class="drag-region"></div>
       <select id="site-select" title="Uložené relace"><option value="">— vyberte relaci —</option></select>
       <button id="btn-connect" class="primary">Připojit</button>
-      <button id="btn-disconnect" hidden>Odpojit</button>
       <span class="sep"></span>
       <button id="btn-new-site" title="Nová relace">＋ Relace</button>
       <button id="btn-edit-site" title="Upravit vybranou relaci">Upravit</button>
@@ -24,6 +23,8 @@
       <button id="btn-sync" title="Synchronizace adresářů (⌘S)">⇅ Sync</button>
       <button id="btn-settings" title="Nastavení">⚙</button>
     </header>
+
+    <nav class="tabs" id="tabs" hidden></nav>
 
     <main class="panes">
       <section class="pane" id="pane-local" data-side="local">

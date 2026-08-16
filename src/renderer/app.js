@@ -16,20 +16,59 @@ function newPane(showHidden) {
   };
 }
 
+/** Stav jedné záložky. Lokální panel má každá svůj, jako ve WinSCP. */
+function newSession(info) {
+  return {
+    id: info ? info.id : null,
+    info: info || null,
+    local: newPane(false),
+    remote: newPane(true),
+    queue: { items: [], pending: 0, totalBytes: 0, doneBytes: 0, paused: false, active: 0 },
+    trash: { enabled: false, path: '' },
+    watch: { running: false },
+    editing: [],
+  };
+}
+
 const state = {
   sites: [],
-  connected: false,
-  local: newPane(false),
-  remote: newPane(true),
+  /** id záložky → stav */
+  sessions: new Map(),
+  order: [],
+  activeId: null,
+  /** Než je otevřená první záložka, prochází se aspoň lokální strana. */
+  placeholder: newSession(null),
   activeSide: 'local',
-  queue: { items: [], paused: false },
-  editing: [],
   settings: {},
-  trash: { enabled: false, path: '' },
-  watch: { running: false },
   importData: null,
   syncActions: [],
 };
+
+/** Záložka vpředu, nebo náhradní stav, když žádná není. */
+function active() {
+  return (state.activeId && state.sessions.get(state.activeId)) || state.placeholder;
+}
+
+/** Id pro volání do hlavního procesu; null znamená „nejsme připojeni". */
+function sid() {
+  return state.activeId;
+}
+
+// Zbytek kódu pracuje se `state.local`, `state.remote` a spol. jako dřív;
+// tyhle vlastnosti jen ukazují do právě aktivní záložky.
+for (const key of ['local', 'remote', 'queue', 'trash', 'watch', 'editing']) {
+  Object.defineProperty(state, key, {
+    get() { return active()[key]; },
+    set(v) { active()[key] = v; },
+  });
+}
+
+Object.defineProperty(state, 'connected', {
+  get() {
+    const s = active();
+    return Boolean(s.info && s.info.status === 'connected');
+  },
+});
 
 /** Výchozí nastavení; hlavní proces posílá jen to, co je uložené. */
 const DEFAULT_SETTINGS = {
@@ -108,8 +147,9 @@ const localParent = (p) => posixParent(p);
  *   nesmí do historie přidávat další záznam, jinak by se z ní nedalo vyjít
  */
 async function loadPane(side, targetPath, { fromHistory = false } = {}) {
-  const api = side === 'local' ? window.api.local : window.api.remote;
-  const data = await call(api.list(targetPath));
+  const data = await call(side === 'local'
+    ? window.api.local.list(targetPath)
+    : window.api.remote.list(sid(), targetPath));
   if (!data) return;
   const st = state[side];
 
@@ -303,7 +343,7 @@ function wirePane(side) {
     if (act === 'up') await loadPane(side, parentOf(side, state[side].path));
     else if (act === 'back') await goHistory(side, -1);
     else if (act === 'fwd') await goHistory(side, 1);
-    else if (act === 'home') await loadPane('remote', await call(window.api.remote.home()));
+    else if (act === 'home') await loadPane('remote', await call(window.api.remote.home(sid())));
     else if (act === 'browse') {
       const dir = await call(window.api.local.pickDir());
       if (dir) await loadPane('local', dir);
@@ -414,7 +454,7 @@ function wirePane(side) {
     const files = [...(ev.dataTransfer.files || [])].map((f) => window.api.pathForFile(f)).filter(Boolean);
     if (!files.length) return;
     if (side === 'remote') {
-      const r = await call(window.api.transfer.upload(files, state.remote.path));
+      const r = await call(window.api.transfer.upload(sid(), files, state.remote.path));
       if (r) setLog('ok', `Zařazeno ${r.count} ${plural(r.count, 'soubor', 'soubory', 'souborů')} k nahrání`);
     }
   });
@@ -512,14 +552,14 @@ async function transfer(from, to, { move = false, mask, target } = {}) {
     if (!window.confirm(`Přesunout ${what} do ${targetDir}?\n\n`
       + `Po úspěšném přenosu se zdroj smaže ${whereFrom} (do koše).`)) return undefined;
 
-    const r = await call(window.api.transfer.move(items, targetDir, from, mask));
+    const r = await call(window.api.transfer.move(sid(), items, targetDir, from, mask));
     if (r) setLog('ok', `K přesunu zařazeno ${r.count} ${plural(r.count, 'soubor', 'soubory', 'souborů')}`);
     return undefined;
   }
 
   const r = from === 'local'
-    ? await call(window.api.transfer.upload(items, targetDir, mask))
-    : await call(window.api.transfer.download(items, targetDir, mask));
+    ? await call(window.api.transfer.upload(sid(), items, targetDir, mask))
+    : await call(window.api.transfer.download(sid(), items, targetDir, mask));
   if (!r) return undefined;
 
   // Kolik toho maska zahodila, se musí říct — jinak tiché vynechání vypadá,
@@ -762,8 +802,10 @@ async function mkdirIn(side) {
   const name = await promptDialog('Nová složka', 'Název');
   if (!name) return;
   const target = side === 'local' ? localJoin(state.local.path, name) : posixJoin(state.remote.path, name);
-  const api = side === 'local' ? window.api.local : window.api.remote;
-  if (await call(api.mkdir(target)) !== null) await loadPane(side, state[side].path);
+  const ok = side === 'local'
+    ? await call(window.api.local.mkdir(target))
+    : await call(window.api.remote.mkdir(sid(), target));
+  if (ok !== null) await loadPane(side, state[side].path);
 }
 
 async function renameSelected(side) {
@@ -773,8 +815,10 @@ async function renameSelected(side) {
   if (!name || name === entry.name) return;
   const from = fullPath(side, entry);
   const to = side === 'local' ? localJoin(state.local.path, name) : posixJoin(state.remote.path, name);
-  const api = side === 'local' ? window.api.local : window.api.remote;
-  if (await call(api.rename(from, to)) !== null) await loadPane(side, state[side].path);
+  const ok = side === 'local'
+    ? await call(window.api.local.rename(from, to))
+    : await call(window.api.remote.rename(sid(), from, to));
+  if (ok !== null) await loadPane(side, state[side].path);
 }
 
 async function deleteSelected(side, permanent = false) {
@@ -792,7 +836,7 @@ async function deleteSelected(side, permanent = false) {
   const paths = sel.map((e) => fullPath(side, e));
   const res = side === 'local'
     ? await call(window.api.local.remove(paths))
-    : await call(window.api.remote.remove(paths, permanent));
+    : await call(window.api.remote.remove(sid(), paths, permanent));
   if (res === null) return;
 
   const n = sel.length;
@@ -803,11 +847,11 @@ async function deleteSelected(side, permanent = false) {
 
 async function emptyRemoteTrash() {
   if (!state.trash.enabled) return setLog('error', 'Koš na serveru není u této relace zapnutý');
-  const info = await call(window.api.trash.info());
+  const info = await call(window.api.trash.info(sid()));
   if (!info || !info.days.length) return setLog('ok', 'Koš na serveru je prázdný');
   if (!window.confirm(`Nevratně smazat obsah koše na serveru? Obsahuje ${info.days.length} `
     + `${plural(info.days.length, 'den', 'dny', 'dnů')} mazání (${info.path}).`)) return undefined;
-  await call(window.api.trash.empty());
+  await call(window.api.trash.empty(sid()));
   await loadPane('remote', state.remote.path);
   return undefined;
 }
@@ -819,7 +863,7 @@ async function chmodSelected(side) {
   if (!v) return;
   const mode = parseInt(v, 8);
   if (Number.isNaN(mode)) return setLog('error', 'Neplatná hodnota práv');
-  if (await call(window.api.remote.chmod(fullPath(side, entry), mode)) !== null) {
+  if (await call(window.api.remote.chmod(sid(), fullPath(side, entry), mode)) !== null) {
     await loadPane('remote', state.remote.path);
   }
   return undefined;
@@ -827,7 +871,7 @@ async function chmodSelected(side) {
 
 async function editRemote(remotePath) {
   setLog('warn', `Otevírám ${remotePath}…`);
-  const r = await call(window.api.edit.open(remotePath));
+  const r = await call(window.api.edit.open(sid(), remotePath));
   if (r) setLog('ok', `${remotePath} — změny se budou nahrávat automaticky`);
 }
 
@@ -896,7 +940,7 @@ $('#watch-go').addEventListener('click', async () => {
       : 'Koš na serveru je u této relace vypnutý — smazané položky zmizí nenávratně.')
     + '\n\nPokračovat?')) return;
 
-  const res = await call(window.api.watch.start({
+  const res = await call(window.api.watch.start(sid(), {
     localDir: $('#watch-local').value.trim(),
     remoteDir: $('#watch-remote').value.trim(),
     mask: $('#watch-mask').value.trim(),
@@ -910,16 +954,18 @@ $('#watch-go').addEventListener('click', async () => {
 });
 
 $('#watch-stop').addEventListener('click', async () => {
-  const res = await call(window.api.watch.stop());
+  const res = await call(window.api.watch.stop(sid()));
   if (res) {
     state.watch = res;
     renderWatchState();
   }
 });
 
-window.api.onWatch((st) => {
-  state.watch = st;
-  renderWatchState();
+window.api.onWatch(({ sid: id, payload }) => {
+  const s = state.sessions.get(id);
+  if (!s) return;
+  s.watch = payload;
+  if (id === state.activeId) renderWatchState();
 });
 
 /* ------------------------------------------------ hledání souborů */
@@ -994,7 +1040,7 @@ $('#find-go').addEventListener('click', async () => {
   $('#find-stop').hidden = false;
   $('#find-status').textContent = 'Hledám…';
 
-  const res = await call(window.api.find.start({
+  const res = await call(window.api.find.start(sid(), {
     root: $('#find-root').value.trim() || '/',
     mask: $('#find-mask').value.trim() || '*',
     includeDirs: $('#find-dirs').checked,
@@ -1011,8 +1057,8 @@ $('#find-go').addEventListener('click', async () => {
   }
 });
 
-$('#find-stop').addEventListener('click', () => window.api.find.cancel());
-$('#find-close').addEventListener('click', () => { window.api.find.cancel(); findDlg.close(); });
+$('#find-stop').addEventListener('click', () => window.api.find.cancel(sid()));
+$('#find-close').addEventListener('click', () => { window.api.find.cancel(sid()); findDlg.close(); });
 
 $('#find-reveal').addEventListener('click', async () => {
   const [first] = findSelection();
@@ -1037,7 +1083,7 @@ $('#find-edit').addEventListener('click', async () => {
 $('#find-download').addEventListener('click', async () => {
   const items = findSelection().map((h) => h.path);
   if (!items.length) return setLog('warn', 'Nic není vybráno');
-  const r = await call(window.api.transfer.download(items, state.local.path));
+  const r = await call(window.api.transfer.download(sid(), items, state.local.path));
   if (r) {
     setLog('ok', `Zařazeno ${r.count} ${plural(r.count, 'soubor', 'soubory', 'souborů')} ke stažení`);
     findDlg.close();
@@ -1045,7 +1091,8 @@ $('#find-download').addEventListener('click', async () => {
   return undefined;
 });
 
-window.api.onFind((msg) => {
+window.api.onFind(({ sid: id, payload: msg }) => {
+  if (id !== state.activeId) return;
   if (msg.hit) {
     findState.hits.push(msg.hit);
     // Překreslujeme po dávkách, jinak by se u tisíců nálezů okno zadrhlo.
@@ -1216,45 +1263,165 @@ async function refreshTrashInfo() {
   // Nekontrolujeme state.connected — ten se nastavuje až z události „conn",
   // která může dorazit po odpovědi na připojení. Hlavní proces si stejně
   // ohlídá, že bez spojení vrátí vypnuto.
-  const info = await call(window.api.trash.info(), { silent: true });
+  const info = await call(window.api.trash.info(sid()), { silent: true });
   state.trash = info && info.enabled ? { enabled: true, path: info.path } : { enabled: false, path: '' };
 }
 
 async function connectSelected() {
   const id = $('#site-select').value;
   if (!id) return setLog('error', 'Nejdřív vyberte relaci');
+
   $('#conn-status').className = 'badge wait';
   $('#conn-status').textContent = 'Připojuji…';
-  const r = await call(window.api.conn.connect({ siteId: id }));
+
+  // Nová záložka převezme lokální cestu z té, ve které stojíme — obvykle
+  // se pracuje na jednom projektu a jen se střídají servery.
+  const carryLocal = active().local.path;
+
+  const r = await call(window.api.sessions.open({ siteId: id }));
   if (!r) {
-    $('#conn-status').className = 'badge off';
-    $('#conn-status').textContent = 'Odpojeno';
+    renderTabs();
     return undefined;
   }
+
+  const session = newSession(r.session);
+  state.sessions.set(r.session.id, session);
+  state.order.push(r.session.id);
+  state.activeId = r.session.id;
+
+  renderTabs();
   await refreshTrashInfo();
   await loadPane('remote', r.home);
-  if (r.localDir) await loadPane('local', r.localDir);
+  await loadPane('local', carryLocal || r.localDir);
+  renderQueue(await call(window.api.queue.snapshot(sid())) || session.queue);
   return undefined;
 }
 
-function applyConnState(connected, site) {
-  state.connected = connected;
-  $('#btn-connect').hidden = connected;
-  $('#btn-disconnect').hidden = !connected;
+/* ------------------------------------------------------------- záložky */
+
+function renderTabs() {
+  const bar = $('#tabs');
+  const ids = state.order.filter((id) => state.sessions.has(id));
+  state.order = ids;
+  bar.hidden = ids.length === 0;
+
+  const frag = document.createDocumentFragment();
+  for (const id of ids) {
+    const s = state.sessions.get(id);
+    const info = s.info || {};
+    const off = info.status !== 'connected';
+
+    const tab = document.createElement('button');
+    tab.className = `tab${id === state.activeId ? ' active' : ''}${off ? ' off' : ''}`;
+    tab.title = `${info.username ? `${info.username}@` : ''}${info.host || ''}`;
+    tab.addEventListener('click', () => switchTo(id));
+
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = info.name || info.host || 'relace';
+
+    tab.append(dot, name);
+
+    // Přenosy běží i v záložkách vzadu — ať je vidět, že se něco děje.
+    if (s.queue && s.queue.pending) {
+      const busy = document.createElement('span');
+      busy.className = 'busy';
+      busy.textContent = `↕${s.queue.pending}`;
+      tab.appendChild(busy);
+    }
+
+    const x = document.createElement('span');
+    x.className = 'x';
+    x.textContent = '✕';
+    x.title = 'Zavřít záložku (⌘W)';
+    x.addEventListener('click', (ev) => { ev.stopPropagation(); closeTab(id); });
+    tab.appendChild(x);
+
+    frag.appendChild(tab);
+  }
+
+  const add = document.createElement('button');
+  add.className = 'tab-add';
+  add.textContent = '＋';
+  add.title = 'Připojit v nové záložce (⌘O)';
+  add.addEventListener('click', () => connectSelected());
+  frag.appendChild(add);
+
+  bar.replaceChildren(frag);
+  applyConnState();
+}
+
+async function switchTo(id) {
+  if (!state.sessions.has(id) || id === state.activeId) return;
+  state.activeId = id;
+  await call(window.api.sessions.activate(id), { silent: true });
+
+  // Panely i fronta ukazují do nové záložky, takže se překreslí všechno.
+  renderTabs();
+  renderPane('local');
+  renderPane('remote');
+  $('[data-role=path]', panes.local).value = state.local.path;
+  $('[data-role=path]', panes.remote).value = state.remote.path;
+  updateHistoryButtons('local');
+  updateHistoryButtons('remote');
+  renderQueue(state.queue);
+  renderWatchState();
+  updateEditStatus();
+
+  const s = state.sessions.get(id);
+  if (s.info && s.info.siteId) $('#site-select').value = s.info.siteId;
+}
+
+async function closeTab(id) {
+  const s = state.sessions.get(id);
+  if (!s) return;
+  if (s.queue && s.queue.pending
+    && !window.confirm(`V záložce „${s.info.name}" ještě běží ${s.queue.pending} přenosů. Zavřít i tak?`)) return;
+
+  const wasActive = state.activeId === id;
+  await call(window.api.sessions.close(id));
+  state.sessions.delete(id);
+  state.order = state.order.filter((x) => x !== id);
+
+  if (wasActive) {
+    const next = state.order[state.order.length - 1] || null;
+    // Nejdřív uvolnit, teprve pak přepnout: switchTo odchází, když se má
+    // přepnout na záložku, která už je označená jako aktivní.
+    state.activeId = null;
+    if (next) {
+      await switchTo(next);
+      return;
+    }
+    // Poslední záložka zmizela — zbude náhradní stav s lokálním panelem.
+    state.placeholder.local = s.local;
+    renderPane('remote');
+    $('[data-role=path]', panes.remote).value = '';
+    renderQueue(state.queue);
+    renderWatchState();
+    updateEditStatus();
+  }
+  renderTabs();
+}
+
+function cycleTab(delta) {
+  if (state.order.length < 2) return;
+  const i = state.order.indexOf(state.activeId);
+  const next = state.order[(i + delta + state.order.length) % state.order.length];
+  switchTo(next);
+}
+
+/** Stavový řádek ukazuje záložku vpředu. */
+function applyConnState() {
+  const info = active().info;
+  const connected = state.connected;
   const badge = $('#conn-status');
   badge.className = `badge ${connected ? 'on' : 'off'}`;
-  badge.textContent = connected && site
-    ? `${site.protocol.toUpperCase()} · ${site.username ? `${site.username}@` : ''}${site.host}`
+  badge.textContent = connected && info
+    ? `${info.protocol.toUpperCase()} · ${info.username ? `${info.username}@` : ''}${info.host}`
     : 'Odpojeno';
-  if (!connected) {
-    state.trash = { enabled: false, path: '' };
-    state.watch = { running: false };
-    renderWatchState();
-    state.remote.entries = [];
-    state.remote.path = '';
-    $('[data-role=path]', panes.remote).value = '';
-    renderPane('remote');
-  }
 }
 
 /* ------------------------------------------------------- editor relace */
@@ -1454,7 +1621,7 @@ $('#sync-compare').addEventListener('click', async () => {
   const btn = $('#sync-compare');
   btn.disabled = true;
   btn.textContent = 'Porovnávám…';
-  const res = await call(window.api.sync.compare({
+  const res = await call(window.api.sync.compare(sid(), {
     localDir: $('#sync-local').value.trim(),
     remoteDir: $('#sync-remote').value.trim(),
     direction: $('#sync-direction').value,
@@ -1530,7 +1697,7 @@ $('#sync-apply').addEventListener('click', async () => {
   const destructive = picked.filter((a) => a.action.startsWith('delete') || a.action === 'rmdirRemote');
   if (destructive.length && !window.confirm(`Součástí je ${destructive.length} mazání. Pokračovat?`)) return;
 
-  const r = await call(window.api.sync.apply(picked));
+  const r = await call(window.api.sync.apply(sid(), picked));
   if (r) {
     setLog('ok', `Synchronizace: ${r.transfers} ${plural(r.transfers, 'přenos', 'přenosy', 'přenosů')} zařazeno`);
     syncDlg.close();
@@ -1590,7 +1757,7 @@ function renderQueue(snap) {
           label: kb ? `Změnit limit (nyní ${kb} kB/s)…` : 'Omezit rychlost této položky…',
           fn: () => askItemSpeed(it),
         },
-        ...(kb ? [{ label: 'Zrušit limit položky', fn: () => window.api.queue.speedLimit(it.id, 0) }] : []),
+        ...(kb ? [{ label: 'Zrušit limit položky', fn: () => window.api.queue.speedLimit(sid(), it.id, 0) }] : []),
         null,
         { label: 'Omezit rychlost všech přenosů…', fn: () => askGlobalSpeed() },
       ], ev.clientX, ev.clientY);
@@ -1601,8 +1768,8 @@ function renderQueue(snap) {
     x.textContent = ['error', 'canceled'].includes(it.status) ? '⟳' : '✕';
     x.title = ['error', 'canceled'].includes(it.status) ? 'Zkusit znovu' : 'Zrušit';
     x.addEventListener('click', () => {
-      if (['error', 'canceled'].includes(it.status)) window.api.queue.retry(it.id);
-      else window.api.queue.cancel(it.id);
+      if (['error', 'canceled'].includes(it.status)) window.api.queue.retry(sid(), it.id);
+      else window.api.queue.cancel(sid(), it.id);
     });
 
     el.append(icon, p, bar, size, rate, x);
@@ -1626,7 +1793,7 @@ async function askItemSpeed(item) {
   const cur = item.speedLimit ? String(Math.round(item.speedLimit / 1024)) : '';
   const v = await promptDialog('Limit rychlosti položky', 'kB/s (0 = bez omezení)', cur);
   if (v === null) return;
-  await call(window.api.queue.speedLimit(item.id, Number(v) || 0));
+  await call(window.api.queue.speedLimit(sid(), item.id, Number(v) || 0));
 }
 
 async function askGlobalSpeed() {
@@ -1634,15 +1801,15 @@ async function askGlobalSpeed() {
   const v = await promptDialog('Limit rychlosti všech přenosů', 'kB/s (0 = bez omezení)', cur);
   if (v === null) return;
   const kb = Math.max(0, Number(v) || 0);
-  await call(window.api.queue.speedLimit(null, kb));
+  await call(window.api.queue.speedLimit(sid(), null, kb));
   state.settings = { ...state.settings, speedLimitKb: kb };
   setLog('ok', kb ? `Rychlost omezena na ${kb} kB/s` : 'Omezení rychlosti zrušeno');
 }
 
-$('#q-pause').addEventListener('click', () => window.api.queue.pause());
-$('#q-resume').addEventListener('click', () => window.api.queue.resume());
-$('#q-cancel').addEventListener('click', () => window.api.queue.cancelAll());
-$('#q-clear').addEventListener('click', () => window.api.queue.clear());
+$('#q-pause').addEventListener('click', () => window.api.queue.pause(sid()));
+$('#q-resume').addEventListener('click', () => window.api.queue.resume(sid()));
+$('#q-cancel').addEventListener('click', () => window.api.queue.cancelAll(sid()));
+$('#q-clear').addEventListener('click', () => window.api.queue.clear(sid()));
 $('#q-toggle').addEventListener('click', () => {
   const q = $('#queue');
   q.classList.toggle('collapsed');
@@ -1713,7 +1880,6 @@ function applySettings(next) {
 /* ------------------------------------------------------------- toolbar */
 
 $('#btn-connect').addEventListener('click', connectSelected);
-$('#btn-disconnect').addEventListener('click', () => window.api.conn.disconnect());
 $('#btn-new-site').addEventListener('click', () => openSiteDialog(null));
 $('#btn-edit-site').addEventListener('click', () => {
   const s = state.sites.find((x) => x.id === $('#site-select').value);
@@ -1736,22 +1902,51 @@ $('#site-select').addEventListener('dblclick', connectSelected);
 
 /* --------------------------------------------------------------- start */
 
-window.api.onConn(({ status, site }) => {
-  if (status === 'connected') applyConnState(true, site);
-  else if (status === 'disconnected') applyConnState(false, null);
+window.api.onSessions((list) => {
+  for (const info of list) {
+    const s = state.sessions.get(info.id);
+    if (s) s.info = info;
+  }
+  renderTabs();
 });
+
+window.api.onConn(({ sid: id, payload }) => {
+  const s = state.sessions.get(id);
+  if (!s) return;
+  s.info = payload;
+  renderTabs();
+});
+
 window.api.onAsk(askConflict);
-window.api.onQueue(renderQueue);
+
+window.api.onQueue(({ sid: id, payload }) => {
+  const s = state.sessions.get(id);
+  if (!s) return;
+  s.queue = payload;
+  // Záložka vzadu jen přepočítá odznak, kreslit její frontu nemá smysl.
+  if (id === state.activeId) renderQueue(payload);
+  else renderTabs();
+});
 window.api.onLog(({ level, text }) => setLog(level, text));
-window.api.onEdit((list) => {
-  state.editing = list;
+
+window.api.onEdit(({ sid: id, payload }) => {
+  const s = state.sessions.get(id);
+  if (!s) return;
+  s.editing = payload;
+  if (id === state.activeId) updateEditStatus();
+});
+
+function updateEditStatus() {
+  const list = state.editing || [];
   $('#edit-status').textContent = list.length
     ? `✎ ${list.length} otevřeno v editoru (${list.filter((e) => e.status === 'uploading').length} se nahrává)`
     : '';
-});
+}
 window.api.onMenu(async (cmd) => {
   if (cmd === 'connect') connectSelected();
-  else if (cmd === 'disconnect') window.api.conn.disconnect();
+  else if (cmd === 'closetab') { if (state.activeId) closeTab(state.activeId); }
+  else if (cmd === 'nexttab') cycleTab(1);
+  else if (cmd === 'prevtab') cycleTab(-1);
   else if (cmd === 'import') $('#btn-import').click();
   else if (cmd === 'sync') openSync();
   else if (cmd === 'emptytrash') emptyRemoteTrash();
@@ -1765,7 +1960,8 @@ window.api.onMenu(async (cmd) => {
   wirePane('remote');
   applySettings(await call(window.api.settings.get()) || {});
   await refreshSites();
+  renderTabs();
   await loadPane('local', await call(window.api.local.home()));
-  renderQueue(await call(window.api.queue.snapshot()) || { items: [], pending: 0, totalBytes: 0, doneBytes: 0, paused: false });
+  renderQueue(state.queue);
   setActive('local');
 }());

@@ -34,6 +34,7 @@ předlohy vozí i zpátky.
 | Souběžné přenosy a omezení rychlosti | ✅ |
 | Přenos přes dočasný název | ✅ |
 | Hlídání složky s automatickým nahráváním | ✅ |
+| Víc připojení naráz v záložkách | ✅ |
 
 Nepodporuje SCP, WebDAV ani S3 — relace v těchto protokolech se při importu
 zobrazí, ale nejdou naimportovat.
@@ -88,6 +89,27 @@ přitom nesmí běžet.
 Automatické aktualizace by potřebovaly někde vystavené vydání (typicky GitHub
 Releases) a `electron-updater`. Dokud je Charon jen pro tebe, je `install-app`
 jednodušší.
+
+## Záložky
+
+Každé připojení má vlastní záložku a **nic se mezi nimi nesdílí** — vlastní
+spojení pro procházení, vlastní zásobu spojení pro přenosy, vlastní frontu,
+hlídání složky i soubory otevřené v editoru. Přenos v jedné záložce tak nemůže
+spadnout kvůli tomu, co se děje v jiné, a přenosy vzadu běží dál. Že se v nich
+něco děje, ukazuje počet u názvu záložky.
+
+Vlastní je i lokální panel a historie cest, takže přepnutí vrátí obě strany
+přesně tam, kde jste je nechali. Nová záložka přebírá lokální cestu z té,
+ve které stojíte — obvykle se pracuje na jednom projektu a jen střídají servery.
+
+| Klávesa | Akce |
+| --- | --- |
+| `⌘O` | Připojit v nové záložce |
+| `⌘W` | Zavřít záložku |
+| `⌃Tab` / `⌃⇧Tab` | Další / předchozí záložka |
+
+Zavřít záložku s běžícími přenosy jde, ale aplikace se zeptá. Bez otevřené
+záložky zůstává použitelný aspoň lokální panel.
 
 ## Import z WinSCP
 
@@ -235,7 +257,8 @@ v Keychain, ne v souboru.
 | `⌘R` | Obnovit oba panely |
 | `⌘S` | Synchronizace adresářů |
 | `⌘U` | Hlídat složku a nahrávat změny |
-| `⌘O` / `⌘D` | Připojit / odpojit |
+| `⌘O` | Připojit v nové záložce |
+| `⌘W` | Zavřít záložku |
 
 ## Editace se zpětným nahráním
 
@@ -401,6 +424,7 @@ npm test
 
 - `test/winscp-import.test.js` — dekódování hesel WinSCP, parsování `.ini` i `.reg`
 - `test/mask.test.js` — zápis masek souborů
+- `test/session.test.js` — správce záložek: pořadí, přepínání a úklid
 - `test/safety.test.js` — otisky klíčů a `known_hosts`, odmítnutí neověřeného
   serveru, všechny volby při konfliktu, přesun a chování koše
 - `test/browse.test.js` — dopočítání velikosti složek a hledání souborů

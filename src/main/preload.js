@@ -6,6 +6,9 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
  * Renderer nemá přístup k Node — všechno jde přes tenhle úzký můstek.
  * Každé volání vrací {ok, data} nebo {ok:false, error}, chyby se tedy
  * nepropagují jako výjimky přes IPC hranici.
+ *
+ * Skoro všechno se vztahuje ke konkrétní záložce, proto `sid` jako první
+ * parametr. Lokální souborový systém a nastavení jsou společné.
  */
 const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args);
 
@@ -29,19 +32,24 @@ contextBridge.exposeInMainWorld('api', {
     pick: () => invoke('winscp:pick'),
     import: (sessions, overwrite) => invoke('winscp:import', { sessions, overwrite }),
   },
-  conn: {
-    status: () => invoke('conn:status'),
-    connect: (payload) => invoke('conn:connect', payload),
-    disconnect: () => invoke('conn:disconnect'),
+  sessions: {
+    list: () => invoke('sessions:list'),
+    open: (payload) => invoke('sessions:open', payload),
+    close: (sid) => invoke('sessions:close', sid),
+    activate: (sid) => invoke('sessions:activate', sid),
   },
   remote: {
-    list: (p) => invoke('remote:list', p),
-    home: () => invoke('remote:home'),
-    mkdir: (p) => invoke('remote:mkdir', p),
-    rename: (from, to) => invoke('remote:rename', { from, to }),
-    chmod: (remotePath, mode) => invoke('remote:chmod', { remotePath, mode }),
-    remove: (paths, permanent) => invoke('remote:delete', { paths, permanent: Boolean(permanent) }),
-    dirSize: (p) => invoke('remote:dirSize', p),
+    list: (sid, path) => invoke('remote:list', { sid, path }),
+    home: (sid) => invoke('remote:home', { sid }),
+    mkdir: (sid, path) => invoke('remote:mkdir', { sid, path }),
+    rename: (sid, from, to) => invoke('remote:rename', { sid, from, to }),
+    chmod: (sid, remotePath, mode) => invoke('remote:chmod', { sid, remotePath, mode }),
+    remove: (sid, paths, permanent) => invoke('remote:delete', { sid, paths, permanent: Boolean(permanent) }),
+    dirSize: (sid, path) => invoke('remote:dirSize', { sid, path }),
+  },
+  trash: {
+    info: (sid) => invoke('trash:info', { sid }),
+    empty: (sid) => invoke('trash:empty', { sid }),
   },
   local: {
     home: () => invoke('local:home'),
@@ -54,43 +62,39 @@ contextBridge.exposeInMainWorld('api', {
     pickFile: (opts) => invoke('local:pickFile', opts),
     dirSize: (p) => invoke('local:dirSize', p),
   },
-  trash: {
-    info: () => invoke('trash:info'),
-    empty: () => invoke('trash:empty'),
-  },
   transfer: {
-    upload: (items, remoteDir, mask) => invoke('transfer:upload', { items, remoteDir, mask }),
-    download: (items, localDir, mask) => invoke('transfer:download', { items, localDir, mask }),
-    move: (items, targetDir, from, mask) => invoke('transfer:move', { items, targetDir, from, mask }),
-  },
-  watch: {
-    start: (opts) => invoke('watch:start', opts),
-    stop: () => invoke('watch:stop'),
-    status: () => invoke('watch:status'),
+    upload: (sid, items, remoteDir, mask) => invoke('transfer:upload', { sid, items, remoteDir, mask }),
+    download: (sid, items, localDir, mask) => invoke('transfer:download', { sid, items, localDir, mask }),
+    move: (sid, items, targetDir, from, mask) => invoke('transfer:move', { sid, items, targetDir, from, mask }),
   },
   find: {
-    start: (opts) => invoke('find:start', opts),
-    cancel: () => invoke('find:cancel'),
+    start: (sid, opts) => invoke('find:start', { sid, ...opts }),
+    cancel: (sid) => invoke('find:cancel', { sid }),
+  },
+  watch: {
+    start: (sid, opts) => invoke('watch:start', { sid, ...opts }),
+    stop: (sid) => invoke('watch:stop', { sid }),
+    status: (sid) => invoke('watch:status', { sid }),
   },
   queue: {
-    snapshot: () => invoke('queue:snapshot'),
-    pause: () => invoke('queue:pause'),
-    resume: () => invoke('queue:resume'),
-    cancel: (id) => invoke('queue:cancel', id),
-    cancelAll: () => invoke('queue:cancelAll'),
-    retry: (id) => invoke('queue:retry', id),
-    clear: () => invoke('queue:clear'),
-    speedLimit: (id, kb) => invoke('queue:speedLimit', { id, kb }),
+    snapshot: (sid) => invoke('queue:snapshot', { sid }),
+    pause: (sid) => invoke('queue:pause', { sid }),
+    resume: (sid) => invoke('queue:resume', { sid }),
+    cancel: (sid, id) => invoke('queue:cancel', { sid, id }),
+    cancelAll: (sid) => invoke('queue:cancelAll', { sid }),
+    retry: (sid, id) => invoke('queue:retry', { sid, id }),
+    clear: (sid) => invoke('queue:clear', { sid }),
+    speedLimit: (sid, id, kb) => invoke('queue:speedLimit', { sid, id, kb }),
   },
   sync: {
-    compare: (opts) => invoke('sync:compare', opts),
-    apply: (actions) => invoke('sync:apply', actions),
+    compare: (sid, opts) => invoke('sync:compare', { sid, ...opts }),
+    apply: (sid, actions) => invoke('sync:apply', { sid, actions }),
   },
   edit: {
-    open: (remotePath) => invoke('edit:open', remotePath),
-    stop: (remotePath) => invoke('edit:stop', remotePath),
-    stopAll: () => invoke('edit:stopAll'),
-    list: () => invoke('edit:list'),
+    open: (sid, remotePath) => invoke('edit:open', { sid, remotePath }),
+    stop: (sid, remotePath) => invoke('edit:stop', { sid, remotePath }),
+    stopAll: (sid) => invoke('edit:stopAll', { sid }),
+    list: (sid) => invoke('edit:list', { sid }),
   },
   // Electron už na File neposkytuje .path — cestu k přetaženému souboru
   // z Finderu je potřeba získat takhle.
@@ -101,11 +105,14 @@ contextBridge.exposeInMainWorld('api', {
   // zpátky pod stejným id, jinak by fronta čekala donekonečna.
   onAsk: (cb) => on('conflict', cb),
   answer: (id, answer) => invoke('prompt:answer', { id, answer }),
-  onFind: (cb) => on('find', cb),
-  onWatch: (cb) => on('watch', cb),
+
+  // Události relací nesou sid, ať je okno přiřadí správné záložce.
+  onSessions: (cb) => on('sessions', cb),
   onQueue: (cb) => on('queue', cb),
   onConn: (cb) => on('conn', cb),
   onEdit: (cb) => on('edit', cb),
+  onWatch: (cb) => on('watch', cb),
+  onFind: (cb) => on('find', cb),
   onLog: (cb) => on('log', cb),
   onMenu: (cb) => on('menu', cb),
 });

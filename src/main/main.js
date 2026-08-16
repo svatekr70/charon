@@ -5,44 +5,30 @@ const fs = require('fs');
 const fsp = fs.promises;
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
+
 const posix = path.posix;
 
 const { SftpAdapter } = require('./adapters/sftp');
 const { FtpAdapter } = require('./adapters/ftp');
 const { SiteStore } = require('./sites');
-const { TransferQueue } = require('./queue');
-const { EditWatcher } = require('./editor-watch');
 const { compare } = require('./sync');
 const { parseWinscpFile } = require('./winscp-import');
 const hostkeys = require('./hostkeys');
-const { RemoteTrash } = require('./trash');
 const prompts = require('./prompts');
 const {
-  localDirSize, remoteDirSize, Finder, expandLocal, expandRemote,
+  localDirSize, remoteDirSize, expandLocal, expandRemote,
 } = require('./browse');
 const FileMask = require('../common/mask');
-const { AdapterPool } = require('./pool');
-const { FolderWatcher } = require('./watcher');
+const { Session, SessionManager, isDir: remoteIsDir } = require('./session');
 
 let win = null;
 let sites = null;
-let queue = null;
-let editWatcher = null;
-let finder = null;
+let manager = null;
 let settings = {
   editor: '', localDir: os.homedir(), transferMask: '',
   maxConcurrent: 3, speedLimitKb: 0,
   tempName: true, tempNameMinKb: 0,
-};
-let pool = null;
-let folderWatcher = null;
-
-const conn = {
-  browse: null,     // spojení pro procházení adresářů
-  transfer: null,   // oddělené spojení pro přenosy, aby procházení neblokovalo
-  config: null,
-  home: '/',
-  status: 'disconnected',
 };
 
 // ---------------------------------------------------------------- pomocné
@@ -59,41 +45,20 @@ function makeAdapter(protocol) {
   return protocol === 'ftp' ? new FtpAdapter() : new SftpAdapter();
 }
 
-function requireBrowse() {
-  if (!conn.browse || conn.status !== 'connected') throw new Error('Nejste připojeni');
-  return conn.browse;
-}
-
 /**
  * Otevře další spojení pro přenosy, oddělené od toho, kterým se prochází.
  *
- * Otisky jsou v conn.config potvrzené z prvního spojení, takže se uživatele
+ * Otisky jsou v konfiguraci potvrzené z prvního spojení, takže se uživatele
  * neptáme znovu — jen zkontrolujeme, že sedí. Když ne, spojení se neotevře;
  * ptát se tady podruhé by bylo matoucí.
  */
-async function openTransferAdapter() {
-  if (!conn.config) throw new Error('Nejste připojeni');
-  const a = makeAdapter(conn.config.protocol);
-  const hooks = conn.config.protocol === 'ftp'
+async function openAdapterFor(config) {
+  const a = makeAdapter(config.protocol);
+  const hooks = config.protocol === 'ftp'
     ? { verifyCertificate: () => false }
-    : { verifyHostKey: makeHostKeyHook(conn.config).hook };
-  await a.connect(conn.config, hooks);
+    : { verifyHostKey: makeHostKeyHook(config).hook };
+  await a.connect(config, hooks);
   return a;
-}
-
-/** Zásoba spojení se zakládá až s prvním přenosem. */
-function transferPool() {
-  if (!pool || pool.closed) {
-    pool = new AdapterPool({
-      open: openTransferAdapter,
-      max: settings.maxConcurrent || 1,
-      onShrink: (n) => {
-        queue.setConcurrency(n);
-        log('warn', `Server nepovolil další spojení — souběžnost snížena na ${n}`);
-      },
-    });
-  }
-  return pool;
 }
 
 // ------------------------------------------------- ověření identity serveru
@@ -275,15 +240,6 @@ async function connectVerified(cfg, siteId) {
   throw new Error('Připojení selhalo');
 }
 
-// ------------------------------------------------------------ vzdálený koš
-
-/** Koš pro aktuální spojení, nebo null když je u relace vypnutý. */
-function getTrash(adapter = conn.browse) {
-  if (!conn.config || !conn.config.useRecycleBin || !adapter) return null;
-  const base = conn.config.recycleBinPath || RemoteTrash.defaultPath(conn.home);
-  return new RemoteTrash(adapter, base);
-}
-
 function settingsPath() {
   return path.join(app.getPath('userData'), 'settings.json');
 }
@@ -299,45 +255,71 @@ async function saveSettings() {
   await fsp.writeFile(settingsPath(), JSON.stringify(settings, null, 2));
 }
 
-// -------------------------------------------------- rekurzivní rozbalení
 
-/** Nahrání vybraných lokálních položek (soubory i adresáře) do vzdálené složky. */
-async function enqueueUpload(items, remoteDir, extra = {}, maskText = '') {
+// -------------------------------------------------------------- relace
+
+/** Závislosti, které relace potřebuje od hlavního procesu. */
+function sessionDeps() {
+  return {
+    openAdapter: openAdapterFor,
+    send: (channel, payload) => send(channel, payload),
+    log,
+    settings: () => settings,
+    askConflict: (sid, info) => prompts.ask(win, 'conflict', { sid, ...info }, { action: 'skip' }),
+    trashLocal: (p) => shell.trashItem(p),
+  };
+}
+
+/** Relace, na kterou míří požadavek z okna. */
+function sessionOf(sid) {
+  return manager.get(sid);
+}
+
+function browseOf(sid) {
+  return sessionOf(sid).requireBrowse();
+}
+
+function sendSessions() {
+  send('sessions', manager.list());
+}
+
+/** Nahrání vybraných lokálních položek do vzdálené složky. */
+async function enqueueUpload(session, items, remoteDir, extra = {}, maskText = '') {
   const jobs = [];
   const mask = compileMask(maskText);
   const stats = { skipped: 0 };
   for (const localPath of items) {
     await expandLocal(localPath, posix.join(remoteDir, path.basename(localPath)), jobs, mask, stats);
   }
-  const a = await transferPool().acquire();
+
+  const a = await session.transferPool().acquire();
   try {
     for (const j of jobs.filter((x) => x.direction === 'mkdirRemote')) {
       await a.mkdir(j.remotePath, true).catch(() => {});
     }
   } finally {
-    transferPool().release(a);
+    session.transferPool().release(a);
   }
+
   // Příznaky (třeba moveFrom) musí být na položce hned při zařazení. Fronta
   // se rozeběhne okamžitě, takže dodatečné označení už nemusí stihnout.
   const files = jobs.filter((x) => x.direction === 'up').map((j) => ({ ...j, ...extra }));
-  return { count: files.length, skipped: stats.skipped, ids: queue.add(files) };
+  return { count: files.length, skipped: stats.skipped, ids: session.queue.add(files) };
 }
 
 /** Stažení vybraných vzdálených položek do lokální složky. */
-async function enqueueDownload(items, localDir, extra = {}, maskText = '') {
-  const a = requireBrowse();
+async function enqueueDownload(session, items, localDir, extra = {}, maskText = '') {
+  const a = session.requireBrowse();
   const jobs = [];
   const mask = compileMask(maskText);
   const stats = { skipped: 0 };
 
   for (const remotePath of items) {
     const localTarget = path.join(localDir, posix.basename(remotePath));
-    // expandRemote si sám pozná, jestli jde o soubor nebo složku, a masku
-    // uplatní na obojí — včetně ručně vybraného kořene.
     await expandRemote(a, remotePath, localTarget, jobs, mask, stats);
   }
   const files = jobs.map((j) => ({ ...j, ...extra }));
-  return { count: files.length, skipped: stats.skipped, ids: queue.add(files) };
+  return { count: files.length, skipped: stats.skipped, ids: session.queue.add(files) };
 }
 
 /**
@@ -348,20 +330,6 @@ function compileMask(text) {
   if (!text || !String(text).trim()) return null;
   const m = FileMask.compile(text);
   return m.empty ? null : m;
-}
-
-/** Rozhodne, jestli je vzdálená cesta soubor nebo adresář. */
-async function remoteIsDir(adapter, remotePath) {
-  try {
-    const st = await adapter.stat(remotePath);
-    if (typeof st.isDirectory === 'boolean') return st.isDirectory;
-  } catch { /* FTP na adresáři SIZE neumí */ }
-  try {
-    await adapter.list(remotePath);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 // ------------------------------------------------------------------ okno
@@ -391,8 +359,11 @@ function buildMenu() {
     {
       label: 'Soubor',
       submenu: [
-        { label: 'Připojit…', accelerator: 'Cmd+O', click: () => send('menu', 'connect') },
-        { label: 'Odpojit', accelerator: 'Cmd+D', click: () => send('menu', 'disconnect') },
+        { label: 'Připojit v nové záložce…', accelerator: 'Cmd+O', click: () => send('menu', 'connect') },
+        { label: 'Zavřít záložku', accelerator: 'Cmd+W', click: () => send('menu', 'closetab') },
+        { type: 'separator' },
+        { label: 'Další záložka', accelerator: 'Ctrl+Tab', click: () => send('menu', 'nexttab') },
+        { label: 'Předchozí záložka', accelerator: 'Ctrl+Shift+Tab', click: () => send('menu', 'prevtab') },
         { type: 'separator' },
         { label: 'Import z WinSCP…', click: () => send('menu', 'import') },
         { type: 'separator' },
@@ -437,16 +408,8 @@ function registerIpc() {
   handle('settings:set', async (patch) => {
     settings = { ...settings, ...patch };
     await saveSettings();
-    if (patch.maxConcurrent !== undefined) {
-      queue.setConcurrency(settings.maxConcurrent);
-      if (pool && !pool.closed) pool.setMax(settings.maxConcurrent);
-    }
-    if (patch.speedLimitKb !== undefined) {
-      queue.setSpeedLimit((settings.speedLimitKb || 0) * 1024);
-    }
-    if (patch.tempName !== undefined || patch.tempNameMinKb !== undefined) {
-      queue.setTempName(settings.tempName !== false, (settings.tempNameMinKb || 0) * 1024);
-    }
+    // Nastavení přenosů platí pro všechny otevřené relace, ne jen pro tu vpředu.
+    for (const s of manager.all()) s.applySettings(settings);
     return settings;
   });
 
@@ -469,141 +432,126 @@ function registerIpc() {
     return { file: res.filePaths[0], ...parseWinscpFile(res.filePaths[0]) };
   });
 
-  handle('winscp:import', async ({ sessions, overwrite }) => {
-    const result = await sites.importMany(sessions, { overwrite });
+  handle('winscp:import', async ({ sessions: found, overwrite }) => {
+    const result = await sites.importMany(found, { overwrite });
     log('ok', `Import z WinSCP: přidáno ${result.added}, přeskočeno ${result.skipped}`);
     return result;
   });
 
-  // --- připojení ---
-  handle('conn:status', async () => ({
-    status: conn.status,
-    site: conn.config ? { name: conn.config.name, host: conn.config.host, protocol: conn.config.protocol, username: conn.config.username } : null,
-  }));
+  // --- záložky ---
+  handle('sessions:list', async () => manager.list());
+  handle('sessions:activate', async (sid) => { manager.setActive(sid); return manager.list(); });
 
-  handle('conn:connect', async (payload) => {
-    await disconnectAll();
+  handle('sessions:open', async (payload) => {
     const cfg = payload.siteId ? await sites.resolve(payload.siteId) : payload.config;
-    conn.status = 'connecting';
-    send('conn', { status: 'connecting' });
+    if (!cfg || !cfg.host) throw new Error('Chybí relace, ke které se má připojit');
 
     let opened;
     try {
       opened = await connectVerified(cfg, payload.siteId || null);
     } catch (err) {
-      conn.status = 'disconnected';
-      send('conn', { status: 'disconnected' });
-      // Odmítnutý klíč není „selhání připojení" — je to výsledek rozhodnutí.
+      // Odmítnutý otisk není „selhání připojení" — je to výsledek rozhodnutí.
       const decided = err.hostKeyRejected || err.certRejected;
       throw new Error(decided ? err.message : `Připojení selhalo: ${err.message}`);
     }
 
-    const adapter = opened.adapter;
-    adapter.onLost = (reason) => {
-      if (conn.browse !== adapter) return;
-      log('error', `Spojení se serverem skončilo: ${reason}`);
-      conn.status = 'disconnected';
-      send('conn', { status: 'disconnected' });
-    };
-    conn.browse = adapter;
-    conn.config = opened.config;
-    conn.status = 'connected';
-    conn.home = await adapter.home().catch(() => '/');
+    const session = new Session({
+      id: crypto.randomUUID(),
+      config: opened.config,
+      siteId: payload.siteId || null,
+      deps: sessionDeps(),
+    });
+    manager.add(session);
+
+    const home = await opened.adapter.home().catch(() => '/');
+    await session.connect(opened.adapter, home);
 
     // Certifikát se obměnil za jiný, kterému systém věří — otisk jen tiše
     // srovnáme, aby příště nevyskakovalo hlášení o změně.
-    if (adapter.certificate && adapter.certificate.refreshPin && payload.siteId) {
-      await sites.setTlsFingerprint(payload.siteId, adapter.certificate.fingerprint);
+    if (opened.adapter.certificate && opened.adapter.certificate.refreshPin && payload.siteId) {
+      await sites.setTlsFingerprint(payload.siteId, opened.adapter.certificate.fingerprint);
       log('ok', 'Certifikát serveru se obnovil, uložený otisk byl srovnán');
     }
 
-    editWatcher = new EditWatcher({
-      queue,
-      connectionKey: () => `${cfg.protocol}://${cfg.username}@${cfg.host}:${cfg.port}`,
-    });
-    editWatcher.on('update', (list) => send('edit', list));
-    editWatcher.on('log', ({ level, text }) => log(level, text));
-
-    const home = cfg.remoteDir || conn.home;
-    log('ok', `Připojeno k ${cfg.host} (${cfg.protocol.toUpperCase()})`);
-
-    // Úklid starých položek v koši na pozadí — připojení kvůli tomu nečeká.
-    const trash = getTrash(adapter);
-    if (trash && conn.config.recycleBinDays > 0) {
-      trash.cleanup(conn.config.recycleBinDays)
+    // Úklid starých položek v koši běží na pozadí; připojení kvůli tomu nečeká.
+    const trash = session.getTrash();
+    if (trash && session.config.recycleBinDays > 0) {
+      trash.cleanup(session.config.recycleBinDays)
         .then((days) => { if (days.length) log('ok', `Z koše na serveru uklizeno ${days.length} starších dnů`); })
         .catch(() => {});
     }
 
-    send('conn', {
-      status: 'connected',
-      site: {
-        name: cfg.name, host: cfg.host, protocol: cfg.protocol, username: cfg.username,
-        useRecycleBin: Boolean(conn.config.useRecycleBin),
-      },
-    });
-    return { home, localDir: cfg.localDir || settings.localDir || os.homedir() };
+    log('ok', `Připojeno k ${cfg.host} (${cfg.protocol.toUpperCase()})`);
+    sendSessions();
+    return {
+      session: session.describe(),
+      home: cfg.remoteDir || home,
+      localDir: cfg.localDir || settings.localDir || os.homedir(),
+    };
   });
 
-  handle('conn:disconnect', async () => { await disconnectAll(); return true; });
+  handle('sessions:close', async (sid) => {
+    await manager.remove(sid);
+    sendSessions();
+    return manager.list();
+  });
 
   // --- vzdálený souborový systém ---
-  handle('remote:list', async (remotePath) => {
-    const a = requireBrowse();
+  handle('remote:list', async ({ sid, path: remotePath }) => {
+    const a = browseOf(sid);
     const target = remotePath || await a.home();
     const entries = await a.list(target);
     return { path: normalizeRemote(target), entries };
   });
 
-  handle('remote:home', async () => requireBrowse().home());
-  handle('remote:mkdir', async (remotePath) => { await requireBrowse().mkdir(remotePath, true); return true; });
-  handle('remote:rename', async ({ from, to }) => { await requireBrowse().rename(from, to); return true; });
-  handle('remote:chmod', async ({ remotePath, mode }) => { await requireBrowse().chmod(remotePath, mode); return true; });
+  handle('remote:home', async ({ sid }) => browseOf(sid).home());
+  handle('remote:mkdir', async ({ sid, path: p }) => { await browseOf(sid).mkdir(p, true); return true; });
+  handle('remote:rename', async ({ sid, from, to }) => { await browseOf(sid).rename(from, to); return true; });
+  handle('remote:chmod', async ({ sid, remotePath, mode }) => { await browseOf(sid).chmod(remotePath, mode); return true; });
+  handle('remote:dirSize', async ({ sid, path: p }) => remoteDirSize(browseOf(sid), p));
 
   /**
    * Mazání na serveru. Se zapnutým košem se položka jen přesune — nikdy
-   * nemažeme natvrdo „pro jistotu", když přesun selže; radši chybu ohlásíme.
+   * nemažeme natvrdo „pro jistotu", když přesun selže.
    */
-  handle('remote:delete', async ({ paths, permanent }) => {
-    const a = requireBrowse();
-    const trash = permanent ? null : getTrash();
+  handle('remote:delete', async ({ sid, paths, permanent }) => {
+    const session = sessionOf(sid);
+    const a = session.requireBrowse();
+    const trash = permanent ? null : session.getTrash();
 
     for (const p of paths) {
-      if (trash) {
-        await trash.moveToTrash(p);
-      } else if (await remoteIsDir(a, p)) {
-        await a.removeDir(p, true);
-      } else {
-        await a.removeFile(p);
-      }
+      if (trash) await trash.moveToTrash(p);
+      else if (await remoteIsDir(a, p)) await a.removeDir(p, true);
+      else await a.removeFile(p);
     }
     return { toTrash: Boolean(trash), count: paths.length };
   });
 
   // --- koš na serveru ---
-  handle('trash:info', async () => {
-    const trash = getTrash();
+  handle('trash:info', async ({ sid }) => {
+    const session = sessionOf(sid);
+    const trash = session.getTrash();
     if (!trash) return { enabled: false };
     return { enabled: true, path: trash.basePath, days: await trash.listDays() };
   });
 
-  handle('trash:empty', async () => {
-    const trash = getTrash();
+  handle('trash:empty', async ({ sid }) => {
+    const trash = sessionOf(sid).getTrash();
     if (!trash) throw new Error('Koš na serveru není u této relace zapnutý');
     const removed = await trash.empty();
     log('ok', removed ? `Koš na serveru vysypán (${removed} dnů)` : 'Koš na serveru byl prázdný');
     return { removed };
   });
 
-  // --- lokální souborový systém ---
+  // --- lokální souborový systém (nezávislý na relaci) ---
   handle('local:home', async () => settings.localDir || os.homedir());
+  handle('local:dirSize', async (localPath) => localDirSize(localPath));
 
   handle('local:list', async (localPath) => {
     const target = localPath || settings.localDir || os.homedir();
     const dirents = await fsp.readdir(target, { withFileTypes: true });
     const entries = [];
     for (const d of dirents) {
-      if (d.name.startsWith('.') && d.name !== '..') { /* skryté necháme, filtruje UI */ }
       const full = path.join(target, d.name);
       const st = await fsp.lstat(full).catch(() => null);
       if (!st) continue;
@@ -637,81 +585,77 @@ function registerIpc() {
   });
 
   // --- fronta přenosů ---
-  handle('queue:snapshot', async () => queue.snapshot());
-  handle('queue:pause', async () => { queue.pause(); return true; });
-  handle('queue:resume', async () => { queue.resume(); return true; });
-  handle('queue:cancel', async (id) => { queue.cancel(id); return true; });
-  handle('queue:cancelAll', async () => { queue.cancelAll(); return true; });
-  handle('queue:retry', async (id) => { queue.retry(id); return true; });
-  handle('queue:clear', async () => { queue.clearFinished(); return true; });
+  handle('queue:snapshot', async ({ sid }) => sessionOf(sid).queue.snapshot());
+  handle('queue:pause', async ({ sid }) => { sessionOf(sid).queue.pause(); return true; });
+  handle('queue:resume', async ({ sid }) => { sessionOf(sid).queue.resume(); return true; });
+  handle('queue:cancel', async ({ sid, id }) => { sessionOf(sid).queue.cancel(id); return true; });
+  handle('queue:cancelAll', async ({ sid }) => { sessionOf(sid).queue.cancelAll(); return true; });
+  handle('queue:retry', async ({ sid, id }) => { sessionOf(sid).queue.retry(id); return true; });
+  handle('queue:clear', async ({ sid }) => { sessionOf(sid).queue.clearFinished(); return true; });
 
-  /** Limit v kB/s; 0 vypíná. Bez id platí globálně. */
-  handle('queue:speedLimit', async ({ id, kb }) => {
+  /** Limit v kB/s; 0 vypíná. Bez id platí globálně pro všechny relace. */
+  handle('queue:speedLimit', async ({ sid, id, kb }) => {
     const bytes = Math.max(0, Math.floor(kb) || 0) * 1024;
-    if (id) queue.setItemSpeedLimit(id, bytes);
-    else {
-      queue.setSpeedLimit(bytes);
-      settings = { ...settings, speedLimitKb: Math.max(0, Math.floor(kb) || 0) };
-      await saveSettings();
-    }
+    if (id) { sessionOf(sid).queue.setItemSpeedLimit(id, bytes); return true; }
+    for (const s of manager.all()) s.queue.setSpeedLimit(bytes);
+    settings = { ...settings, speedLimitKb: Math.max(0, Math.floor(kb) || 0) };
+    await saveSettings();
     return true;
   });
 
+  // --- přenosy ---
   /** `mask === undefined` znamená „použij výchozí z nastavení". */
   const effectiveMask = (mask) => (mask === undefined ? settings.transferMask || '' : mask);
 
-  handle('transfer:upload', async ({ items, remoteDir, mask }) => {
-    const { count, skipped } = await enqueueUpload(items, remoteDir, {}, effectiveMask(mask));
+  handle('transfer:upload', async ({ sid, items, remoteDir, mask }) => {
+    const { count, skipped } = await enqueueUpload(sessionOf(sid), items, remoteDir, {}, effectiveMask(mask));
     return { count, skipped };
   });
 
-  handle('transfer:download', async ({ items, localDir, mask }) => {
-    const { count, skipped } = await enqueueDownload(items, localDir, {}, effectiveMask(mask));
+  handle('transfer:download', async ({ sid, items, localDir, mask }) => {
+    const { count, skipped } = await enqueueDownload(sessionOf(sid), items, localDir, {}, effectiveMask(mask));
     return { count, skipped };
   });
 
-  // --- velikost složek ---
-  handle('remote:dirSize', async (remotePath) => remoteDirSize(requireBrowse(), remotePath));
-  handle('local:dirSize', async (localPath) => localDirSize(localPath));
+  handle('transfer:move', async ({ sid, items, targetDir, from, mask }) => {
+    // U přesunu maska záměrně neplatí z nastavení — vynechaný soubor by
+    // zůstal na zdroji a člověk by si myslel, že přesunul všechno.
+    const session = sessionOf(sid);
+    const result = from === 'local'
+      ? await enqueueUpload(session, items, targetDir, { moveFrom: 'local' }, mask || '')
+      : await enqueueDownload(session, items, targetDir, { moveFrom: 'remote' }, mask || '');
+    return { count: result.count, skipped: result.skipped };
+  });
 
   // --- hledání souborů na serveru ---
-  handle('find:start', async ({ root, mask, includeDirs }) => {
-    const a = requireBrowse();
-    finder = new Finder();
+  handle('find:start', async ({ sid, root, mask, includeDirs }) => {
+    const session = sessionOf(sid);
+    const a = session.requireBrowse();
+    const finder = session.newFinder();
     const res = await finder.run(a, root || '/', mask, {
       includeDirs: Boolean(includeDirs),
-      // Nálezy posíláme do okna průběžně; samotný seznam si drží okno.
-      onProgress: (msg) => send('find', { ...msg, done: false }),
+      onProgress: (msg) => session.emit('find', { ...msg, done: false }),
     });
-    send('find', {
+    session.emit('find', {
       done: true, scanned: res.scanned, total: res.total, canceled: res.canceled, truncated: res.truncated,
     });
     return { total: res.total, scanned: res.scanned, canceled: res.canceled, truncated: res.truncated };
   });
-  handle('find:cancel', async () => { if (finder) finder.cancel(); return true; });
-
-  /**
-   * Přesun mezi panely: nejdřív se přenese, a teprve po úspěchu zmizí zdroj.
-   * Kdyby se mazalo dopředu nebo bez ohledu na výsledek, stačila by jedna
-   * chyba v půlce a soubor by nebyl nikde.
-   */
-  handle('transfer:move', async ({ items, targetDir, from, mask }) => {
-    // U přesunu maska záměrně neplatí z nastavení — vynechaný soubor by
-    // zůstal na zdroji a člověk by si myslel, že přesunul všechno.
-    const result = from === 'local'
-      ? await enqueueUpload(items, targetDir, { moveFrom: 'local' }, mask || '')
-      : await enqueueDownload(items, targetDir, { moveFrom: 'remote' }, mask || '');
-    return { count: result.count, skipped: result.skipped };
+  handle('find:cancel', async ({ sid }) => {
+    const s = manager.has(sid) ? manager.get(sid) : null;
+    if (s && s.finder) s.finder.cancel();
+    return true;
   });
 
   // --- synchronizace ---
-  handle('sync:compare', async ({ localDir, remoteDir, direction, criteria, deleteExtra, mask }) => {
-    const a = requireBrowse();
+  handle('sync:compare', async ({ sid, localDir, remoteDir, direction, criteria, deleteExtra, mask }) => {
+    const a = browseOf(sid);
     return compare(a, localDir, remoteDir, { direction, criteria, deleteExtra, mask });
   });
 
-  handle('sync:apply', async (actions) => {
-    const a = requireBrowse();
+  handle('sync:apply', async ({ sid, actions }) => {
+    const session = sessionOf(sid);
+    const a = session.requireBrowse();
     const jobs = [];
     for (const act of actions) {
       switch (act.action) {
@@ -719,7 +663,7 @@ function registerIpc() {
         case 'mkdirLocal': await fsp.mkdir(act.localPath, { recursive: true }); break;
         // conflictResolved: v náhledu synchronizace uživatel o přepisu
         // rozhodl, druhý dotaz na každý soubor by byl jen otrava.
-        case 'upload': jobs.push({ direction: 'up', localPath: act.localPath, remotePath: act.remotePath, size: act.size, conflictResolved: true }); break; // maska už proběhla v porovnání
+        case 'upload': jobs.push({ direction: 'up', localPath: act.localPath, remotePath: act.remotePath, size: act.size, conflictResolved: true }); break;
         case 'download': jobs.push({ direction: 'down', localPath: act.localPath, remotePath: act.remotePath, size: act.size, conflictResolved: true }); break;
         case 'deleteRemote': await a.removeFile(act.remotePath); break;
         case 'rmdirRemote': await a.removeDir(act.remotePath, true); break;
@@ -727,32 +671,34 @@ function registerIpc() {
         default: break; // 'conflict' se bez rozhodnutí uživatele nedělá
       }
     }
-    queue.add(jobs);
+    session.queue.add(jobs);
     return { transfers: jobs.length };
   });
 
   // --- editace se zpětným nahráním ---
-  handle('edit:open', async (remotePath) => {
-    if (!editWatcher) throw new Error('Nejste připojeni');
-    return editWatcher.open(remotePath, { editor: settings.editor || undefined });
+  handle('edit:open', async ({ sid, remotePath }) => {
+    const session = sessionOf(sid);
+    session.requireBrowse();
+    return session.editWatcher.open(remotePath, { editor: settings.editor || undefined });
   });
-  handle('edit:stop', async (remotePath) => { await editWatcher?.stop(remotePath); return true; });
-  handle('edit:stopAll', async () => { await editWatcher?.stopAll(); return true; });
-  handle('edit:list', async () => (editWatcher ? editWatcher.list() : []));
+  handle('edit:stop', async ({ sid, remotePath }) => { await sessionOf(sid).editWatcher.stop(remotePath); return true; });
+  handle('edit:stopAll', async ({ sid }) => { await sessionOf(sid).editWatcher.stopAll(); return true; });
+  handle('edit:list', async ({ sid }) => sessionOf(sid).editWatcher.list());
 
   // --- hlídání složky s automatickým nahráváním ---
-  handle('watch:start', async (opts) => {
-    requireBrowse();
-    const res = await folderWatcher.start(opts);
+  handle('watch:start', async ({ sid, ...opts }) => {
+    const session = sessionOf(sid);
+    session.requireBrowse();
+    const res = await session.folderWatcher.start(opts);
     log('ok', `Hlídám ${opts.localDir} → ${opts.remoteDir}`);
     return res;
   });
-  handle('watch:stop', async () => {
-    const res = await folderWatcher.stop();
+  handle('watch:stop', async ({ sid }) => {
+    const res = await sessionOf(sid).folderWatcher.stop();
     log('ok', 'Hlídání složky zastaveno');
     return res;
   });
-  handle('watch:status', async () => folderWatcher.status());
+  handle('watch:status', async ({ sid }) => sessionOf(sid).folderWatcher.status());
 }
 
 function normalizeRemote(p) {
@@ -761,65 +707,13 @@ function normalizeRemote(p) {
   return n.length > 1 && n.endsWith('/') ? n.slice(0, -1) : n;
 }
 
-async function disconnectAll() {
-  queue?.cancelAll();
-  await folderWatcher?.stop().catch(() => {});
-  await editWatcher?.stopAll().catch(() => {});
-  editWatcher = null;
-  if (pool) { await pool.closeAll().catch(() => {}); pool = null; }
-  await conn.browse?.disconnect().catch(() => {});
-  await conn.transfer?.disconnect().catch(() => {});
-  conn.browse = null;
-  conn.transfer = null;
-  conn.config = null;
-  conn.status = 'disconnected';
-  send('conn', { status: 'disconnected' });
-}
-
 // ------------------------------------------------------------- start app
 
 app.whenReady().then(async () => {
   await loadSettings();
   sites = new SiteStore(app.getPath('userData'));
   await sites.load();
-
-  queue = new TransferQueue({
-    concurrency: settings.maxConcurrent || 1,
-    acquireAdapter: () => transferPool().acquire(),
-    releaseAdapter: (a) => transferPool().release(a),
-    // Když okno zmizí dřív, než uživatel odpoví, přenos raději přeskočíme —
-    // mlčky přepsat cizí soubor je horší než ho nechat být.
-    onConflict: (info) => prompts.ask(win, 'conflict', info, { action: 'skip' }),
-    onMoveSource: async (item) => {
-      if (item.moveFrom === 'local') {
-        await shell.trashItem(item.localPath);
-        return;
-      }
-      const trash = getTrash();
-      if (trash) await trash.moveToTrash(item.remotePath);
-      else await requireBrowse().removeFile(item.remotePath);
-    },
-  });
-  queue.on('update', (snap) => send('queue', snap));
-
-  queue.setSpeedLimit((settings.speedLimitKb || 0) * 1024);
-  queue.setTempName(settings.tempName !== false, (settings.tempNameMinKb || 0) * 1024);
-
-  folderWatcher = new FolderWatcher({
-    queue,
-    getAdapter: async () => requireBrowse(),
-    // Mazání jde do koše na serveru, když ho relace má zapnutý. Automatika
-    // je od toho, aby ulehčila práci, ne aby zahazovala soubory nenávratně.
-    removeRemote: async (remotePath) => {
-      const trash = getTrash();
-      if (trash) { await trash.moveToTrash(remotePath); return; }
-      const a = requireBrowse();
-      if (await remoteIsDir(a, remotePath)) await a.removeDir(remotePath, true);
-      else await a.removeFile(remotePath);
-    },
-  });
-  folderWatcher.on('update', (st) => send('watch', st));
-  folderWatcher.on('log', ({ level, text }) => log(level, text));
+  manager = new SessionManager();
 
   prompts.register();
   registerIpc();
@@ -833,8 +727,8 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', async () => {
   prompts.cancelAll();
-  await disconnectAll();
+  await manager?.closeAll();
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', async () => { await disconnectAll(); });
+app.on('before-quit', async () => { await manager?.closeAll(); });
