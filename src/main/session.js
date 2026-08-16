@@ -60,6 +60,8 @@ class Session {
     this.editWatcher = new EditWatcher({
       queue: this.queue,
       connectionKey: () => `${config.protocol}://${config.username}@${config.host}:${config.port}`,
+      getAdapter: async () => this.requireBrowse(),
+      askOverwrite: (info) => deps.askEditOverwrite(this.id, info),
     });
     this.editWatcher.on('update', (list) => this.emit('edit', list));
     this.editWatcher.on('log', ({ level, text }) => deps.log(level, text));

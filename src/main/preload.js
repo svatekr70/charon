@@ -46,6 +46,9 @@ contextBridge.exposeInMainWorld('api', {
     chmod: (sid, remotePath, mode) => invoke('remote:chmod', { sid, remotePath, mode }),
     remove: (sid, paths, permanent) => invoke('remote:delete', { sid, paths, permanent: Boolean(permanent) }),
     dirSize: (sid, path) => invoke('remote:dirSize', { sid, path }),
+    properties: (sid, paths) => invoke('remote:properties', { sid, paths }),
+    applyProperties: (sid, opts) => invoke('remote:applyProperties', { sid, ...opts }),
+    checksum: (sid, paths, algo) => invoke('remote:checksum', { sid, paths, algo }),
   },
   trash: {
     info: (sid) => invoke('trash:info', { sid }),
@@ -108,6 +111,7 @@ contextBridge.exposeInMainWorld('api', {
   // Hlavní proces se ptá okna (konflikt při přepisu). Odpověď se posílá
   // zpátky pod stejným id, jinak by fronta čekala donekonečna.
   onAsk: (cb) => on('conflict', cb),
+  onAskEdit: (cb) => on('editconflict', cb),
   answer: (id, answer) => invoke('prompt:answer', { id, answer }),
 
   // Události relací nesou sid, ať je okno přiřadí správné záložce.

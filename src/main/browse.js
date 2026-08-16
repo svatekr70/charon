@@ -188,6 +188,31 @@ async function expandRemote(adapter, remotePath, localBase, out = [], mask = nul
   return out;
 }
 
+/**
+ * Rekurzivní změna práv na serveru.
+ *
+ * Složky a soubory dostávají jiná práva — 755 a 644 dávají smysl vedle sebe,
+ * 644 na složce by ji znepřístupnilo. Proto se předávají obě hodnoty.
+ */
+async function remoteChmod(adapter, target, { fileMode, dirMode, depth = 0 }, stats = { files: 0, dirs: 0 }) {
+  if (depth > MAX_DEPTH) return stats;
+
+  let entries = null;
+  try { entries = await adapter.list(target); } catch { /* není složka */ }
+
+  if (entries === null) {
+    if (fileMode !== null) { await adapter.chmod(target, fileMode); stats.files += 1; }
+    return stats;
+  }
+
+  if (dirMode !== null) { await adapter.chmod(target, dirMode); stats.dirs += 1; }
+  for (const e of entries) {
+    if (e.name === '.' || e.name === '..' || e.type === 'l') continue;
+    await remoteChmod(adapter, posix.join(target, e.name), { fileMode, dirMode, depth: depth + 1 }, stats);
+  }
+  return stats;
+}
+
 module.exports = {
-  localDirSize, remoteDirSize, Finder, expandLocal, expandRemote, MAX_DEPTH,
+  localDirSize, remoteDirSize, Finder, expandLocal, expandRemote, remoteChmod, MAX_DEPTH,
 };

@@ -190,6 +190,27 @@ class FtpAdapter {
     throw new Error('Spouštění příkazů na serveru umí jen SFTP, ne FTP');
   }
 
+  // eslint-disable-next-line class-methods-use-this
+  chown() {
+    throw new Error('Změnu vlastníka umí jen SFTP, ne FTP');
+  }
+
+  /**
+   * Kontrolní součet přes XCRC / XMD5. Nejsou ve standardu a spousta serverů
+   * je nemá — pak to řekneme rovnou místo tichého selhání.
+   */
+  async checksum(remotePath, algo = 'md5') {
+    const cmd = algo === 'md5' ? 'XMD5' : 'XCRC';
+    try {
+      const res = await this.client.send(`${cmd} ${remotePath}`);
+      const hash = String(res.message).trim().split(/\s+/).pop();
+      if (/^[0-9a-f]{8,}$/i.test(hash)) return { algo, hash, tool: cmd };
+      throw new Error('nesrozumitelná odpověď');
+    } catch (err) {
+      throw new Error(`Server neumí ${cmd}: ${err.message}`);
+    }
+  }
+
   /** Přejmenování přes existující cíl; ne každý server RNTO na obsazené jméno pustí. */
   async replace(from, to) {
     try {

@@ -171,6 +171,36 @@ class SftpAdapter {
     await this.client.chmod(remotePath, mode);
   }
 
+  /** Změna vlastníka a skupiny; SFTP zná jen čísla, ne jména. */
+  chown(remotePath, uid, gid) {
+    return new Promise((resolve, reject) => {
+      this.client.sftp.chown(remotePath, Number(uid), Number(gid), (err) => (err ? reject(err) : resolve()));
+    });
+  }
+
+  /**
+   * Kontrolní součet souboru na serveru.
+   *
+   * SFTP ho neumí, počítá se tedy příkazem přes SSH. Různé systémy mají různé
+   * nástroje, proto se zkouší postupně — a vrací se první, který projde.
+   */
+  async checksum(remotePath, algo = 'sha256') {
+    const tools = algo === 'md5'
+      ? ['md5sum', 'md5 -q']
+      : [`${algo}sum`, `shasum -a ${algo.replace('sha', '')}`];
+
+    for (const tool of tools) {
+      // eslint-disable-next-line no-await-in-loop
+      const res = await this.exec(`${tool} ${shellQuote(remotePath)}`, { timeoutMs: 120000 })
+        .catch(() => null);
+      if (res && res.code === 0) {
+        const hash = res.output.trim().split(/\s+/)[0];
+        if (/^[0-9a-f]{16,}$/i.test(hash)) return { algo, hash, tool: tool.split(' ')[0] };
+      }
+    }
+    throw new Error(`Server neumí spočítat ${algo} — chybí md5sum, shasum ani ${algo}sum`);
+  }
+
   /**
    * Spustí příkaz na serveru přes SSH.
    *

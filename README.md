@@ -36,6 +36,8 @@ předlohy vozí i zpátky.
 | Hlídání složky s automatickým nahráváním | ✅ |
 | Víc připojení naráz v záložkách | ✅ |
 | Vlastní příkazy a konzole na serveru | ✅ |
+| Vlastnosti souboru, rekurzivní práva a kontrolní součet | ✅ |
+| Detekce cizí změny při ukládání z editoru | ✅ |
 
 Nepodporuje SCP, WebDAV ani S3 — relace v těchto protokolech se při importu
 zobrazí, ale nejdou naimportovat.
@@ -259,6 +261,7 @@ v Keychain, ne v souboru.
 | `⌘S` | Synchronizace adresářů |
 | `⌘U` | Hlídat složku a nahrávat změny |
 | `⌘L` | Příkazy na serveru |
+| `⌘I` | Vlastnosti vybraného |
 | `⌘O` | Připojit v nové záložce |
 | `⌘W` | Zavřít záložku |
 
@@ -266,7 +269,13 @@ v Keychain, ne v souboru.
 
 Dvojklik na vzdálený soubor (nebo `F4`) ho stáhne do dočasné složky, otevře
 v editoru a hlídá. Při každém uložení se sám nahraje zpět na server — bez
-dalšího kliknutí. V **Nastavení** si můžete zvolit editor (např.
+dalšího kliknutí.
+
+Před nahráním se ale ověří, že se soubor na serveru mezitím nezměnil. Když do
+něj sáhl někdo jiný, Charon se zeptá a **ve výchozím stavu nenahraje** —
+zahodit cizí změnu je horší než neuložit vlastní. Když se stav zjistit nedá
+(server nehlásí čas, spadlo spojení), ukládá se bez ptaní; jinak by se
+u takového serveru nedalo uložit vůbec nic. V **Nastavení** si můžete zvolit editor (např.
 `Visual Studio Code`); prázdné pole znamená výchozí aplikaci podle přípony.
 
 ## Souběžné přenosy
@@ -376,6 +385,22 @@ rovnou stahovat, otevřít soubor v editoru nebo skočit na jeho místo v panelu
 Hledání se zastaví na 5000 nálezech a hloubce 40 úrovní — obojí je pojistka
 proti překlepu v masce, ne technický limit.
 
+## Vlastnosti souboru
+
+`⌘I` nebo *Vlastnosti…* v kontextové nabídce serverového panelu. Ukáže velikost,
+čas, práva, vlastníka a skupinu; umí je i změnit.
+
+Práva se zadávají zvlášť pro **soubory** a zvlášť pro **složky**. Není to
+zbytečné rozlišování: `644` na složce by ji znepřístupnilo, takže vedle sebe
+patří `644` a `755`. Prázdné pole znamená „neměnit". Rekurzivní použití se
+před spuštěním ptá.
+
+Vlastník a skupina se u SFTP zadávají čísly (UID a GID) — jména protokol nezná.
+
+Kontrolní součet se počítá **na serveru** příkazem (`sha256sum`, `shasum`,
+`md5sum` — zkouší se postupně), takže se nemusí nic stahovat. U FTP se zkusí
+`XMD5`/`XCRC`, které ale spousta serverů nemá; pak to Charon řekne.
+
 ## Příkazy na serveru
 
 `⌘L` otevře konzoli: napíšeš příkaz, uvidíš výstup i návratový kód. Šipkami
@@ -471,6 +496,9 @@ npm test
 - `test/winscp-import.test.js` — dekódování hesel WinSCP, parsování `.ini` i `.reg`
 - `test/mask.test.js` — zápis masek souborů
 - `test/session.test.js` — správce záložek: pořadí, přepínání a úklid
+- `test/editconflict.test.js` — detekce cizí změny při ukládání z editoru
+- `test/properties.test.js` — rekurzivní práva a kontrolní součty proti
+  skutečnému `sha256sum`
 - `test/commands.test.js` — doplňování šablon a spouštění příkazů. Uzavírání do
   apostrofů se ověřuje i doopravdy: soubor pojmenovaný `a; touch HACKED` se
   přečte jako soubor a nic navíc nevznikne

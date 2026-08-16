@@ -726,8 +726,8 @@ function showContextMenu(side, x, y) {
     if (toTrash) {
       items.push({ label: 'Smazat natrvalo', key: '⇧⌫', fn: () => deleteSelected(side, true) });
     }
-    if (side === 'remote' && sel.length === 1) {
-      items.push({ label: 'Změnit práva…', fn: () => chmodSelected(side) });
+    if (side === 'remote') {
+      items.push({ label: 'Vlastnosti…', key: '⌘I', fn: () => openProperties(side) });
     }
     items.push(null);
   }
@@ -865,24 +865,113 @@ async function emptyRemoteTrash() {
   return undefined;
 }
 
-async function chmodSelected(side) {
-  const [entry] = selectedEntries(side);
-  if (!entry) return;
-  const v = await promptDialog('Změnit práva', 'Osmičkově, např. 644', fmtPerm(entry.mode) || '644');
-  if (!v) return;
-  const mode = parseInt(v, 8);
-  if (Number.isNaN(mode)) return setLog('error', 'Neplatná hodnota práv');
-  if (await call(window.api.remote.chmod(sid(), fullPath(side, entry), mode)) !== null) {
-    await loadPane('remote', state.remote.path);
-  }
-  return undefined;
-}
-
 async function editRemote(remotePath) {
   setLog('warn', `Otevírám ${remotePath}…`);
   const r = await call(window.api.edit.open(sid(), remotePath));
   if (r) setLog('ok', `${remotePath} — změny se budou nahrávat automaticky`);
 }
+
+/* ---------------------------------------------------------- vlastnosti */
+
+const propsDlg = $('#dlg-props');
+let propsPaths = [];
+
+async function openProperties(side) {
+  if (side !== 'remote') return setLog('warn', 'Vlastnosti umí zatím jen serverová strana');
+  const sel = selectedEntries(side);
+  if (!sel.length) return setLog('warn', 'Nic není vybráno');
+
+  propsPaths = sel.map((e) => fullPath(side, e));
+  const data = await call(window.api.remote.properties(sid(), propsPaths));
+  if (!data) return undefined;
+
+  $('#props-what').textContent = propsPaths.length === 1
+    ? propsPaths[0]
+    : `${propsPaths.length} ${plural(propsPaths.length, 'položka', 'položky', 'položek')}`;
+
+  const rows = [
+    '<tr><th>Položka</th><th>Velikost</th><th>Změněno</th><th>Práva</th><th>Vlastník</th><th>Skupina</th></tr>',
+    ...data.items.map((it) => {
+      const name = it.path.slice(it.path.lastIndexOf('/') + 1) + (it.isDir ? '/' : '');
+      return `<tr><td>${escapeHtml(name)}</td><td>${it.isDir ? '—' : fmtSize(it.size)}</td>`
+        + `<td>${fmtDate(it.mtime) || '—'}</td><td>${fmtPerm(it.mode) || '—'}</td>`
+        + `<td>${it.owner ?? '—'}</td><td>${it.group ?? '—'}</td></tr>`;
+    }),
+  ];
+  $('#props-table').innerHTML = rows.join('');
+
+  // Předvyplníme práva podle první položky, ať se nemusí opisovat.
+  const first = data.items[0];
+  const dirs = data.items.filter((i) => i.isDir);
+  const files = data.items.filter((i) => !i.isDir);
+  $('#props-file-mode').value = files.length ? fmtPerm(files[0].mode) : '';
+  $('#props-dir-mode').value = dirs.length ? fmtPerm(dirs[0].mode) : '';
+  $('#props-owner').value = first && first.owner !== null ? first.owner : '';
+  $('#props-group').value = first && first.group !== null ? first.group : '';
+  $('#props-recursive').checked = false;
+  $('#props-hash').style.display = 'none';
+  $('#props-hash').textContent = '';
+
+  propsDlg.showModal();
+  return undefined;
+}
+
+function escapeHtml(v) {
+  return String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+/** Osmičkový zápis práv, nebo null když pole zůstalo prázdné. */
+function parseMode(value) {
+  const v = String(value || '').trim();
+  if (!v) return null;
+  if (!/^[0-7]{3,4}$/.test(v)) throw new Error(`„${v}" nejsou platná práva — čekám tři osmičkové číslice, třeba 644`);
+  return parseInt(v, 8);
+}
+
+$('#props-close').addEventListener('click', () => propsDlg.close());
+
+$('#props-apply').addEventListener('click', async () => {
+  let fileMode;
+  let dirMode;
+  try {
+    fileMode = parseMode($('#props-file-mode').value);
+    dirMode = parseMode($('#props-dir-mode').value);
+  } catch (err) {
+    setLog('error', err.message);
+    return;
+  }
+
+  const owner = $('#props-owner').value.trim() === '' ? null : Number($('#props-owner').value);
+  const group = $('#props-group').value.trim() === '' ? null : Number($('#props-group').value);
+  const recursive = $('#props-recursive').checked;
+
+  if (fileMode === null && dirMode === null && owner === null && group === null) {
+    setLog('warn', 'Není co změnit — všechna pole jsou prázdná');
+    return;
+  }
+  if (recursive && !window.confirm('Změna práv se použije i na všechen obsah vybraných složek. Pokračovat?')) return;
+
+  const res = await call(window.api.remote.applyProperties(sid(), {
+    paths: propsPaths, fileMode, dirMode, owner, group, recursive,
+  }));
+  if (!res) return;
+  setLog('ok', `Změněno: ${res.files} ${plural(res.files, 'soubor', 'soubory', 'souborů')}`
+    + `, ${res.dirs} ${plural(res.dirs, 'složka', 'složky', 'složek')}`
+    + (res.owners ? `, vlastník u ${res.owners}` : ''));
+  propsDlg.close();
+  await loadPane('remote', state.remote.path);
+});
+
+$('#props-checksum').addEventListener('click', async () => {
+  const box = $('#props-hash');
+  box.style.display = 'block';
+  box.textContent = 'Počítám…';
+  const res = await call(window.api.remote.checksum(sid(), propsPaths, $('#props-algo').value));
+  if (!res) { box.textContent = ''; box.style.display = 'none'; return; }
+  box.textContent = res
+    .map((r) => (r.error ? `${r.path}\n  ${r.error}` : `${r.path}\n  ${r.hash}`))
+    .join('\n');
+});
 
 /* ------------------------------------------------------------- konzole */
 
@@ -1305,6 +1394,47 @@ window.api.onFind(({ sid: id, payload: msg }) => {
   else if (msg.scanned) $('#find-status').textContent = `Hledám… prohledáno ${msg.scanned}, nalezeno ${findState.hits.length}`;
 });
 
+/* ------------------------------- soubor se na serveru mezitím změnil */
+
+const editConflictDlg = $('#dlg-editconflict');
+let editConflictQueue = Promise.resolve();
+
+function askEditConflict(req) {
+  editConflictQueue = editConflictQueue.then(() => new Promise((resolve) => {
+    $('#ec-path').textContent = req.remotePath;
+
+    const cell = (v, cls = '') => `<span class="${cls}">${v}</span>`;
+    $('#ec-cmp').innerHTML = [
+      cell('', 'h'), cell('Když jste otevřel', 'h'), cell('Teď na serveru', 'h'),
+      cell('Velikost', 'k'), cell(fmtSize(req.known?.size)), cell(fmtSize(req.current?.size)),
+      cell('Změněno', 'k'), cell(fmtDate(req.known?.mtime) || '—'),
+      cell(fmtDate(req.current?.mtime) || '—', 'newer'),
+    ].join('');
+
+    const done = (action) => {
+      cleanup();
+      window.api.answer(req.id, { action });
+      editConflictDlg.close();
+      resolve();
+    };
+    const onClick = (ev) => {
+      const btn = ev.target.closest('button[data-action]');
+      if (btn) done(btn.dataset.action);
+    };
+    // Esc znamená nenahrávat — cizí změnu je horší zahodit než neuložit vlastní.
+    const onCancel = (ev) => { ev.preventDefault(); done('skip'); };
+    const cleanup = () => {
+      editConflictDlg.removeEventListener('click', onClick);
+      editConflictDlg.removeEventListener('cancel', onCancel);
+    };
+
+    editConflictDlg.addEventListener('click', onClick);
+    editConflictDlg.addEventListener('cancel', onCancel);
+    editConflictDlg.showModal();
+  }));
+  return editConflictQueue;
+}
+
 /* --------------------------------------------- konflikt při přepisu */
 
 const conflictDlg = $('#dlg-conflict');
@@ -1425,6 +1555,9 @@ document.addEventListener('keydown', async (ev) => {
       break;
     case 'l':
       if (ev.metaKey) { ev.preventDefault(); openConsole(); }
+      break;
+    case 'i':
+      if (ev.metaKey) { ev.preventDefault(); await openProperties(side); }
       break;
     default:
       // Psaní písmen skáče na odpovídající položku. Modifikátory vynecháváme,
@@ -2124,6 +2257,7 @@ window.api.onConn(({ sid: id, payload }) => {
 });
 
 window.api.onAsk(askConflict);
+window.api.onAskEdit(askEditConflict);
 
 window.api.onQueue(({ sid: id, payload }) => {
   const s = state.sessions.get(id);

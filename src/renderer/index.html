@@ -264,6 +264,50 @@
     </form>
   </dialog>
 
+  <!-- vlastnosti souboru -->
+  <dialog id="dlg-props">
+    <div class="dlg wide">
+      <h2>Vlastnosti</h2>
+      <p class="muted" id="props-what"></p>
+
+      <div class="scroll" style="margin-bottom:12px">
+        <table id="props-table"></table>
+      </div>
+
+      <h3>Práva</h3>
+      <div class="grid">
+        <label>Soubory (osmičkově)<input id="props-file-mode" placeholder="beze změny" spellcheck="false" /></label>
+        <label>Složky (osmičkově)<input id="props-dir-mode" placeholder="beze změny" spellcheck="false" /></label>
+      </div>
+      <label class="check"><input type="checkbox" id="props-recursive" /> Použít i na obsah složek</label>
+
+      <h3>Vlastník a skupina</h3>
+      <p class="muted">SFTP zná jen čísla (UID a GID), ne jména.</p>
+      <div class="grid">
+        <label>Vlastník<input id="props-owner" type="number" placeholder="beze změny" /></label>
+        <label>Skupina<input id="props-group" type="number" placeholder="beze změny" /></label>
+      </div>
+
+      <h3>Kontrolní součet</h3>
+      <div class="find-opts">
+        <label style="flex:0 0 160px">Algoritmus
+          <select id="props-algo">
+            <option value="sha256">SHA-256</option>
+            <option value="sha1">SHA-1</option>
+            <option value="md5">MD5</option>
+          </select>
+        </label>
+        <button id="props-checksum">Spočítat</button>
+      </div>
+      <pre class="console-out" id="props-hash" style="height:auto;max-height:120px;display:none"></pre>
+
+      <menu>
+        <button id="props-close">Zavřít</button>
+        <button id="props-apply" class="primary">Použít změny</button>
+      </menu>
+    </div>
+  </dialog>
+
   <!-- konzole -->
   <dialog id="dlg-console">
     <div class="dlg wide">
@@ -404,6 +448,21 @@
         <button id="find-reveal">Ukázat v panelu</button>
         <button id="find-edit">Upravit</button>
         <button id="find-download" class="primary">Stáhnout vybrané</button>
+      </menu>
+    </div>
+  </dialog>
+
+  <!-- soubor se na serveru mezitím změnil -->
+  <dialog id="dlg-editconflict">
+    <div class="dlg">
+      <h2>Soubor se na serveru mezitím změnil</h2>
+      <p class="muted" id="ec-path"></p>
+      <div class="cmp" id="ec-cmp"></div>
+      <p class="muted">Někdo jiný do souboru sáhl od chvíle, kdy jste si ho otevřel.
+        Uložením byste jeho změnu přepsal.</p>
+      <menu>
+        <button data-action="skip" class="primary">Nenahrávat</button>
+        <button data-action="overwrite">Přesto přepsat</button>
       </menu>
     </div>
   </dialog>

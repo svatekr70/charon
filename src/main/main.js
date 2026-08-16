@@ -17,7 +17,7 @@ const { parseWinscpFile } = require('./winscp-import');
 const hostkeys = require('./hostkeys');
 const prompts = require('./prompts');
 const {
-  localDirSize, remoteDirSize, expandLocal, expandRemote,
+  localDirSize, remoteDirSize, expandLocal, expandRemote, remoteChmod,
 } = require('./browse');
 const FileMask = require('../common/mask');
 const { Session, SessionManager, isDir: remoteIsDir } = require('./session');
@@ -268,6 +268,9 @@ function sessionDeps() {
     log,
     settings: () => settings,
     askConflict: (sid, info) => prompts.ask(win, 'conflict', { sid, ...info }, { action: 'skip' }),
+    // Když okno neodpoví, soubor raději nepřepisujeme — cizí změnu je horší
+    // zahodit než neuložit vlastní.
+    askEditOverwrite: (sid, info) => prompts.ask(win, 'editconflict', { sid, ...info }, { action: 'skip' }),
     trashLocal: (p) => shell.trashItem(p),
   };
 }
@@ -514,6 +517,78 @@ function registerIpc() {
   handle('remote:rename', async ({ sid, from, to }) => { await browseOf(sid).rename(from, to); return true; });
   handle('remote:chmod', async ({ sid, remotePath, mode }) => { await browseOf(sid).chmod(remotePath, mode); return true; });
   handle('remote:dirSize', async ({ sid, path: p }) => remoteDirSize(browseOf(sid), p));
+
+  /** Podklady pro dialog vlastností. */
+  handle('remote:properties', async ({ sid, paths }) => {
+    const a = browseOf(sid);
+    const items = [];
+    for (const p of paths) {
+      const isFolder = await remoteIsDir(a, p);
+      let st = null;
+      try { st = await a.stat(p); } catch { /* FTP na složce SIZE neumí */ }
+      // Vlastníka a skupinu má výpis nadřazené složky, stat je nevrací.
+      let entry = null;
+      try {
+        const parent = posix.dirname(p);
+        const name = posix.basename(p);
+        entry = (await a.list(parent)).find((e) => e.name === name) || null;
+      } catch { /* na kořen se nedostaneme */ }
+
+      items.push({
+        path: p,
+        isDir: isFolder,
+        size: isFolder ? null : (st ? st.size : (entry ? entry.size : null)),
+        mtime: (st && st.mtime) || (entry && entry.mtime) || null,
+        mode: (st && st.mode) ?? (entry && entry.mode) ?? null,
+        owner: entry ? entry.owner : null,
+        group: entry ? entry.group : null,
+      });
+    }
+    return { items, protocol: sessionOf(sid).config.protocol };
+  });
+
+  handle('remote:applyProperties', async ({
+    sid, paths, fileMode, dirMode, owner, group, recursive,
+  }) => {
+    const a = browseOf(sid);
+    const stats = { files: 0, dirs: 0, owners: 0 };
+
+    for (const p of paths) {
+      if (fileMode !== null || dirMode !== null) {
+        if (recursive) {
+          const r = await remoteChmod(a, p, { fileMode, dirMode });
+          stats.files += r.files;
+          stats.dirs += r.dirs;
+        } else {
+          const isFolder = await remoteIsDir(a, p);
+          const mode = isFolder ? dirMode : fileMode;
+          if (mode !== null) {
+            await a.chmod(p, mode);
+            if (isFolder) stats.dirs += 1; else stats.files += 1;
+          }
+        }
+      }
+      if (owner !== null || group !== null) {
+        const cur = await a.stat(p).catch(() => ({}));
+        await a.chown(p, owner ?? cur.uid ?? 0, group ?? cur.gid ?? 0);
+        stats.owners += 1;
+      }
+    }
+    return stats;
+  });
+
+  handle('remote:checksum', async ({ sid, paths, algo }) => {
+    const a = browseOf(sid);
+    const out = [];
+    for (const p of paths) {
+      try {
+        out.push({ path: p, ...(await a.checksum(p, algo)) });
+      } catch (err) {
+        out.push({ path: p, error: err.message });
+      }
+    }
+    return out;
+  });
 
   /**
    * Mazání na serveru. Se zapnutým košem se položka jen přesune — nikdy
