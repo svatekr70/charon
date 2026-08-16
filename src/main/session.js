@@ -39,10 +39,17 @@ class Session {
     this.deps = deps;
 
     this.status = 'disconnected';
+    // Fronta se pamatuje podle uložené relace; bez ní podle serveru a cíle.
+    this.persistKey = siteId || `${config.protocol}://${config.username}@${config.host}:${config.port}${config.remoteDir || ''}`;
     this.browse = null;
     this.home = '/';
     this.pool = null;
     this.finder = null;
+    this.closing = false;
+    this.reconnecting = false;
+    // Dokud se nerozhodne, co s frontou z minula, nesmíme ji přepsat. Prázdná
+    // fronta nové relace by ji jinak smazala dřív, než se stačíme zeptat.
+    this.queueAdopted = false;
 
     const settings = deps.settings();
 
@@ -55,7 +62,13 @@ class Session {
     });
     this.queue.setSpeedLimit((settings.speedLimitKb || 0) * 1024);
     this.queue.setTempName(settings.tempName !== false, (settings.tempNameMinKb || 0) * 1024);
-    this.queue.on('update', (snap) => this.emit('queue', snap));
+    this.queue.on('update', (snap) => {
+      this.emit('queue', snap);
+      // Nedokončené přenosy si pamatujeme, aby přežily zavření aplikace.
+      if (deps.rememberQueue && this.queueAdopted) {
+        deps.rememberQueue(this.persistKey, snap.items, this.describe().name);
+      }
+    });
 
     this.editWatcher = new EditWatcher({
       queue: this.queue,
@@ -110,9 +123,60 @@ class Session {
     adapter.onLost = (reason) => {
       if (this.browse !== adapter) return;
       this.status = 'disconnected';
-      this.deps.log('error', `${this.describe().name}: spojení skončilo — ${reason}`);
       this.emit('conn', this.describe());
+      // Zavíráme-li sami, není co obnovovat.
+      if (this.closing) return;
+      this.deps.log('warn', `${this.describe().name}: spojení skončilo — ${reason}`);
+      this.reconnect().catch(() => {});
     };
+  }
+
+  /**
+   * Obnovení spadlého spojení.
+   *
+   * Zkouší se několikrát s rostoucí prodlevou — výpadek linky nebo restart
+   * serveru je otázka vteřin a bez tohohle by uživatel musel klikat sám.
+   * Rozepsané přenosy se po obnovení rozeběhnou dál; navazovat na ně už
+   * fronta umí.
+   */
+  async reconnect({ attempts = [1000, 3000, 8000] } = {}) {
+    if (this.reconnecting || this.closing) return false;
+    this.reconnecting = true;
+
+    // Zásoba spojení pro přenosy je taky mrtvá; ať se otevře znovu.
+    if (this.pool) { await this.pool.closeAll().catch(() => {}); this.pool = null; }
+
+    try {
+      for (let i = 0; i < attempts.length; i += 1) {
+        if (this.closing) return false;
+        await wait(attempts[i]);
+        if (this.closing) return false;
+
+        this.status = 'connecting';
+        this.emit('conn', this.describe());
+        this.deps.log('warn', `${this.describe().name}: pokus o obnovení ${i + 1}/${attempts.length}…`);
+
+        try {
+          const adapter = await this.deps.openAdapter(this.config);
+          const home = await adapter.home().catch(() => this.home);
+          await this.connect(adapter, home);
+          this.deps.log('ok', `${this.describe().name}: spojení obnoveno`);
+          this.emit('conn', this.describe());
+          // Co zbylo pozastavené výpadkem, se rozeběhne dál.
+          this.queue.resume();
+          return true;
+        } catch (err) {
+          this.deps.log('warn', `${this.describe().name}: ${err.message}`);
+        }
+      }
+
+      this.status = 'disconnected';
+      this.emit('conn', this.describe());
+      this.deps.log('error', `${this.describe().name}: spojení se nepodařilo obnovit`);
+      return false;
+    } finally {
+      this.reconnecting = false;
+    }
   }
 
   transferPool() {
@@ -167,6 +231,7 @@ class Session {
   }
 
   async close() {
+    this.closing = true;
     this.status = 'disconnected';
     this.queue.cancelAll();
     if (this.finder) this.finder.cancel();
@@ -179,6 +244,10 @@ class Session {
       this.browse = null;
     }
   }
+}
+
+function wait(ms) {
+  return new Promise((resolve) => { setTimeout(resolve, ms); });
 }
 
 /** Zjistí, jestli vzdálená cesta ukazuje na složku. */

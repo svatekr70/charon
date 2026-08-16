@@ -6,6 +6,7 @@ const path = require('path');
 const SftpClient = require('ssh2-sftp-client');
 const { makeThrottle } = require('../throttle');
 const { shellQuote } = require('../commands');
+const { buildPath } = require('../netpath');
 
 function expandHome(p) {
   if (!p) return p;
@@ -29,6 +30,8 @@ class SftpAdapter {
     });
     this.connected = false;
     this.protocol = 'sftp';
+    /** Uklidí tunel nebo proxy, když se přes ně šlo. */
+    this.cleanupPath = null;
     /** @type {null | ((reason: string) => void)} */
     this.onLost = null;
   }
@@ -83,11 +86,20 @@ class SftpAdapter {
     const wantsAgent = cfg.useAgent || (!cfg.password && !cfg.privateKeyPath);
     if (wantsAgent && process.env.SSH_AUTH_SOCK) opts.agent = process.env.SSH_AUTH_SOCK;
 
+    // Když se jde přes proxy nebo bránu, spojení otevřeme sami a knihovně
+    // ho jen podstrčíme.
+    const routed = await buildPath({ ...cfg, verifyTunnelHostKey: hooks.verifyTunnelHostKey });
+    if (routed.sock) {
+      opts.sock = routed.sock;
+      this.cleanupPath = routed.cleanup;
+    }
+
     try {
       await this.client.connect(opts);
     } catch (err) {
       // Selhání handshaku kvůli odmítnutému klíči hlásí knihovna obecnou
       // hláškou — nahradíme ji tou, která říká, co se opravdu stalo.
+      if (this.cleanupPath) { this.cleanupPath(); this.cleanupPath = null; }
       if (this._hostKeyRejected) {
         throw Object.assign(new Error(this._hostKeyRejected), { hostKeyRejected: true });
       }
@@ -97,9 +109,12 @@ class SftpAdapter {
   }
 
   async disconnect() {
-    if (!this.connected) return;
+    const wasConnected = this.connected;
     this.connected = false;
-    try { await this.client.end(); } catch { /* spojení už mohlo spadnout */ }
+    if (wasConnected) {
+      try { await this.client.end(); } catch { /* spojení už mohlo spadnout */ }
+    }
+    if (this.cleanupPath) { this.cleanupPath(); this.cleanupPath = null; }
   }
 
   async home() {

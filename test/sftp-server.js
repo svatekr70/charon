@@ -8,6 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const net = require('net');
 const { spawn } = require('child_process');
 const { Server } = require('ssh2');
 const { STATUS_CODE, OPEN_MODE } = require('ssh2').utils.sftp;
@@ -46,7 +47,12 @@ function startTestServer({
       mtime: Math.floor(st.mtimeMs / 1000),
     });
 
+    // Živá spojení si držíme, ať jde server zavřít i uprostřed přenosu.
+    const clients = new Set();
+
     const server = new Server({ hostKeys: [fs.readFileSync(hostKeyPath)] }, (client) => {
+      clients.add(client);
+      client.on('close', () => clients.delete(client));
       client.on('authentication', (ctx) => {
         if (ctx.method === 'password' && ctx.username === user && ctx.password === password) ctx.accept();
         else if (ctx.method === 'none') ctx.reject(['password']);
@@ -54,6 +60,16 @@ function startTestServer({
       });
 
       client.on('ready', () => {
+        // Protažení spojení dál (direct-tcpip). Bez toho by nešlo vyzkoušet
+        // připojení přes bránu, protože forwardOut nemá kdo obsloužit.
+        client.on('tcpip', (acceptFwd, rejectFwd, info) => {
+          const upstream = net.connect({ host: info.destIP, port: info.destPort }, () => {
+            const channel = acceptFwd();
+            channel.pipe(upstream).pipe(channel);
+          });
+          upstream.on('error', () => rejectFwd());
+        });
+
         client.on('session', (accept) => {
           const session = accept();
 
@@ -205,7 +221,19 @@ function startTestServer({
     });
 
     server.listen(port, '127.0.0.1', () => {
-      resolve({ port: server.address().port, close: () => new Promise((r) => server.close(r)) });
+      resolve({
+        port: server.address().port,
+        // ssh2 čeká se zavřením na dožití všech spojení. Test ale server často
+        // vypíná právě proto, aby zjistil, co se stane při výpadku — takže je
+        // ukončíme sami, jinak by se close() nedočkal.
+        close: () => new Promise((r) => {
+          for (const c of clients) { try { c.end(); } catch { /* už zavřený */ } }
+          clients.clear();
+          server.close(r);
+          // Kdyby některé spojení nedoumíralo, po chvíli ho utneme natvrdo.
+          setTimeout(() => { try { server.close(); } catch { /* už zavřený */ } r(); }, 1500).unref();
+        }),
+      });
     });
   });
 }

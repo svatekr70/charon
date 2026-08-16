@@ -69,6 +69,9 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
 .tab.active { background: var(--bg); color: var(--fg); box-shadow: inset 0 2px 0 var(--accent); }
 .tab .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; }
 .tab.off .dot { background: var(--err); }
+.tab.busy .dot { background: var(--warn); animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .tab.busy .dot { animation: none; } }
 .tab .name { overflow: hidden; text-overflow: ellipsis; }
 .tab .busy { color: var(--accent); font-size: 11px; font-variant-numeric: tabular-nums; }
 .tab .x { color: var(--fg-dim); font-size: 13px; padding: 0 2px; border-radius: 3px; }
@@ -288,6 +291,12 @@ table.ph td:first-child { width: 150px; }
 .find-results .fr .p { direction: rtl; text-align: left; font-family: "SF Mono", ui-monospace, monospace; font-size: 11.5px; }
 .find-results .fr .n { text-align: right; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
 .find-results .fr.dir .p { color: #8fb8ff; }
+
+details { margin: 4px 0 10px; }
+details > summary { cursor: pointer; font-size: 12px; color: var(--fg-dim);
+  text-transform: uppercase; letter-spacing: .06em; padding: 4px 0; }
+details > summary:hover { color: var(--fg); }
+details[open] > summary { color: var(--accent); }
 
 .dlg h3 { margin: 16px 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-dim); }
 .dlg h3:first-of-type { margin-top: 4px; }

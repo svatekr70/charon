@@ -38,6 +38,10 @@ předlohy vozí i zpátky.
 | Vlastní příkazy a konzole na serveru | ✅ |
 | Vlastnosti souboru, rekurzivní práva a kontrolní součet | ✅ |
 | Detekce cizí změny při ukládání z editoru | ✅ |
+| Nedokončená fronta přežije zavření aplikace | ✅ |
+| Automatické obnovení spadlého spojení | ✅ |
+| SSH brána (jump host) a proxy SOCKS5 / HTTP | ✅ |
+| Pracovní plochy — uložená sada otevřených záložek | ✅ |
 
 Nepodporuje SCP, WebDAV ani S3 — relace v těchto protokolech se při importu
 zobrazí, ale nejdou naimportovat.
@@ -115,6 +119,9 @@ Zavřít záložku s běžícími přenosy jde, ale aplikace se zeptá. Bez otev
 záložky zůstává použitelný aspoň lokální panel.
 
 ## Import z WinSCP
+
+Je v **Nastavení → Relace** a v nabídce *Soubor*. V liště tlačítko nemá —
+importuje se obvykle jednou a pak už nikdy.
 
 WinSCP hesla nešifruje, jen obfuskuje reverzibilním algoritmem, jehož klíčem je
 `UserName + HostName`. Importér je proto umí přenést včetně hesel.
@@ -226,12 +233,68 @@ Nastavuje se u každé relace zvlášť — složka koše i automatický úklid 
 počtu dní. Ruční vysypání je v nabídce *Soubor* a v kontextovém menu serverového
 panelu. Mazání s klávesou **Shift** koš obejde a smaže rovnou.
 
+## Fronta přežije zavření aplikace
+
+Nedokončené přenosy se ukládají průběžně, takže se o ně nepřijde, když se
+aplikace zavře nebo spadne uprostřed nahrávání. Při dalším připojení ke stejné
+relaci se Charon zeptá, jestli je má vrátit do fronty.
+
+Pomáhá tomu i [přenos přes dočasný název](#přenos-přes-dočasný-název) —
+rozepsaný `.filepart` na disku zůstane, takže se navazuje tam, kde se přestalo,
+a nezačíná se od nuly. Když nabídku odmítnete, zapomene se; cílový soubor
+zůstane nedotčený, protože nedokončený přenos se do něj ještě nepromítl.
+
+## Když spojení spadne
+
+Výpadek linky ani restart serveru neznamená, že se musíte připojovat ručně.
+Charon to pozná, ohlásí to ve stavovém řádku a zkusí se připojit znovu —
+třikrát, s prodlevou 1, 3 a 8 vteřin. Záložka i stavový řádek mezitím ukazují
+*připojuji* (tečka u názvu pomalu bliká).
+
+Když se to povede, rozdělaná fronta pokračuje dál a navazuje na to, co už se
+přeneslo. Když ne, relace zůstane odpojená a připojíte se sami — opakovat to
+donekonečna by jen zbytečně bušilo do serveru, který třeba záměrně neběží.
+
+Zavřete-li záložku sami, nic se neobnovuje.
+
+## Cesta k serveru — brána a proxy
+
+Server, který není vidět z internetu, bývá dostupný přes jiný stroj. V dialogu
+relace je na to sekce **Cesta k serveru** (jen SFTP; FTP potřebuje kromě
+řídicího ještě datová spojení a ta by tudy neprošla):
+
+| Nastavení | K čemu |
+| --- | --- |
+| Brána (jump host) | SSH stroj, přes který se protáhne spojení k cíli — obdoba `ssh -J` |
+| Proxy SOCKS5 | Typicky firemní síť; podporuje i jméno a heslo |
+| Proxy HTTP CONNECT | Totéž přes HTTP proxy |
+
+Dá se to kombinovat: proxy vede k bráně, brána k cíli. Adresu cíle posíláme
+proxy jménem, aby si ji přeložila sama — na vaší straně by se přeložit nemusela.
+
+**Klíč brány se ověřuje stejně přísně jako klíč cíle.** Je to stroj, kterým jde
+všechno ostatní, takže na něm záleží nejvíc; při prvním připojení se na jeho
+otisk zeptáme zvlášť. Bez potvrzeného klíče se spojení neotevře.
+
+Hesla k bráně i k proxy se ukládají zašifrovaná stejně jako ta ostatní.
+
+## Pracovní plochy
+
+**Okno → Pracovní plochy** (`⇧⌘O`) uloží sadu právě otevřených záložek i s tím,
+v jaké složce jsou na obou stranách. Příště ji otevřete jedním kliknutím —
+hodí se, když se pravidelně vracíte ke stejné skupině serverů.
+
+Ukládají se jen záložky z uložených relací; u jednorázového připojení není co
+otevřít. Když se některá relace nepřipojí, ostatní se otevřou i tak a řekne se,
+kolik jich z kolika vyšlo.
+
 ## Kde se co ukládá
 
 | Co | Kde |
 | --- | --- |
 | Relace | `~/Library/Application Support/charon/sites.json` |
-| Nastavení | `~/Library/Application Support/charon/settings.json` |
+| Nastavení a pracovní plochy | `~/Library/Application Support/charon/settings.json` |
+| Nedokončená fronta | `~/Library/Application Support/charon/queue.json` |
 | Šifrovací klíč k heslům | macOS Keychain, položka `Charon` |
 | Dočasné soubory otevřené v editoru | `$TMPDIR/charon-edit/` |
 
@@ -522,6 +585,13 @@ npm test
 - `test/editconflict.test.js` — detekce cizí změny při ukládání z editoru
 - `test/properties.test.js` — rekurzivní práva a kontrolní součty proti
   skutečnému `sha256sum`
+- `test/queue-store.test.js` — co z fronty přežije zavření aplikace a co ne
+- `test/netpath.test.js` — proxy a SSH brána proti skutečné proxy (napsané
+  v testu podle RFC) a skutečné bráně. Hlídá se hlavně to, že se bez ověřeného
+  klíče brána neotevře — bez toho by tunel nechránil před ničím
+- `test/reconnect.test.js` — obnovení spojení proti serveru, který se opravdu
+  vypne a zase zapne. Ověřuje se i to, na co se nesmí reagovat: vlastní zavření
+  záložky se neobnovuje a dva pokusy naráz se nepřekrývají
 - `test/commands.test.js` — doplňování šablon a spouštění příkazů. Uzavírání do
   apostrofů se ověřuje i doopravdy: soubor pojmenovaný `a; touch HACKED` se
   přečte jako soubor a nic navíc nevznikne

@@ -16,8 +16,6 @@
       <button id="btn-new-site" title="Nová relace">＋ Relace</button>
       <button id="btn-edit-site" title="Upravit vybranou relaci">Upravit</button>
       <button id="btn-del-site" title="Smazat vybranou relaci">Smazat</button>
-      <span class="sep"></span>
-      <button id="btn-import">Import z WinSCP…</button>
       <span class="spacer"></span>
       <button id="btn-refresh" title="Obnovit oba panely (⌘R)">⟳</button>
       <button id="btn-sync" title="Synchronizace adresářů (⌘S)">⇅ Sync</button>
@@ -137,6 +135,35 @@
         <label>Vysypat koš po (dnech)<input name="recycleBinDays" type="number" min="0" placeholder="0 = nikdy" /></label>
         <label class="check"><input type="checkbox" name="useRecycleBin" checked /> Mazat na serveru do koše místo nevratného smazání</label>
         <label class="check" data-when="sftp"><input type="checkbox" name="useAgent" /> Použít ssh-agent</label>
+      </div>
+
+      <details data-when="sftp" id="site-path">
+        <summary>Cesta k serveru — brána nebo proxy</summary>
+        <p class="muted">Jen pro SFTP. FTP potřebuje kromě řídicího i datová spojení
+          a ta by tudy neprošla.</p>
+        <div class="grid">
+          <label>Brána (jump host)<input name="tunnelHost" placeholder="prázdné = přímo" /></label>
+          <label>Port brány<input name="tunnelPort" type="number" min="1" max="65535" placeholder="22" /></label>
+          <label>Uživatel na bráně<input name="tunnelUsername" /></label>
+          <label>Heslo na bráně<input name="tunnelPassword" type="password" placeholder="beze změny" /></label>
+          <label>Klíč pro bránu
+            <span class="row"><input name="tunnelKeyPath" placeholder="~/.ssh/id_ed25519" /><button type="button" id="pick-tunnel-key">…</button></span>
+          </label>
+          <label>Proxy
+            <select name="proxyType">
+              <option value="none">Žádná</option>
+              <option value="socks5">SOCKS5</option>
+              <option value="http">HTTP CONNECT</option>
+            </select>
+          </label>
+          <label>Adresa proxy<input name="proxyHost" /></label>
+          <label>Port proxy<input name="proxyPort" type="number" min="1" max="65535" /></label>
+          <label>Uživatel proxy<input name="proxyUsername" /></label>
+          <label>Heslo proxy<input name="proxyPassword" type="password" placeholder="beze změny" /></label>
+        </div>
+      </details>
+
+      <div class="grid">
         <label class="check" data-when="ftp" hidden><input type="checkbox" name="acceptAnyCert" /> Přijmout jakýkoliv certifikát bez ptaní (nedoporučeno)</label>
       </div>
       <menu>
@@ -260,8 +287,36 @@
       <h3>Sloupce</h3>
       <label class="check"><input type="checkbox" name="colOwner" /> Zobrazit vlastníka</label>
       <label class="check"><input type="checkbox" name="colGroup" /> Zobrazit skupinu</label>
+
+      <h3>Relace</h3>
+      <button type="button" id="btn-import">Import z WinSCP…</button>
+      <p class="muted">Načte relace i s hesly z <code>WinSCP.ini</code> nebo z exportu
+        registru. Dělá se to obvykle jednou, proto to sedí tady a ne v liště.
+        Je to i v nabídce <em>Soubor</em>.</p>
       <menu><button value="cancel">Zrušit</button><button value="save" class="primary">Uložit</button></menu>
     </form>
+  </dialog>
+
+  <!-- pracovní plochy -->
+  <dialog id="dlg-ws">
+    <div class="dlg wide">
+      <h2>Pracovní plochy</h2>
+      <p class="muted">Uložená sada otevřených záložek i s cestami. Hodí se, když
+        se pravidelně vracíte ke stejné skupině serverů.</p>
+
+      <div class="cmd-table" id="ws-list"></div>
+
+      <div class="find-opts">
+        <label style="flex:1">Název nové plochy
+          <input id="ws-name" placeholder="např. Klient Novák" />
+        </label>
+        <button id="ws-save" class="primary">Uložit současné záložky</button>
+      </div>
+
+      <menu>
+        <button id="ws-close">Zavřít</button>
+      </menu>
+    </div>
   </dialog>
 
   <!-- vlastnosti souboru -->

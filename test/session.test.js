@@ -2,7 +2,7 @@
 
 /** Správce relací — pořadí záložek, přepínání a úklid při zavření. */
 
-const { SessionManager } = require('../src/main/session');
+const { Session, SessionManager } = require('../src/main/session');
 
 let pass = 0;
 let fail = 0;
@@ -74,6 +74,33 @@ async function main() {
 
   await m.remove('neexistuje'); // nesmí spadnout
   check('zavření neznámé nespadne', true, true);
+
+  // ================= fronta z minula se nesmí přepsat dřív, než se zeptáme
+  // Relace při otevření vždycky ohlásí prázdnou frontu. Kdyby se ukládala
+  // rovnou, smazala by přesně to, na co se okno teprve chystá zeptat.
+  const zapsano = [];
+  const session = new Session({
+    id: 'q1',
+    config: { protocol: 'sftp', host: 'h', port: 22, username: 'u', name: 'Relace' },
+    siteId: 'site-q',
+    deps: {
+      openAdapter: async () => ({}),
+      send: () => {},
+      log: () => {},
+      settings: () => ({}),
+      askConflict: async () => ({ action: 'skip' }),
+      askEditOverwrite: async () => ({ action: 'skip' }),
+      rememberQueue: (key, items) => zapsano.push({ key, pocet: items.length }),
+    },
+  });
+
+  session.queue.add([{ direction: 'up', localPath: '/a', remotePath: '/b', size: 1 }]);
+  check('před rozhodnutím se nic neukládá', zapsano.length, 0);
+
+  session.queueAdopted = true;
+  session.queue.add([{ direction: 'up', localPath: '/c', remotePath: '/d', size: 1 }]);
+  truthy('po rozhodnutí už ano', zapsano.length > 0);
+  check('a ukládá se pod klíčem relace', zapsano[zapsano.length - 1].key, 'site-q');
 
   console.log(`\n${pass} prošlo, ${fail} selhalo`);
   process.exit(fail ? 1 : 0);

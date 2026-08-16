@@ -21,16 +21,18 @@ const {
 } = require('./browse');
 const FileMask = require('../common/mask');
 const { Session, SessionManager, isDir: remoteIsDir } = require('./session');
+const { QueueStore } = require('./queue-store');
 const { expand, findPrompts, runLocal } = require('./commands');
 
 let win = null;
 let sites = null;
 let manager = null;
+let queueStore = null;
 let settings = {
   editor: '', localDir: os.homedir(), transferMask: '',
   maxConcurrent: 3, speedLimitKb: 0,
   tempName: true, tempNameMinKb: 0,
-  commands: [],
+  commands: [], workspaces: [],
 };
 
 // ---------------------------------------------------------------- pomocné
@@ -58,7 +60,10 @@ async function openAdapterFor(config) {
   const a = makeAdapter(config.protocol);
   const hooks = config.protocol === 'ftp'
     ? { verifyCertificate: () => false }
-    : { verifyHostKey: makeHostKeyHook(config).hook };
+    : {
+      verifyHostKey: makeHostKeyHook(config).hook,
+      verifyTunnelHostKey: config.tunnelHost ? makeHostKeyHook(tunnelCfgOf(config)).hook : undefined,
+    };
   await a.connect(config, hooks);
   return a;
 }
@@ -83,29 +88,39 @@ function makeHostKeyHook(cfg) {
   return state;
 }
 
+/** Konfigurace brány jako samostatného stroje — má vlastní otisk klíče. */
+function tunnelCfgOf(cfg) {
+  return {
+    host: cfg.tunnelHost,
+    port: Number(cfg.tunnelPort) || 22,
+    hostKeyFingerprint: cfg.tunnelHostKeyFingerprint,
+  };
+}
+
 /**
  * Zeptá se na neznámý nebo změněný klíč. Používáme nativní dialog schválně —
  * jde o bezpečnostní rozhodnutí a obsah okna aplikace ho nemá jak ovlivnit.
  */
-async function askAboutHostKey(info, cfg) {
+async function askAboutHostKey(info, cfg, role = 'serveru') {
   const where = `${cfg.host}:${Number(cfg.port) || 22}`;
+  const co = role === 'brány' ? 'Brána' : 'Server';
 
   if (info.verdict === 'revoked') {
     await dialog.showMessageBox(win, {
       type: 'error',
       title: 'Odvolaný klíč serveru',
-      message: `Klíč serveru ${where} je v known_hosts označen jako odvolaný.`,
+      message: `Klíč ${role} ${where} je v known_hosts označen jako odvolaný.`,
       detail: `Otisk: ${info.fingerprint}\n\nPřipojení bylo zrušeno.`,
       buttons: ['Rozumím'],
     });
-    return { accept: false, reason: 'Klíč serveru je označen jako odvolaný' };
+    return { accept: false, reason: `Klíč ${role} je označen jako odvolaný` };
   }
 
   if (info.verdict === 'mismatch') {
     const res = await dialog.showMessageBox(win, {
       type: 'error',
       title: 'Klíč serveru se změnil',
-      message: `Server ${where} se hlásí jiným klíčem, než jaký je uložený.`,
+      message: `${co} ${where} se hlásí jiným klíčem, než jaký je uložený.`,
       detail: `Uložený otisk (zdroj: ${info.knownFrom}):\n${info.expected}\n\n`
         + `Nový otisk (${info.type}):\n${info.fingerprint}\n\n`
         + 'Server mohl být přeinstalován — nebo se za něj někdo vydává a čte, '
@@ -117,13 +132,13 @@ async function askAboutHostKey(info, cfg) {
     });
     return res.response === 1
       ? { accept: true, remember: true }
-      : { accept: false, reason: 'Klíč serveru se změnil — připojení zrušeno' };
+      : { accept: false, reason: `Klíč ${role} se změnil — připojení zrušeno` };
   }
 
   const res = await dialog.showMessageBox(win, {
     type: 'warning',
     title: 'Neznámý server',
-    message: `K serveru ${where} se připojujete poprvé.`,
+    message: `K ${role === 'brány' ? 'bráně' : 'serveru'} ${where} se připojujete poprvé.`,
     detail: `Otisk klíče (${info.type}):\n${info.fingerprint}\n\n`
       + 'Ověřte si ho u správce serveru, nebo z jiného počítače příkazem:\n'
       + `ssh-keyscan -p ${Number(cfg.port) || 22} ${cfg.host} | ssh-keygen -lf -\n\n`
@@ -132,7 +147,7 @@ async function askAboutHostKey(info, cfg) {
     defaultId: 2,
     cancelId: 0,
   });
-  if (res.response === 0) return { accept: false, reason: 'Klíč serveru nebyl potvrzen' };
+  if (res.response === 0) return { accept: false, reason: `Klíč ${role} nebyl potvrzen` };
   return { accept: true, remember: res.response === 2 };
 }
 
@@ -207,11 +222,16 @@ async function connectVerified(cfg, siteId) {
     const adapter = makeAdapter(effective.protocol);
     const isFtp = effective.protocol === 'ftp';
     const hostKey = isFtp ? null : makeHostKeyHook(effective);
+    // Brána je samostatný stroj — vidí všechno, co jím projde, takže se
+    // ověřuje zvlášť a stejně přísně jako cíl.
+    const tunnelKey = !isFtp && effective.tunnelHost
+      ? makeHostKeyHook(tunnelCfgOf(effective))
+      : null;
     const cert = { seen: null };
 
     const hooks = isFtp
       ? { verifyCertificate: (info) => { cert.seen = info; return false; } }
-      : { verifyHostKey: hostKey.hook };
+      : { verifyHostKey: hostKey.hook, verifyTunnelHostKey: tunnelKey ? tunnelKey.hook : undefined };
 
     try {
       await adapter.connect(effective, hooks);
@@ -219,6 +239,16 @@ async function connectVerified(cfg, siteId) {
     } catch (err) {
       await adapter.disconnect().catch(() => {});
       if (attempt > 0) throw err;
+
+      // Nejdřív brána: bez ní se k cíli vůbec nedostaneme, takže selhalo-li
+      // spojení a její klíč jsme nepotvrdili, je to tenhle důvod.
+      if (tunnelKey && tunnelKey.seen && tunnelKey.seen.verdict !== 'trusted') {
+        const decision = await askAboutHostKey(tunnelKey.seen, tunnelCfgOf(effective), 'brány');
+        if (!decision.accept) throw Object.assign(new Error(decision.reason), { hostKeyRejected: true });
+        effective = { ...effective, tunnelHostKeyFingerprint: tunnelKey.seen.fingerprint };
+        if (decision.remember && siteId) await sites.setTunnelHostKey(siteId, tunnelKey.seen.fingerprint);
+        continue;
+      }
 
       if (err.hostKeyRejected && hostKey && hostKey.seen) {
         const decision = await askAboutHostKey(hostKey.seen, effective);
@@ -272,6 +302,7 @@ function sessionDeps() {
     // zahodit než neuložit vlastní.
     askEditOverwrite: (sid, info) => prompts.ask(win, 'editconflict', { sid, ...info }, { action: 'skip' }),
     trashLocal: (p) => shell.trashItem(p),
+    rememberQueue: (key, items, name) => queueStore.remember(key, items, { name }),
   };
 }
 
@@ -366,6 +397,7 @@ function buildMenu() {
       submenu: [
         { label: 'Připojit v nové záložce…', accelerator: 'Cmd+O', click: () => send('menu', 'connect') },
         { label: 'Zavřít záložku', accelerator: 'Cmd+W', click: () => send('menu', 'closetab') },
+        { label: 'Pracovní plochy…', accelerator: 'Shift+Cmd+O', click: () => send('menu', 'workspaces') },
         { type: 'separator' },
         { label: 'Další záložka', accelerator: 'Ctrl+Tab', click: () => send('menu', 'nexttab') },
         { label: 'Předchozí záložka', accelerator: 'Ctrl+Shift+Tab', click: () => send('menu', 'prevtab') },
@@ -491,10 +523,19 @@ function registerIpc() {
 
     log('ok', `Připojeno k ${cfg.host} (${cfg.protocol.toUpperCase()})`);
     sendSessions();
+
+    // Když z minula nic nezbylo, může si relace frontu ukládat hned. Jinak
+    // počkáme, až okno řekne, jestli se má obnovit — do té doby by prázdná
+    // fronta uložený záznam smazala.
+    const unfinished = queueStore.pending(session.persistKey).length;
+    session.queueAdopted = unfinished === 0;
+
     return {
       session: session.describe(),
       home: cfg.remoteDir || home,
       localDir: cfg.localDir || settings.localDir || os.homedir(),
+      // Nedokončené přenosy z minula; okno se zeptá, jestli je obnovit.
+      unfinished,
     };
   });
 
@@ -673,6 +714,27 @@ function registerIpc() {
   handle('queue:retry', async ({ sid, id }) => { sessionOf(sid).queue.retry(id); return true; });
   handle('queue:clear', async ({ sid }) => { sessionOf(sid).queue.clearFinished(); return true; });
 
+  /** Vrátí do fronty přenosy, které nedoběhly před zavřením aplikace. */
+  handle('queue:restore', async ({ sid }) => {
+    const session = sessionOf(sid);
+    const items = queueStore.pending(session.persistKey);
+    session.queueAdopted = true;
+    if (!items.length) return { count: 0 };
+    // Postup se dopočítá z rozepsaných souborů na disku, ne z uloženého čísla —
+    // soubor je jediné, co o skutečně přenesených bajtech vypovídá.
+    session.queue.add(items);
+    queueStore.forget(session.persistKey);
+    log('ok', `Obnoveno ${items.length} nedokončených přenosů`);
+    return { count: items.length };
+  });
+
+  handle('queue:discard', async ({ sid }) => {
+    const session = sessionOf(sid);
+    queueStore.forget(session.persistKey);
+    session.queueAdopted = true;
+    return true;
+  });
+
   /** Limit v kB/s; 0 vypíná. Bez id platí globálně pro všechny relace. */
   handle('queue:speedLimit', async ({ sid, id, kb }) => {
     const bytes = Math.max(0, Math.floor(kb) || 0) * 1024;
@@ -834,6 +896,8 @@ app.whenReady().then(async () => {
   sites = new SiteStore(app.getPath('userData'));
   await sites.load();
   manager = new SessionManager();
+  queueStore = new QueueStore(app.getPath('userData'));
+  await queueStore.load();
 
   prompts.register();
   registerIpc();
@@ -851,4 +915,8 @@ app.on('window-all-closed', async () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', async () => { await manager?.closeAll(); });
+app.on('before-quit', async () => {
+  // Uložit dřív, než se relace zavřou — zavření frontu vyprázdní.
+  await queueStore?.save().catch(() => {});
+  await manager?.closeAll();
+});

@@ -73,7 +73,7 @@ Object.defineProperty(state, 'connected', {
 /** Výchozí nastavení; hlavní proces posílá jen to, co je uložené. */
 const DEFAULT_SETTINGS = {
   editor: '', doubleClick: 'edit', typeAhead: true, colOwner: false, colGroup: false,
-  transferMask: '', maxConcurrent: 3, speedLimitKb: 0, commands: [],
+  transferMask: '', maxConcurrent: 3, speedLimitKb: 0, commands: [], workspaces: [],
   tempName: true, tempNameMinKb: 0,
 };
 
@@ -263,6 +263,24 @@ function renderPane(side) {
   updateFoot(side);
 }
 
+/**
+ * Přebarví výběr, aniž by se seznam postavil znovu.
+ *
+ * Znovupostavení by vypadalo stejně, ale rozbíjí dvojklik: druhé kliknutí by
+ * dopadlo na nově vyrobený řádek, a prohlížeč pak pošle `dblclick` až
+ * společnému rodiči — tedy seznamu, kde už žádný řádek není.
+ */
+function paintSelection(side) {
+  const st = state[side];
+  const listEl = $('[data-role=list]', panes[side]);
+  for (const row of listEl.children) {
+    if (row.dataset.up) continue;
+    const entry = st.view[Number(row.dataset.index)];
+    row.classList.toggle('sel', Boolean(entry) && st.sel.has(entry.name));
+  }
+  updateFoot(side);
+}
+
 function updateSortIndicator(side) {
   const { key, dir } = state[side].sort;
   $$('[data-sort]', $('[data-role=head]', panes[side])).forEach((el) => {
@@ -325,6 +343,21 @@ async function openEntry(side, entry) {
       if (side === 'remote') await editRemote(fullPath(side, entry));
       else await call(window.api.local.reveal(fullPath(side, entry)));
   }
+}
+
+/**
+ * Řádek, na kterém se událost stala.
+ *
+ * Když se seznam mezi dvěma kliknutími překreslí (třeba obnovením výpisu na
+ * pozadí), přijde dvojklik už jen seznamu. Dohledáme řádek podle polohy
+ * kurzoru, ať se akce neztratí.
+ */
+function rowAt(side, ev) {
+  const row = ev.target.closest('.row');
+  if (row) return row;
+  const under = document.elementFromPoint(ev.clientX, ev.clientY);
+  const found = under && under.closest('.row');
+  return found && panes[side].contains(found) ? found : null;
 }
 
 function wirePane(side) {
@@ -393,11 +426,11 @@ function wirePane(side) {
       st.sel.add(entry.name);
       st.cursor = idx;
     }
-    renderPane(side);
+    paintSelection(side);
   });
 
   listEl.addEventListener('dblclick', async (ev) => {
-    const row = ev.target.closest('.row');
+    const row = rowAt(side, ev);
     if (!row) return;
     if (row.dataset.up) {
       await loadPane(side, side === 'local' ? localParent(state[side].path) : posixParent(state[side].path));
@@ -416,7 +449,7 @@ function wirePane(side) {
         state[side].sel.clear();
         state[side].sel.add(entry.name);
         state[side].cursor = Number(row.dataset.index);
-        renderPane(side);
+        paintSelection(side);
       }
     }
     showContextMenu(side, ev.clientX, ev.clientY);
@@ -430,7 +463,7 @@ function wirePane(side) {
     if (!state[side].sel.has(entry.name)) {
       state[side].sel.clear();
       state[side].sel.add(entry.name);
-      renderPane(side);
+      paintSelection(side);
     }
     ev.dataTransfer.setData('application/x-ftpcli', side);
     ev.dataTransfer.effectAllowed = 'copy';
@@ -869,6 +902,111 @@ async function editRemote(remotePath) {
   setLog('warn', `Otevírám ${remotePath}…`);
   const r = await call(window.api.edit.open(sid(), remotePath));
   if (r) setLog('ok', `${remotePath} — změny se budou nahrávat automaticky`);
+}
+
+/* ------------------------------------------------------ pracovní plochy */
+
+const wsDlg = $('#dlg-ws');
+
+function workspaces() {
+  return state.settings.workspaces || [];
+}
+
+function openWorkspaces() {
+  renderWorkspaces();
+  $('#ws-name').value = '';
+  wsDlg.showModal();
+}
+
+function renderWorkspaces() {
+  const box = $('#ws-list');
+  const list = workspaces();
+
+  if (!list.length) {
+    box.replaceChildren(Object.assign(document.createElement('p'), {
+      className: 'cmd-empty',
+      textContent: 'Zatím žádná. Otevřete si záložky a uložte je dole.',
+    }));
+    return;
+  }
+
+  const head = document.createElement('div');
+  head.className = 'cmd-row head';
+  head.style.gridTemplateColumns = 'minmax(0,1fr) 90px 120px 90px';
+  head.innerHTML = '<span>Název</span><span>Záložek</span><span>Otevřít</span><span>Smazat</span>';
+
+  const rows = list.map((w) => {
+    const row = document.createElement('div');
+    row.className = 'cmd-row';
+    row.style.gridTemplateColumns = 'minmax(0,1fr) 90px 120px 90px';
+
+    const name = document.createElement('span');
+    name.textContent = w.name;
+    const count = document.createElement('span');
+    count.textContent = `${w.tabs.length}`;
+
+    const open = document.createElement('button');
+    open.textContent = 'Otevřít';
+    open.addEventListener('click', () => openWorkspace(w));
+
+    const del = document.createElement('button');
+    del.textContent = 'Smazat';
+    del.addEventListener('click', async () => {
+      if (!window.confirm(`Smazat plochu „${w.name}"?`)) return;
+      const saved = await call(window.api.settings.set({
+        workspaces: workspaces().filter((x) => x.id !== w.id),
+      }));
+      if (saved) applySettings(saved);
+      renderWorkspaces();
+    });
+
+    row.append(name, count, open, del);
+    return row;
+  });
+
+  box.replaceChildren(head, ...rows);
+}
+
+$('#ws-close').addEventListener('click', () => wsDlg.close());
+
+$('#ws-save').addEventListener('click', async () => {
+  const name = $('#ws-name').value.trim();
+  if (!name) return setLog('error', 'Zadejte název plochy');
+
+  // Ukládáme jen záložky z uložených relací — bez nich by nebylo co otevřít.
+  const tabs = state.order
+    .map((id) => state.sessions.get(id))
+    .filter((s) => s && s.info && s.info.siteId)
+    .map((s) => ({ siteId: s.info.siteId, remotePath: s.remote.path, localPath: s.local.path }));
+
+  if (!tabs.length) return setLog('error', 'Nejsou otevřené žádné záložky z uložených relací');
+
+  const list = [...workspaces().filter((w) => w.name !== name), { id: `w${Date.now()}`, name, tabs }];
+  const saved = await call(window.api.settings.set({ workspaces: list }));
+  if (saved) applySettings(saved);
+  renderWorkspaces();
+  $('#ws-name').value = '';
+  setLog('ok', `Plocha „${name}" uložena (${tabs.length} ${plural(tabs.length, 'záložka', 'záložky', 'záložek')})`);
+  return undefined;
+});
+
+/** Otevře uloženou plochu — každou záložku zvlášť, ať se chyba jedné nešíří. */
+async function openWorkspace(ws) {
+  wsDlg.close();
+  let opened = 0;
+
+  for (const tab of ws.tabs) {
+    const r = await call(window.api.sessions.open({ siteId: tab.siteId }));
+    if (!r) continue;
+
+    await adoptSession(r, { remote: tab.remotePath, local: tab.localPath });
+    opened += 1;
+  }
+
+  setLog(opened ? 'ok' : 'error',
+    opened
+      ? `Plocha „${ws.name}": otevřeno ${opened} z ${ws.tabs.length}`
+      : `Plochu „${ws.name}" se nepodařilo otevřít`);
 }
 
 /* ---------------------------------------------------------- vlastnosti */
@@ -1623,6 +1761,17 @@ async function connectSelected() {
     return undefined;
   }
 
+  await adoptSession(r, { local: carryLocal });
+  return undefined;
+}
+
+/**
+ * Zabydlí čerstvě otevřenou relaci v okně.
+ *
+ * Používá to připojení i otvírání pracovní plochy — kdyby si každý dělal svoje,
+ * jedna z cest by dřív nebo později zapomněla třeba na nedokončenou frontu.
+ */
+async function adoptSession(r, { remote = '', local = '' } = {}) {
   const session = newSession(r.session);
   state.sessions.set(r.session.id, session);
   state.order.push(r.session.id);
@@ -1630,10 +1779,21 @@ async function connectSelected() {
 
   renderTabs();
   await refreshTrashInfo();
-  await loadPane('remote', r.home);
-  await loadPane('local', carryLocal || r.localDir);
+
+  // Přenosy, které nedoběhly před zavřením aplikace. Ptáme se: rozepsané
+  // soubory mohly mezitím zestárnout a obnovovat je bez ptaní by překvapilo.
+  if (r.unfinished) {
+    const n = r.unfinished;
+    if (window.confirm(`Z minula zbývá ${n} ${plural(n, 'nedokončený přenos', 'nedokončené přenosy', 'nedokončených přenosů')}.\n\nObnovit je?`)) {
+      await call(window.api.queue.restore(sid()));
+    } else {
+      await call(window.api.queue.discard(sid()));
+    }
+  }
+
+  await loadPane('remote', remote || r.home);
+  await loadPane('local', local || r.localDir);
   renderQueue(await call(window.api.queue.snapshot(sid())) || session.queue);
-  return undefined;
 }
 
 /* ------------------------------------------------------------- záložky */
@@ -1649,9 +1809,10 @@ function renderTabs() {
     const s = state.sessions.get(id);
     const info = s.info || {};
     const off = info.status !== 'connected';
+    const busy = info.status === 'connecting';
 
     const tab = document.createElement('button');
-    tab.className = `tab${id === state.activeId ? ' active' : ''}${off ? ' off' : ''}`;
+    tab.className = `tab${id === state.activeId ? ' active' : ''}${off ? ' off' : ''}${busy ? ' busy' : ''}`;
     tab.title = `${info.username ? `${info.username}@` : ''}${info.host || ''}`;
     tab.addEventListener('click', () => switchTo(id));
 
@@ -1755,10 +1916,15 @@ function cycleTab(delta) {
 /** Stavový řádek ukazuje záložku vpředu. */
 function applyConnState() {
   const info = active().info;
-  const connected = state.connected;
   const badge = $('#conn-status');
-  badge.className = `badge ${connected ? 'on' : 'off'}`;
-  badge.textContent = connected && info
+
+  if (info && info.status === 'connecting') {
+    badge.className = 'badge wait';
+    badge.textContent = `Obnovuji spojení k ${info.host}…`;
+    return;
+  }
+  badge.className = `badge ${state.connected ? 'on' : 'off'}`;
+  badge.textContent = state.connected && info
     ? `${info.protocol.toUpperCase()} · ${info.username ? `${info.username}@` : ''}${info.host}`
     : 'Odpojeno';
 }
@@ -1793,6 +1959,20 @@ function openSiteDialog(site) {
   f.useRecycleBin.checked = site ? site.useRecycleBin !== false : true;
   f.recycleBinPath.value = site?.recycleBinPath || '';
   f.recycleBinDays.value = site?.recycleBinDays || '';
+  f.tunnelHost.value = site?.tunnelHost || '';
+  f.tunnelPort.value = site?.tunnelPort || 22;
+  f.tunnelUsername.value = site?.tunnelUsername || '';
+  f.tunnelKeyPath.value = site?.tunnelKeyPath || '';
+  f.tunnelPassword.value = '';
+  f.tunnelPassword.placeholder = site?.hasTunnelPassword ? 'uloženo — nechte prázdné' : '';
+  f.proxyType.value = site?.proxyType || 'none';
+  f.proxyHost.value = site?.proxyHost || '';
+  f.proxyPort.value = site?.proxyPort || '';
+  f.proxyUsername.value = site?.proxyUsername || '';
+  f.proxyPassword.value = '';
+  f.proxyPassword.placeholder = site?.hasProxyPassword ? 'uloženo — nechte prázdné' : '';
+  // Rozbalíme jen když se něco takového používá; jinak ať nepřekáží.
+  $('#site-path').open = Boolean(site?.tunnelHost || (site?.proxyType && site.proxyType !== 'none'));
   f.acceptAnyCert.checked = site ? site.rejectUnauthorized === false : false;
   f.password.placeholder = site?.hasPassword ? 'uloženo — nechte prázdné' : '';
   f.passphrase.placeholder = site?.hasPassphrase ? 'uloženo — nechte prázdné' : '';
@@ -1826,10 +2006,20 @@ siteDlg.addEventListener('close', async () => {
     useRecycleBin: f.useRecycleBin.checked,
     recycleBinPath: f.recycleBinPath.value.trim(),
     recycleBinDays: Number(f.recycleBinDays.value) || 0,
+    tunnelHost: f.tunnelHost.value.trim(),
+    tunnelPort: Number(f.tunnelPort.value) || 22,
+    tunnelUsername: f.tunnelUsername.value.trim(),
+    tunnelKeyPath: f.tunnelKeyPath.value.trim(),
+    proxyType: f.proxyType.value,
+    proxyHost: f.proxyHost.value.trim(),
+    proxyPort: Number(f.proxyPort.value) || 0,
+    proxyUsername: f.proxyUsername.value.trim(),
   };
   // Prázdné heslo znamená "nech uložené" — proto ho posíláme jen když je vyplněné.
   if (f.password.value) payload.password = f.password.value;
   if (f.passphrase.value) payload.passphrase = f.passphrase.value;
+  if (f.tunnelPassword.value) payload.tunnelPassword = f.tunnelPassword.value;
+  if (f.proxyPassword.value) payload.proxyPassword = f.proxyPassword.value;
 
   const id = await call(window.api.sites.save(payload));
   if (!id) return;
@@ -1841,6 +2031,10 @@ siteDlg.addEventListener('close', async () => {
 $('#pick-key').addEventListener('click', async () => {
   const p = await call(window.api.local.pickFile({ title: 'Vyberte privátní klíč', defaultPath: '~/.ssh' }));
   if (p) siteForm.elements.privateKeyPath.value = p;
+});
+$('#pick-tunnel-key').addEventListener('click', async () => {
+  const p = await call(window.api.local.pickFile({ title: 'Vyberte klíč pro bránu', defaultPath: '~/.ssh' }));
+  if (p) siteForm.elements.tunnelKeyPath.value = p;
 });
 $('#pick-local').addEventListener('click', async () => {
   const p = await call(window.api.local.pickDir());
@@ -1912,10 +2106,17 @@ function renderImport(data) {
     + `${usable} podporovaných, hesel přečteno: ${data.sessions.filter((s) => s.password).length}.`;
 }
 
-$('#btn-import').addEventListener('click', () => {
+function openImport() {
   $('#import-list').replaceChildren();
   $('#import-go').disabled = true;
   importDlg.showModal();
+}
+
+$('#btn-import').addEventListener('click', () => {
+  // Import je schovaný v nastavení; to musí nejdřív zmizet, jinak by se
+  // dva dialogy překrývaly.
+  setDlg.close();
+  openImport();
 });
 $('#import-cancel').addEventListener('click', () => importDlg.close());
 $('#import-pick').addEventListener('click', async () => {
@@ -2287,13 +2488,14 @@ window.api.onMenu(async (cmd) => {
   else if (cmd === 'closetab') { if (state.activeId) closeTab(state.activeId); }
   else if (cmd === 'nexttab') cycleTab(1);
   else if (cmd === 'prevtab') cycleTab(-1);
-  else if (cmd === 'import') $('#btn-import').click();
+  else if (cmd === 'import') openImport();
   else if (cmd === 'sync') openSync();
   else if (cmd === 'emptytrash') emptyRemoteTrash();
   else if (cmd === 'find') openFind();
   else if (cmd === 'watch') openWatch();
   else if (cmd === 'console') openConsole();
   else if (cmd === 'commands') openCommands();
+  else if (cmd === 'workspaces') openWorkspaces();
   else if (cmd === 'refresh') $('#btn-refresh').click();
 });
 

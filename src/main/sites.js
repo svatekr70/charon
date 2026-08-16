@@ -35,10 +35,14 @@ class SiteStore {
 
   /** Seznam pro UI — bez hesel. */
   list() {
-    return this.sites.map(({ password, passphrase, ...rest }) => ({
+    return this.sites.map(({
+      password, passphrase, tunnelPassword, proxyPassword, ...rest
+    }) => ({
       ...rest,
       hasPassword: Boolean(password),
       hasPassphrase: Boolean(passphrase),
+      hasTunnelPassword: Boolean(tunnelPassword),
+      hasProxyPassword: Boolean(proxyPassword),
     }));
   }
 
@@ -62,10 +66,22 @@ class SiteStore {
       rejectUnauthorized: site.rejectUnauthorized !== false,
       // Otisky potvrzené uživatelem; mění je jen setHostKey/setTlsFingerprint.
       hostKeyFingerprint: existing ? existing.hostKeyFingerprint || '' : '',
+      tunnelHostKeyFingerprint: existing ? existing.tunnelHostKeyFingerprint || '' : '',
       tlsFingerprint: existing ? existing.tlsFingerprint || '' : '',
       useRecycleBin: site.useRecycleBin !== undefined ? Boolean(site.useRecycleBin) : true,
       recycleBinPath: site.recycleBinPath || '',
       recycleBinDays: Number(site.recycleBinDays) || 0,
+      // Cesta k serveru, když nevede přímo (jen SFTP).
+      tunnelHost: site.tunnelHost || '',
+      tunnelPort: Number(site.tunnelPort) || 22,
+      tunnelUsername: site.tunnelUsername || '',
+      tunnelKeyPath: site.tunnelKeyPath || '',
+      proxyType: site.proxyType || 'none',
+      proxyHost: site.proxyHost || '',
+      proxyPort: Number(site.proxyPort) || 0,
+      proxyUsername: site.proxyUsername || '',
+      tunnelPassword: existing ? existing.tunnelPassword : '',
+      proxyPassword: existing ? existing.proxyPassword : '',
       password: existing ? existing.password : '',
       passphrase: existing ? existing.passphrase : '',
     };
@@ -76,10 +92,17 @@ class SiteStore {
       record.hostKeyFingerprint = '';
       record.tlsFingerprint = '';
     }
+    // Totéž pro bránu — po její výměně nemá starý otisk co potvrzovat.
+    if (existing && (existing.tunnelHost !== record.tunnelHost
+      || Number(existing.tunnelPort) !== Number(record.tunnelPort))) {
+      record.tunnelHostKeyFingerprint = '';
+    }
 
     // Heslo přepisujeme jen když přišlo — jinak si necháme to uložené.
     if (site.password !== undefined) record.password = await vault.encrypt(site.password);
     if (site.passphrase !== undefined) record.passphrase = await vault.encrypt(site.passphrase);
+    if (site.tunnelPassword !== undefined) record.tunnelPassword = await vault.encrypt(site.tunnelPassword);
+    if (site.proxyPassword !== undefined) record.proxyPassword = await vault.encrypt(site.proxyPassword);
 
     if (existing) Object.assign(existing, record);
     else this.sites.push(record);
@@ -93,6 +116,14 @@ class SiteStore {
     const site = this.sites.find((s) => s.id === id);
     if (!site) return;
     site.hostKeyFingerprint = fingerprint || '';
+    await this.save();
+  }
+
+  /** Uloží potvrzený otisk klíče brány, přes kterou se jde. */
+  async setTunnelHostKey(id, fingerprint) {
+    const site = this.sites.find((s) => s.id === id);
+    if (!site) return;
+    site.tunnelHostKeyFingerprint = fingerprint || '';
     await this.save();
   }
 
@@ -117,6 +148,8 @@ class SiteStore {
       ...site,
       password: await vault.decrypt(site.password),
       passphrase: await vault.decrypt(site.passphrase),
+      tunnelPassword: await vault.decrypt(site.tunnelPassword),
+      proxyPassword: await vault.decrypt(site.proxyPassword),
     };
   }
 

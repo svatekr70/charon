@@ -92,6 +92,8 @@ contextBridge.exposeInMainWorld('api', {
     retry: (sid, id) => invoke('queue:retry', { sid, id }),
     clear: (sid) => invoke('queue:clear', { sid }),
     speedLimit: (sid, id, kb) => invoke('queue:speedLimit', { sid, id, kb }),
+    restore: (sid) => invoke('queue:restore', { sid }),
+    discard: (sid) => invoke('queue:discard', { sid }),
   },
   sync: {
     compare: (sid, opts) => invoke('sync:compare', { sid, ...opts }),
