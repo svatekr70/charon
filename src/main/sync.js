@@ -4,6 +4,8 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 
+const FileMask = require('../common/mask');
+
 /**
  * Porovnání lokálního a vzdáleného adresáře — jádro "Synchronizace adresářů"
  * z WinSCP. Nejdřív se vždy jen spočítá seznam akcí, teprve po potvrzení
@@ -12,7 +14,7 @@ const path = require('path');
 
 const MAX_DEPTH = 32;
 
-async function walkLocal(root, { depth = 0, base = '' } = {}, out = new Map()) {
+async function walkLocal(root, { depth = 0, base = '', mask = null, stats } = {}, out = new Map()) {
   if (depth > MAX_DEPTH) return out;
   let entries;
   try {
@@ -25,9 +27,11 @@ async function walkLocal(root, { depth = 0, base = '' } = {}, out = new Map()) {
     const rel = base ? `${base}/${e.name}` : e.name;
     const full = path.join(root, rel);
     if (e.isDirectory()) {
+      if (mask && !mask.allowDir(e.name)) { if (stats) stats.skipped += 1; continue; }
       out.set(rel, { type: 'd', size: 0, mtime: null });
-      await walkLocal(root, { depth: depth + 1, base: rel }, out);
+      await walkLocal(root, { depth: depth + 1, base: rel, mask, stats }, out);
     } else if (e.isFile()) {
+      if (mask && !mask.matchFile(e.name)) { if (stats) stats.skipped += 1; continue; }
       const st = await fsp.stat(full).catch(() => null);
       if (st) out.set(rel, { type: 'f', size: st.size, mtime: st.mtimeMs });
     }
@@ -35,7 +39,7 @@ async function walkLocal(root, { depth = 0, base = '' } = {}, out = new Map()) {
   return out;
 }
 
-async function walkRemote(adapter, root, { depth = 0, base = '' } = {}, out = new Map()) {
+async function walkRemote(adapter, root, { depth = 0, base = '', mask = null, stats } = {}, out = new Map()) {
   if (depth > MAX_DEPTH) return out;
   const dir = base ? `${root.replace(/\/$/, '')}/${base}` : root;
   let entries;
@@ -51,9 +55,11 @@ async function walkRemote(adapter, root, { depth = 0, base = '' } = {}, out = ne
     if (e.name === '.' || e.name === '..' || e.type === 'l') continue;
     const rel = base ? `${base}/${e.name}` : e.name;
     if (e.type === 'd') {
+      if (mask && !mask.allowDir(e.name)) { if (stats) stats.skipped += 1; continue; }
       out.set(rel, { type: 'd', size: 0, mtime: null });
-      await walkRemote(adapter, root, { depth: depth + 1, base: rel }, out);
+      await walkRemote(adapter, root, { depth: depth + 1, base: rel, mask, stats }, out);
     } else {
+      if (mask && !mask.matchFile(e.name)) { if (stats) stats.skipped += 1; continue; }
       out.set(rel, { type: 'f', size: e.size, mtime: e.mtime });
     }
   }
@@ -66,18 +72,26 @@ async function walkRemote(adapter, root, { depth = 0, base = '' } = {}, out = ne
  * @param {'time'|'size'|'timeSize'} opts.criteria
  * @param {boolean} opts.deleteExtra  smazat, co na druhé straně nemá protějšek
  * @param {number} opts.toleranceMs   FTP hlásí čas často jen na minuty
+ * @param {string} opts.mask          maska souborů, prázdná = bez omezení
  */
 async function compare(adapter, localRoot, remoteRoot, opts = {}) {
   const {
     direction = 'toRemote',
     criteria = 'timeSize',
     deleteExtra = false,
+    mask: maskText = '',
     toleranceMs = adapter.protocol === 'ftp' ? 61000 : 2000,
   } = opts;
 
+  // Maska platí na obou stranách. Kdyby platila jen na jedné, soubory
+  // vyloučené vlevo by se vpravo tvářily jako přebytek k smazání.
+  const compiled = maskText && String(maskText).trim() ? FileMask.compile(maskText) : null;
+  const mask = compiled && !compiled.empty ? compiled : null;
+  const stats = { skipped: 0 };
+
   const [local, remote] = await Promise.all([
-    walkLocal(localRoot),
-    walkRemote(adapter, remoteRoot),
+    walkLocal(localRoot, { mask, stats }),
+    walkRemote(adapter, remoteRoot, { mask, stats }),
   ]);
 
   const actions = [];
@@ -157,6 +171,7 @@ async function compare(adapter, localRoot, remoteRoot, opts = {}) {
     actions,
     localCount: [...local.values()].filter((v) => v.type === 'f').length,
     remoteCount: [...remote.values()].filter((v) => v.type === 'f').length,
+    skipped: stats.skipped,
     toleranceMs,
   };
 }

@@ -190,6 +190,11 @@
         <label class="check"><input type="checkbox" id="sync-delete" /> Mazat, co na druhé straně chybí</label>
         <button id="sync-compare" class="primary">Porovnat</button>
       </div>
+      <div class="sync-opts">
+        <label style="flex:1">Maska souborů
+          <input id="sync-mask" placeholder="prázdné = vše; např. *.php; *.css | .git/; node_modules/" spellcheck="false" />
+        </label>
+      </div>
       <div class="sync-result" id="sync-result"><p class="muted">Zatím neporovnáno.</p></div>
       <menu>
         <button id="sync-cancel">Zavřít</button>
@@ -209,6 +214,14 @@
       </label>
       <p class="muted">Název aplikace tak, jak se jmenuje ve složce Aplikace. Soubor se stáhne do dočasné složky, otevře v editoru a při každém uložení se sám nahraje zpět.</p>
 
+      <h3>Přenosy</h3>
+      <label>Výchozí maska pro přenosy
+        <input name="transferMask" placeholder="prázdné = přenášet vše" spellcheck="false" />
+      </label>
+      <p class="muted">Uplatní se na každý přenos přes F5 a přetažení. Typicky
+        <code>| .DS_Store; .git/; node_modules/</code> — svislítko na začátku znamená
+        „ber vše kromě". Kolik souborů maska vynechala, se vždycky napíše do stavového řádku.</p>
+
       <h3>Ovládání</h3>
       <label>Dvojklik na soubor
         <select name="doubleClick">
@@ -223,6 +236,25 @@
       <label class="check"><input type="checkbox" name="colOwner" /> Zobrazit vlastníka</label>
       <label class="check"><input type="checkbox" name="colGroup" /> Zobrazit skupinu</label>
       <menu><button value="cancel">Zrušit</button><button value="save" class="primary">Uložit</button></menu>
+    </form>
+  </dialog>
+
+  <!-- přenos s volbami -->
+  <dialog id="dlg-xfer">
+    <form method="dialog" class="dlg">
+      <h2 id="xfer-title">Přenést s volbami</h2>
+      <p class="muted" id="xfer-what"></p>
+      <label>Cílová složka<input name="target" spellcheck="false" /></label>
+      <label>Maska souborů
+        <input name="mask" placeholder="prázdné = vše; např. *.php | .git/; node_modules/" spellcheck="false" />
+      </label>
+      <p class="muted">Výluka za svislítkem má přednost. Na složky platí jen výluky —
+        maska <code>*.php</code> tedy nezakáže vstup do podsložek.</p>
+      <label class="check"><input type="checkbox" name="asDefault" /> Uložit masku jako výchozí pro všechny přenosy</label>
+      <menu>
+        <button value="cancel">Zrušit</button>
+        <button value="ok" class="primary">Přenést</button>
+      </menu>
     </form>
   </dialog>
 

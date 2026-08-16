@@ -75,6 +75,7 @@
 
     return {
       empty: include.length === 0 && exclude.length === 0,
+
       /**
        * @param {string} name název souboru nebo složky
        * @param {boolean} isDir jde o adresář
@@ -84,6 +85,25 @@
         if (exclude.length && hit(exclude, name, isDir)) return false;
         if (!include.length) return true;
         return hit(include, name, isDir);
+      },
+
+      /** Rozhodnutí o souboru — plné pravidlo se zahrnutím i výlukou. */
+      matchFile(name) {
+        if (exclude.length && hit(exclude, name, false)) return false;
+        if (!include.length) return true;
+        return hit(include, name, false);
+      },
+
+      /**
+       * Smí se do složky sestoupit?
+       *
+       * Na složky se schválně uplatní jen výluky. Kdyby platilo i zahrnutí,
+       * maska `*.php` by zakázala vstup do každé podsložky a rekurzivní přenos
+       * by nenašel vůbec nic. Vyloučit `.git/` naopak smysl dává a ušetří
+       * spoustu zbytečné práce.
+       */
+      allowDir(name) {
+        return !(exclude.length && hit(exclude, name, true));
       },
     };
   }

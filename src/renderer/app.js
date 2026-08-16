@@ -33,6 +33,7 @@ const state = {
 /** Výchozí nastavení; hlavní proces posílá jen to, co je uložené. */
 const DEFAULT_SETTINGS = {
   editor: '', doubleClick: 'edit', typeAhead: true, colOwner: false, colGroup: false,
+  transferMask: '',
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -489,12 +490,19 @@ function showBookmarkMenu(side, anchor) {
 }
 
 /** Přesun vybraných položek z jednoho panelu do druhého. */
-async function transfer(from, to, { move = false } = {}) {
+/**
+ * @param {object} [opts]
+ * @param {boolean} [opts.move]   přesun místo kopie
+ * @param {string}  [opts.mask]   maska jen pro tenhle přenos; když se nepředá,
+ *   použije se výchozí z nastavení
+ * @param {string}  [opts.target] jiná cílová složka než ta otevřená v panelu
+ */
+async function transfer(from, to, { move = false, mask, target } = {}) {
   if (!state.connected) return setLog('error', 'Nejste připojeni');
   const items = selectedEntries(from).map((e) => fullPath(from, e));
   if (!items.length) return setLog('warn', 'Nic není vybráno');
 
-  const targetDir = to === 'local' ? state.local.path : state.remote.path;
+  const targetDir = target || (to === 'local' ? state.local.path : state.remote.path);
 
   if (move) {
     const what = items.length === 1 ? `„${selectedEntries(from)[0].name}"` : `${items.length} položek`;
@@ -502,17 +510,63 @@ async function transfer(from, to, { move = false } = {}) {
     if (!window.confirm(`Přesunout ${what} do ${targetDir}?\n\n`
       + `Po úspěšném přenosu se zdroj smaže ${whereFrom} (do koše).`)) return undefined;
 
-    const r = await call(window.api.transfer.move(items, targetDir, from));
+    const r = await call(window.api.transfer.move(items, targetDir, from, mask));
     if (r) setLog('ok', `K přesunu zařazeno ${r.count} ${plural(r.count, 'soubor', 'soubory', 'souborů')}`);
     return undefined;
   }
 
   const r = from === 'local'
-    ? await call(window.api.transfer.upload(items, targetDir))
-    : await call(window.api.transfer.download(items, targetDir));
-  if (r) setLog('ok', `Zařazeno ${r.count} ${plural(r.count, 'soubor', 'soubory', 'souborů')} do fronty`);
+    ? await call(window.api.transfer.upload(items, targetDir, mask))
+    : await call(window.api.transfer.download(items, targetDir, mask));
+  if (!r) return undefined;
+
+  // Kolik toho maska zahodila, se musí říct — jinak tiché vynechání vypadá,
+  // jako by se přeneslo všechno.
+  const skipped = r.skipped
+    ? `, maska vynechala ${r.skipped} ${plural(r.skipped, 'položku', 'položky', 'položek')}`
+    : '';
+  if (r.count === 0 && r.skipped) setLog('warn', `Maska nepustila nic — vynecháno ${r.skipped}`);
+  else setLog('ok', `Zařazeno ${r.count} ${plural(r.count, 'soubor', 'soubory', 'souborů')} do fronty${skipped}`);
   return undefined;
 }
+
+/* --------------------------------------------------- přenos s volbami */
+
+const xferDlg = $('#dlg-xfer');
+const xferForm = $('form', xferDlg);
+
+function openTransferOptions(from) {
+  if (!state.connected) return setLog('error', 'Nejste připojeni');
+  const sel = selectedEntries(from);
+  if (!sel.length) return setLog('warn', 'Nic není vybráno');
+
+  const to = from === 'local' ? 'remote' : 'local';
+  xferDlg.dataset.from = from;
+  $('#xfer-title').textContent = from === 'local' ? 'Nahrát s volbami' : 'Stáhnout s volbami';
+  $('#xfer-what').textContent = sel.length === 1
+    ? `Přenáší se „${sel[0].name}"`
+    : `Přenáší se ${sel.length} ${plural(sel.length, 'položka', 'položky', 'položek')}`;
+  xferForm.elements.target.value = to === 'local' ? state.local.path : state.remote.path;
+  xferForm.elements.mask.value = state.settings.transferMask || '';
+  xferForm.elements.asDefault.checked = false;
+  xferDlg.showModal();
+  return undefined;
+}
+
+xferDlg.addEventListener('close', async () => {
+  if (xferDlg.returnValue !== 'ok') return;
+  const from = xferDlg.dataset.from;
+  const mask = xferForm.elements.mask.value.trim();
+
+  if (xferForm.elements.asDefault.checked) {
+    const saved = await call(window.api.settings.set({ transferMask: mask }));
+    if (saved) applySettings(saved);
+  }
+  await transfer(from, from === 'local' ? 'remote' : 'local', {
+    mask,
+    target: xferForm.elements.target.value.trim(),
+  });
+});
 
 /* ------------------------------------------- výběr maskou, velikost složek */
 
@@ -607,6 +661,11 @@ function showContextMenu(side, x, y) {
       label: side === 'local' ? '↑ Přesunout na server' : '↓ Přesunout k sobě',
       key: 'F6',
       fn: () => transfer(side, other, { move: true }),
+    });
+    items.push({
+      label: 'Přenést s volbami…',
+      key: '⇧F5',
+      fn: () => openTransferOptions(side),
     });
     if (sel.some((e) => e.type === 'd')) {
       items.push({ label: 'Spočítat velikost složek', fn: () => calcSizes(side) });
@@ -969,7 +1028,11 @@ document.addEventListener('keydown', async (ev) => {
   const st = state[side];
 
   switch (ev.key) {
-    case 'F5': ev.preventDefault(); await transfer(side, other); break;
+    case 'F5':
+      ev.preventDefault();
+      // Shift otevře dialog s cílem a maskou, jako „Transfer settings" ve WinSCP.
+      if (ev.shiftKey) openTransferOptions(side); else await transfer(side, other);
+      break;
     case 'F6': ev.preventDefault(); await transfer(side, other, { move: true }); break;
     case 'F2': ev.preventDefault(); await renameSelected(side); break;
     case 'F4': ev.preventDefault(); {
@@ -1277,6 +1340,7 @@ function openSync() {
   if (!state.connected) return setLog('error', 'Nejste připojeni');
   $('#sync-local').value = state.local.path;
   $('#sync-remote').value = state.remote.path;
+  if (!$('#sync-mask').value) $('#sync-mask').value = state.settings.transferMask || '';
   $('#sync-result').replaceChildren(Object.assign(document.createElement('p'), { className: 'muted', textContent: 'Zatím neporovnáno.' }));
   $('#sync-apply').disabled = true;
   syncDlg.showModal();
@@ -1300,6 +1364,7 @@ $('#sync-compare').addEventListener('click', async () => {
     direction: $('#sync-direction').value,
     criteria: $('#sync-criteria').value,
     deleteExtra: $('#sync-delete').checked,
+    mask: $('#sync-mask').value.trim(),
   }));
   btn.disabled = false;
   btn.textContent = 'Porovnat';
@@ -1308,14 +1373,20 @@ $('#sync-compare').addEventListener('click', async () => {
   state.syncActions = res.actions;
   const box = $('#sync-result');
 
+  const maskNote = res.skipped
+    ? ` Maska vynechala ${res.skipped} ${plural(res.skipped, 'položku', 'položky', 'položek')}.`
+    : '';
+
   if (!res.actions.length) {
     box.replaceChildren(Object.assign(document.createElement('p'), {
       className: 'muted',
-      textContent: `Nic k přenosu — ${res.localCount} lokálních a ${res.remoteCount} vzdálených souborů je shodných.`,
+      textContent: `Nic k přenosu — ${res.localCount} lokálních a ${res.remoteCount} vzdálených `
+        + `souborů je shodných.${maskNote}`,
     }));
     $('#sync-apply').disabled = true;
     return;
   }
+  if (maskNote) setLog('warn', maskNote.trim());
 
   const head = document.createElement('div');
   head.className = 'sr head';
@@ -1454,6 +1525,7 @@ $('#btn-settings').addEventListener('click', () => {
   const f = setForm.elements;
   const cur = { ...DEFAULT_SETTINGS, ...state.settings };
   f.editor.value = cur.editor;
+  f.transferMask.value = cur.transferMask || '';
   f.doubleClick.value = cur.doubleClick;
   f.typeAhead.checked = cur.typeAhead !== false;
   f.colOwner.checked = Boolean(cur.colOwner);
@@ -1466,6 +1538,7 @@ setDlg.addEventListener('close', async () => {
   const f = setForm.elements;
   const saved = await call(window.api.settings.set({
     editor: f.editor.value.trim(),
+    transferMask: f.transferMask.value.trim(),
     doubleClick: f.doubleClick.value,
     typeAhead: f.typeAhead.checked,
     colOwner: f.colOwner.checked,

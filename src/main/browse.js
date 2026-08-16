@@ -123,4 +123,71 @@ class Finder {
   }
 }
 
-module.exports = { localDirSize, remoteDirSize, Finder, MAX_DEPTH };
+/**
+ * Rozbalí vybranou položku na jednotlivé soubory pro frontu přenosů.
+ *
+ * Maska se testuje na jednom místě — hned na začátku, ať jde o kořen výběru
+ * nebo o položku hluboko ve stromu. Díky tomu platí i na složku, kterou
+ * uživatel označil ručně; kdyby ne, vyloučené `node_modules/` by se po
+ * označení a F5 stejně nahrálo a maska by mlčky neplatila.
+ */
+async function expandLocal(localPath, remoteBase, out = [], mask = null, stats = { skipped: 0 }) {
+  const st = await fsp.stat(localPath).catch(() => null);
+  if (!st) return out;
+  const name = path.basename(localPath);
+
+  if (st.isFile()) {
+    if (mask && !mask.matchFile(name)) { stats.skipped += 1; return out; }
+    out.push({ direction: 'up', localPath, remotePath: remoteBase, size: st.size });
+    return out;
+  }
+  if (!st.isDirectory()) return out;
+  if (mask && !mask.allowDir(name)) { stats.skipped += 1; return out; }
+
+  const entries = await fsp.readdir(localPath, { withFileTypes: true }).catch(() => []);
+  if (entries.length === 0) {
+    // Prázdnou složku je potřeba na serveru založit zvlášť, žádný soubor
+    // ji tam jinak nevytvoří.
+    out.push({ direction: 'mkdirRemote', remotePath: remoteBase });
+    return out;
+  }
+  for (const e of entries) {
+    if (e.isSymbolicLink()) continue;
+    await expandLocal(path.join(localPath, e.name), posix.join(remoteBase, e.name), out, mask, stats);
+  }
+  return out;
+}
+
+/** Totéž opačným směrem. */
+async function expandRemote(adapter, remotePath, localBase, out = [], mask = null, stats = { skipped: 0 }) {
+  const name = posix.basename(remotePath);
+  let entries = null;
+  try { entries = await adapter.list(remotePath); } catch { /* není adresář */ }
+
+  if (entries === null) {
+    if (mask && !mask.matchFile(name)) { stats.skipped += 1; return out; }
+    const st = await adapter.stat(remotePath);
+    out.push({ direction: 'down', remotePath, localPath: localBase, size: st.size });
+    return out;
+  }
+
+  if (mask && !mask.allowDir(name)) { stats.skipped += 1; return out; }
+  await fsp.mkdir(localBase, { recursive: true });
+
+  for (const e of entries) {
+    if (e.name === '.' || e.name === '..' || e.type === 'l') continue;
+    const r = posix.join(remotePath, e.name);
+    const l = path.join(localBase, e.name);
+    if (e.type === 'd') {
+      await expandRemote(adapter, r, l, out, mask, stats);
+    } else {
+      if (mask && !mask.matchFile(e.name)) { stats.skipped += 1; continue; }
+      out.push({ direction: 'down', remotePath: r, localPath: l, size: e.size });
+    }
+  }
+  return out;
+}
+
+module.exports = {
+  localDirSize, remoteDirSize, Finder, expandLocal, expandRemote, MAX_DEPTH,
+};

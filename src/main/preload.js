@@ -59,9 +59,9 @@ contextBridge.exposeInMainWorld('api', {
     empty: () => invoke('trash:empty'),
   },
   transfer: {
-    upload: (items, remoteDir) => invoke('transfer:upload', { items, remoteDir }),
-    download: (items, localDir) => invoke('transfer:download', { items, localDir }),
-    move: (items, targetDir, from) => invoke('transfer:move', { items, targetDir, from }),
+    upload: (items, remoteDir, mask) => invoke('transfer:upload', { items, remoteDir, mask }),
+    download: (items, localDir, mask) => invoke('transfer:download', { items, localDir, mask }),
+    move: (items, targetDir, from, mask) => invoke('transfer:move', { items, targetDir, from, mask }),
   },
   find: {
     start: (opts) => invoke('find:start', opts),

@@ -17,14 +17,17 @@ const { parseWinscpFile } = require('./winscp-import');
 const hostkeys = require('./hostkeys');
 const { RemoteTrash } = require('./trash');
 const prompts = require('./prompts');
-const { localDirSize, remoteDirSize, Finder } = require('./browse');
+const {
+  localDirSize, remoteDirSize, Finder, expandLocal, expandRemote,
+} = require('./browse');
+const FileMask = require('../common/mask');
 
 let win = null;
 let sites = null;
 let queue = null;
 let editWatcher = null;
 let finder = null;
-let settings = { editor: '', localDir: os.homedir() };
+let settings = { editor: '', localDir: os.homedir(), transferMask: '' };
 
 const conn = {
   browse: null,     // spojení pro procházení adresářů
@@ -274,52 +277,13 @@ async function saveSettings() {
 
 // -------------------------------------------------- rekurzivní rozbalení
 
-/** Rozbalí adresáře na jednotlivé soubory, aby fronta pracovala se soubory. */
-async function expandLocal(localPath, remoteBase, out = []) {
-  const st = await fsp.stat(localPath);
-  if (st.isFile()) {
-    out.push({ direction: 'up', localPath, remotePath: remoteBase, size: st.size });
-    return out;
-  }
-  if (!st.isDirectory()) return out;
-  const entries = await fsp.readdir(localPath, { withFileTypes: true });
-  if (entries.length === 0) {
-    out.push({ direction: 'mkdirRemote', remotePath: remoteBase });
-    return out;
-  }
-  for (const e of entries) {
-    if (e.isSymbolicLink()) continue;
-    await expandLocal(path.join(localPath, e.name), posix.join(remoteBase, e.name), out);
-  }
-  return out;
-}
-
-async function expandRemote(adapter, remotePath, localBase, out = []) {
-  let entries;
-  try {
-    entries = await adapter.list(remotePath);
-  } catch {
-    // Není adresář — bereme jako soubor.
-    const st = await adapter.stat(remotePath);
-    out.push({ direction: 'down', remotePath, localPath: localBase, size: st.size });
-    return out;
-  }
-  await fsp.mkdir(localBase, { recursive: true });
-  for (const e of entries) {
-    if (e.name === '.' || e.name === '..' || e.type === 'l') continue;
-    const r = posix.join(remotePath, e.name);
-    const l = path.join(localBase, e.name);
-    if (e.type === 'd') await expandRemote(adapter, r, l, out);
-    else out.push({ direction: 'down', remotePath: r, localPath: l, size: e.size });
-  }
-  return out;
-}
-
 /** Nahrání vybraných lokálních položek (soubory i adresáře) do vzdálené složky. */
-async function enqueueUpload(items, remoteDir, extra = {}) {
+async function enqueueUpload(items, remoteDir, extra = {}, maskText = '') {
   const jobs = [];
+  const mask = compileMask(maskText);
+  const stats = { skipped: 0 };
   for (const localPath of items) {
-    await expandLocal(localPath, posix.join(remoteDir, path.basename(localPath)), jobs);
+    await expandLocal(localPath, posix.join(remoteDir, path.basename(localPath)), jobs, mask, stats);
   }
   const a = await getTransferAdapter();
   for (const j of jobs.filter((x) => x.direction === 'mkdirRemote')) {
@@ -328,23 +292,34 @@ async function enqueueUpload(items, remoteDir, extra = {}) {
   // Příznaky (třeba moveFrom) musí být na položce hned při zařazení. Fronta
   // se rozeběhne okamžitě, takže dodatečné označení už nemusí stihnout.
   const files = jobs.filter((x) => x.direction === 'up').map((j) => ({ ...j, ...extra }));
-  return { count: files.length, ids: queue.add(files) };
+  return { count: files.length, skipped: stats.skipped, ids: queue.add(files) };
 }
 
 /** Stažení vybraných vzdálených položek do lokální složky. */
-async function enqueueDownload(items, localDir, extra = {}) {
+async function enqueueDownload(items, localDir, extra = {}, maskText = '') {
   const a = requireBrowse();
   const jobs = [];
+  const mask = compileMask(maskText);
+  const stats = { skipped: 0 };
+
   for (const remotePath of items) {
     const localTarget = path.join(localDir, posix.basename(remotePath));
-    if (await remoteIsDir(a, remotePath)) await expandRemote(a, remotePath, localTarget, jobs);
-    else {
-      const st = await a.stat(remotePath).catch(() => ({ size: null }));
-      jobs.push({ direction: 'down', remotePath, localPath: localTarget, size: st.size });
-    }
+    // expandRemote si sám pozná, jestli jde o soubor nebo složku, a masku
+    // uplatní na obojí — včetně ručně vybraného kořene.
+    await expandRemote(a, remotePath, localTarget, jobs, mask, stats);
   }
   const files = jobs.map((j) => ({ ...j, ...extra }));
-  return { count: files.length, ids: queue.add(files) };
+  return { count: files.length, skipped: stats.skipped, ids: queue.add(files) };
+}
+
+/**
+ * Zkompiluje masku; prázdná znamená „bez omezení". Vrací null, aby volající
+ * mohl kontroly úplně přeskočit a neplatil za ně u každé položky.
+ */
+function compileMask(text) {
+  if (!text || !String(text).trim()) return null;
+  const m = FileMask.compile(text);
+  return m.empty ? null : m;
 }
 
 /** Rozhodne, jestli je vzdálená cesta soubor nebo adresář. */
@@ -631,14 +606,17 @@ function registerIpc() {
   handle('queue:retry', async (id) => { queue.retry(id); return true; });
   handle('queue:clear', async () => { queue.clearFinished(); return true; });
 
-  handle('transfer:upload', async ({ items, remoteDir }) => {
-    const { count } = await enqueueUpload(items, remoteDir);
-    return { count };
+  /** `mask === undefined` znamená „použij výchozí z nastavení". */
+  const effectiveMask = (mask) => (mask === undefined ? settings.transferMask || '' : mask);
+
+  handle('transfer:upload', async ({ items, remoteDir, mask }) => {
+    const { count, skipped } = await enqueueUpload(items, remoteDir, {}, effectiveMask(mask));
+    return { count, skipped };
   });
 
-  handle('transfer:download', async ({ items, localDir }) => {
-    const { count } = await enqueueDownload(items, localDir);
-    return { count };
+  handle('transfer:download', async ({ items, localDir, mask }) => {
+    const { count, skipped } = await enqueueDownload(items, localDir, {}, effectiveMask(mask));
+    return { count, skipped };
   });
 
   // --- velikost složek ---
@@ -666,17 +644,19 @@ function registerIpc() {
    * Kdyby se mazalo dopředu nebo bez ohledu na výsledek, stačila by jedna
    * chyba v půlce a soubor by nebyl nikde.
    */
-  handle('transfer:move', async ({ items, targetDir, from }) => {
+  handle('transfer:move', async ({ items, targetDir, from, mask }) => {
+    // U přesunu maska záměrně neplatí z nastavení — vynechaný soubor by
+    // zůstal na zdroji a člověk by si myslel, že přesunul všechno.
     const result = from === 'local'
-      ? await enqueueUpload(items, targetDir, { moveFrom: 'local' })
-      : await enqueueDownload(items, targetDir, { moveFrom: 'remote' });
-    return { count: result.count };
+      ? await enqueueUpload(items, targetDir, { moveFrom: 'local' }, mask || '')
+      : await enqueueDownload(items, targetDir, { moveFrom: 'remote' }, mask || '');
+    return { count: result.count, skipped: result.skipped };
   });
 
   // --- synchronizace ---
-  handle('sync:compare', async ({ localDir, remoteDir, direction, criteria, deleteExtra }) => {
+  handle('sync:compare', async ({ localDir, remoteDir, direction, criteria, deleteExtra, mask }) => {
     const a = requireBrowse();
-    return compare(a, localDir, remoteDir, { direction, criteria, deleteExtra });
+    return compare(a, localDir, remoteDir, { direction, criteria, deleteExtra, mask });
   });
 
   handle('sync:apply', async (actions) => {
@@ -688,7 +668,7 @@ function registerIpc() {
         case 'mkdirLocal': await fsp.mkdir(act.localPath, { recursive: true }); break;
         // conflictResolved: v náhledu synchronizace uživatel o přepisu
         // rozhodl, druhý dotaz na každý soubor by byl jen otrava.
-        case 'upload': jobs.push({ direction: 'up', localPath: act.localPath, remotePath: act.remotePath, size: act.size, conflictResolved: true }); break;
+        case 'upload': jobs.push({ direction: 'up', localPath: act.localPath, remotePath: act.remotePath, size: act.size, conflictResolved: true }); break; // maska už proběhla v porovnání
         case 'download': jobs.push({ direction: 'down', localPath: act.localPath, remotePath: act.remotePath, size: act.size, conflictResolved: true }); break;
         case 'deleteRemote': await a.removeFile(act.remotePath); break;
         case 'rmdirRemote': await a.removeDir(act.remotePath, true); break;

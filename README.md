@@ -30,6 +30,7 @@ předlohy vozí i zpátky.
 | Hledání souborů na serveru | ✅ |
 | Dopočítání velikosti složek | ✅ |
 | Sloupce vlastníka a skupiny, nastavitelný dvojklik | ✅ |
+| Masky souborů pro přenosy i synchronizaci | ✅ |
 
 Nepodporuje SCP, WebDAV ani S3 — relace v těchto protokolech se při importu
 zobrazí, ale nejdou naimportovat.
@@ -66,13 +67,24 @@ zastaví a bude potřeba **pravý klik → Otevřít**.
 Data (relace, nastavení) jsou společná pro oba způsoby spuštění, takže se
 o nic nepřijde přepnutím mezi nimi.
 
-### Mezera v cestě k projektu
+### Aktualizace
 
-Složka projektu má v názvu mezeru, kvůli čemuž se nepodaří sestavit `cpu-features` —
-nepovinný nativní modul, kterým si `ssh2` zrychluje šifrování. Aplikace kvůli
-tomu funguje normálně, jen o kousek pomaleji na velkých přenosech. Kdyby to
-vadilo, stačí složku přejmenovat na cestu bez mezery a spustit `npm run dist`
-znovu.
+Aplikace se **sama neaktualizuje** a ani nic nesestavuje při spuštění.
+
+- `npm start` pouští zdrojové soubory přímo, takže stačí okno zavřít a spustit
+  znovu — žádný build.
+- `.app` v Aplikacích je snímek z chvíle sestavení. Po změnách ji vyměníte:
+
+```bash
+npm run install-app
+```
+
+Tenhle příkaz sestaví novou verzi a nahradí tu v `/Applications`. Aplikace
+přitom nesmí běžet.
+
+Automatické aktualizace by potřebovaly někde vystavené vydání (typicky GitHub
+Releases) a `electron-updater`. Dokud je Charon jen pro tebe, je `install-app`
+jednodušší.
 
 ## Import z WinSCP
 
@@ -203,6 +215,7 @@ v Keychain, ne v souboru.
 | Klávesa | Akce |
 | --- | --- |
 | `F5` | Zkopírovat vybrané do druhého panelu |
+| `⇧F5` | Přenést s volbami (cíl a maska) |
 | `F6` | Přesunout vybrané do druhého panelu |
 | `F4` | Upravit vzdálený soubor v editoru |
 | `F2` | Přejmenovat |
@@ -247,6 +260,33 @@ vybere PHP a CSS, ale vynechá dvě složky.
 
 Filtr nikdy neschovává složky — jinak by se nedalo doklikat níž.
 
+### Masky u přenosů
+
+Na složky se schválně uplatní **jen výluky**. Kdyby platilo i zahrnutí, maska
+`*.php` by zakázala vstup do každé podsložky a rekurzivní přenos by nenašel nic.
+Vyloučit `.git/` naopak smysl dává.
+
+Maska platí i na položky, které jste označili ručně. Když je ve výluce
+`node_modules/`, nenahraje se, ani když ji vyberete a zmáčknete F5 — jinak by
+se na masku nedalo spolehnout.
+
+Kolik položek maska vynechala, se **vždycky napíše do stavového řádku**. Tiché
+vynechání by vypadalo, jako by se přeneslo všechno.
+
+Maska se nastavuje na třech místech:
+
+| Kde | Platnost |
+| --- | --- |
+| **Nastavení → Přenosy** | výchozí pro každé F5 a přetažení |
+| **⇧F5** (Přenést s volbami) | jen pro ten jeden přenos, volitelně se uloží jako výchozí |
+| **Dialog synchronizace** | jen pro to porovnání |
+
+U synchronizace platí maska na obě strany. Kdyby platila jen na jednu, soubory
+vyloučené vlevo by se vpravo tvářily jako přebytek k smazání.
+
+U **přesunu (F6)** se výchozí maska záměrně nepoužívá — vynechaný soubor by
+zůstal na zdroji a člověk by si myslel, že přesunul všechno.
+
 ## Hledání souborů na serveru
 
 `⌘F` v pravém panelu (nebo *Soubor → Najít soubory na serveru*) projde strom od
@@ -289,6 +329,8 @@ npm test
 - `test/safety.test.js` — otisky klíčů a `known_hosts`, odmítnutí neověřeného
   serveru, všechny volby při konfliktu, přesun a chování koše
 - `test/browse.test.js` — dopočítání velikosti složek a hledání souborů
+- `test/transfer-mask.test.js` — masky u přenosů a synchronizace, včetně toho,
+  že vyloučená složka neprojde ani jako ručně vybraný kořen
 - `test/e2e.test.js` — SFTP: přenosy, pauza, navázání, chmod a synchronizace proti
   dočasnému SFTP serveru z `test/sftp-server.js`
 - `test/ftp.test.js` — FTP: totéž proti dočasnému FTP serveru, včetně navázání
