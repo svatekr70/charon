@@ -411,7 +411,9 @@ function createWindow() {
     },
   });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
-  if (process.argv.includes('--dev')) win.webContents.openDevTools({ mode: 'detach' });
+  // Nástroje pro vývojáře jen na výslovné vyžádání. Pouhé spuštění ze zdrojáků
+  // (`npm run dev`) je otevírat nemá — překážejí a k ničemu nejsou.
+  if (process.argv.includes('--devtools')) win.webContents.openDevTools({ mode: 'detach' });
 }
 
 function buildMenu() {

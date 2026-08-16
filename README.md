@@ -64,7 +64,8 @@ npm start
 ```
 
 Okno naskočí za pár vteřin. Takhle se aplikace spouští při vývoji — zavřením
-terminálu skončí. `npm run dev` je totéž s otevřenou konzolí pro ladění.
+terminálu skončí. `npm run dev` je totéž; nástroje pro vývojáře se otevřou až
+`npm run devtools`, aby při běžném spuštění ze zdrojáků nepřekážely.
 
 ### Jako opravdová aplikace
 
