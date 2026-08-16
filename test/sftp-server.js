@@ -18,7 +18,7 @@ const { STATUS_CODE, OPEN_MODE } = require('ssh2').utils.sftp;
  *   řeší — a to je právě latence, ne šířka pásma.
  */
 function startTestServer({
-  root, hostKeyPath, user = 'test', password = 'test', latencyMs = 0,
+  root, hostKeyPath, user = 'test', password = 'test', latencyMs = 0, port = 0,
 }) {
   return new Promise((resolve) => {
     const handles = new Map();
@@ -204,7 +204,7 @@ function startTestServer({
       client.on('error', () => { /* klient se odpojil */ });
     });
 
-    server.listen(0, '127.0.0.1', () => {
+    server.listen(port, '127.0.0.1', () => {
       resolve({ port: server.address().port, close: () => new Promise((r) => server.close(r)) });
     });
   });

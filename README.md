@@ -487,6 +487,29 @@ U FTP je kolem času několik nástrah, které aplikace řeší za vás:
   neselže, ale opakovaná synchronizace by pak soubory hlásila znovu — v takovém
   případě přepněte porovnávání **na velikost**.
 
+## Testovací servery
+
+Na zkoušení bez zásahu do skutečných serverů:
+
+```bash
+npm run servers
+```
+
+Spustí dva servery na localhostu — jeden SFTP a jeden FTP, protože se každý
+chová jinak (FTP nemá shell, hlásí čas jen na minuty, neumí změnu vlastníka):
+
+| | Adresa | Přihlášení | Data |
+| --- | --- | --- | --- |
+| SFTP | `127.0.0.1:2222` | `test` / `test` | `test-data/sftp/` |
+| FTP | `127.0.0.1:2121` | `test` / `test` | `test-data/ftp/` |
+
+Vzdálený adresář je `/www`, obsah zůstává mezi spuštěními. V Charonovi jsou
+připravené relace **Test SFTP (localhost)** a **Test FTP (localhost)** ve složce
+*Testovací*. Servery poslouchají jen na `127.0.0.1`.
+
+Při prvním připojení k SFTP se objeví dialog s otiskem klíče — je to ten
+z `test/fixtures/host_key`, takže ho můžete potvrdit.
+
 ## Testy
 
 ```bash
