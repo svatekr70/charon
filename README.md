@@ -63,6 +63,12 @@ předlohy vozí i zpátky.
 | Záloha přepsaných souborů | ✅ |
 | Nastavitelné keepalive a timeouty | ✅ |
 | Textový režim a konverze konců řádků | ✅ |
+| Porovnání složek přímo v panelech | ✅ |
+| Otevření z adresy a kopírování adresy | ✅ |
+| Otevření v přiřazené aplikaci | ✅ |
+| Synchronizované procházení | ✅ |
+| Profily nastavení přenosu | ✅ |
+| Záznam komunikace do souboru | ✅ |
 
 Nepodporuje SCP, WebDAV ani S3 — relace v těchto protokolech se při importu
 zobrazí, ale nejdou naimportovat.
@@ -349,6 +355,24 @@ kolik jich z kolika vyšlo.
 Hesla se do `sites.json` zapisují zašifrovaná (AES-256-GCM); klíč leží
 v Keychain, ne v souboru.
 
+## Ikona
+
+Vlastní, kreslená v `build/icon.svg`. Charon je převozník, který vozí duše přes
+Styx — tedy přesně to, co aplikace dělá se soubory: bere je z jednoho břehu na
+druhý. Proto loďka s postavou v kápi proti světlé obloze a modrá voda přes
+spodní půlku. Všechno na siluetu, aby to bylo čitelné i ve 32 bodech, kde
+z detailů stejně zbude jen tvar.
+
+```bash
+npm run icon
+```
+
+Vykreslí SVG do všech velikostí, které macOS chce, a složí `build/icon.icns`.
+Rasterizérem je Chromium z Electronu — přidávat kvůli jedné ikoně další
+závislost by bylo víc práce než užitku. Na Retině vrací snímek dvojnásobek
+bodů, takže se výsledek ještě srovnává na přesnou velikost; `iconutil` na ní
+trvá.
+
 ## Vzhled
 
 **Nastavení → Vzhled → Motiv** nabízí *Podle systému* (výchozí), *Světlý*
@@ -453,6 +477,49 @@ vám relace padá právě při nečinnosti, zkuste nulu.
 
 Aktivní režim FTP (`PORT`/`EPRT`) Charon **neumí**: knihovna, na které stojí
 FTP, implementuje jen pasivní režim. Anonymní přihlášení zaškrtnete u relace.
+
+## Porovnání panelů a synchronizované procházení
+
+**⇄ Porovnat** (`⌘D`) obarví u kraje řádku, co se liší proti druhé straně:
+zelená je novější tady, oranžová starší, modrá tu je navíc. Jen v aktuální
+složce — do hloubky je od toho synchronizace. Barvou se schválně nesahá na
+text; ten už nese význam podle typu souboru.
+
+**⇉ Synchronizované procházení** (`⌘Y`) udělá tentýž krok i v druhém panelu.
+Mirroruje se jen vstup do podsložky a návrat o úroveň výš; u skoku někam
+jinam by se druhá strana ocitla na cestě, která s ní nemá nic společného.
+Když protějšek neexistuje, řekne se to a druhá strana zůstane, kde byla.
+
+## Adresa relace
+
+`⌘L` otevře připojení z adresy typu `sftp://uzivatel@server:2222/var/www`.
+Relace se nikam neukládá, je to jednorázové připojení. Schéma se dá vynechat
+(předpokládá se SFTP), heslo v adrese se použije.
+
+Opačně: **Kopírovat adresu této složky** v kontextovém menu serverového panelu.
+**Heslo se do zkopírované adresy nikdy nedostane** — taková adresa se často
+ocitne v chatu nebo v ticketu, kde už zůstane.
+
+## Profily nastavení přenosu
+
+V dialogu ⇧F5 se dá vybrat pojmenovaný profil: maska, „jen nové a změněné",
+práva nahraných souborů a textový režim. Profil platí **jen pro ten jeden
+přenos** — nastavení aplikace nemění. Jinak by se jednorázová odchylka
+(„na tenhle server nahraj s právy 755") tiše stala trvalou a projevila by se
+příště úplně jinde.
+
+Profily nepřežijí obnovení fronty po restartu: nedokončeným položkám se
+ukládá cesta a postup, ne volby, se kterými byly zařazené.
+
+## Záznam komunikace
+
+**Nastavení → Editor → Zaznamenávat komunikaci se serverem.** Ve stavovém
+řádku je vidět závěr, v záznamu celý rozhovor — u serveru, který se chová
+divně, je to jediné, co pomůže.
+
+Hesla se do záznamu nedostanou (`PASS` se zkracuje, stejně tak heslo v adrese).
+Soubor je jeden na den, leží v `~/Library/Application Support/charon/logs/`
+a nad 5 MB se odloží stranou.
 
 ## Klávesové zkratky
 
@@ -840,6 +907,12 @@ npm test
   včetně záskoku, když shell cestu nevidí
 - `test/network.test.js` — keepalive, timeouty a anonymní přihlášení; nula
   musí opravdu vypínat, ne se spolknout jako „nezadáno"
+- `test/urlsession.test.js` — adresa relace tam i zpět; hlavně že se heslo
+  nikdy nedostane do adresy ke zkopírování
+- `test/profiles.test.js` — profily přenosu. Podstatné je, že profil nemění
+  nastavení aplikace — jinak by se jednorázová odchylka stala trvalou
+- `test/sessionlog.test.js` — záznam komunikace: že v něm je, co má být,
+  a že v něm není heslo
 - `test/session.test.js` — správce záložek: pořadí, přepínání a úklid
 - `test/editconflict.test.js` — detekce cizí změny při ukládání z editoru
 - `test/properties.test.js` — rekurzivní práva a kontrolní součty proti

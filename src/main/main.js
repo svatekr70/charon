@@ -26,6 +26,7 @@ const FileMask = require('../common/mask');
 const perms = require('./perms');
 const { Session, SessionManager, isDir: remoteIsDir } = require('./session');
 const { QueueStore } = require('./queue-store');
+const { SessionLog } = require('./sessionlog');
 const { expand, findPrompts, runLocal } = require('./commands');
 const { sshCommand } = require('./terminal');
 const { promisify } = require('util');
@@ -35,6 +36,7 @@ let win = null;
 let sites = null;
 let manager = null;
 let queueStore = null;
+let sessionLog = null;
 let settings = {
   editor: '', localDir: os.homedir(), transferMask: '',
   maxConcurrent: 3, speedLimitKb: 0,
@@ -57,6 +59,10 @@ let settings = {
   // Textový režim: kterých souborů se týká a jaké konce řádků chce server.
   textMask: '',
   serverEol: 'lf',
+  // Záznam komunikace se serverem do souboru; kvůli velikosti vypnuto.
+  sessionLog: false,
+  // Pojmenované sady voleb pro přenos.
+  transferProfiles: [],
 };
 
 // ---------------------------------------------------------------- pomocné
@@ -100,11 +106,13 @@ function withNetwork(cfg) {
 
 async function openAdapterFor(config) {
   const a = makeAdapter(config.protocol);
+  const kdo = config.name || config.host;
   const hooks = config.protocol === 'ftp'
-    ? { verifyCertificate: () => false }
+    ? { verifyCertificate: () => false, log: (z) => sessionLog.write(kdo, z) }
     : {
       verifyHostKey: makeHostKeyHook(config).hook,
       verifyTunnelHostKey: config.tunnelHost ? makeHostKeyHook(tunnelCfgOf(config)).hook : undefined,
+      log: (z) => sessionLog.write(kdo, z),
     };
   await a.connect(withNetwork(config), hooks);
   return a;
@@ -271,9 +279,14 @@ async function connectVerified(cfg, siteId) {
       : null;
     const cert = { seen: null };
 
+    const zapis = (z) => sessionLog.write(effective.name || effective.host, z);
     const hooks = isFtp
-      ? { verifyCertificate: (info) => { cert.seen = info; return false; } }
-      : { verifyHostKey: hostKey.hook, verifyTunnelHostKey: tunnelKey ? tunnelKey.hook : undefined };
+      ? { verifyCertificate: (info) => { cert.seen = info; return false; }, log: zapis }
+      : {
+        verifyHostKey: hostKey.hook,
+        verifyTunnelHostKey: tunnelKey ? tunnelKey.hook : undefined,
+        log: zapis,
+      };
 
     try {
       await adapter.connect(withNetwork(effective), hooks);
@@ -500,6 +513,32 @@ async function enqueueDownload(session, items, localDir, extra = {}, maskText = 
 }
 
 /**
+ * Přeloží profil přenosu na volby, které se přilepí ke každé položce.
+ *
+ * Profil je jednorázová odchylka pro jednu dávku, ne trvalá změna nastavení —
+ * proto se nesou na položkách fronty a ne v ní samotné. Prázdný profil
+ * znamená „platí, co je v nastavení".
+ */
+function profileOptions(profil) {
+  if (!profil) return {};
+  const out = {};
+  if (profil.uploadPerms) {
+    out.perms = {
+      uploadPerms: profil.uploadPerms,
+      uploadFileMode: profil.uploadFileMode,
+      uploadDirMode: profil.uploadDirMode,
+    };
+  }
+  if (profil.textMask !== undefined) {
+    out.text = {
+      mask: compileMask(profil.textMask || ''),
+      eol: profil.serverEol === 'crlf' ? 'crlf' : 'lf',
+    };
+  }
+  return out;
+}
+
+/**
  * Vyřadí soubory, které na druhé straně už jsou stejné.
  *
  * Porovnává se velikost a čas změny se stejnou tolerancí jako u synchronizace
@@ -597,6 +636,10 @@ function buildMenu() {
         // panelu otevřelo filtr a v pravém hledání na serveru.
         { label: 'Najít soubory na serveru…', click: () => send('menu', 'find') },
         { label: 'Obnovit', accelerator: 'Cmd+R', click: () => send('menu', 'refresh') },
+        { label: 'Porovnat panely', accelerator: 'Cmd+D', click: () => send('menu', 'compare') },
+        { label: 'Synchronizované procházení', accelerator: 'Cmd+Y', click: () => send('menu', 'syncbrowse') },
+        { type: 'separator' },
+        { label: 'Otevřít z adresy…', accelerator: 'Cmd+L', click: () => send('menu', 'openurl') },
         { type: 'separator' },
         { label: 'Vysypat koš na serveru…', click: () => send('menu', 'emptytrash') },
       ],
@@ -633,6 +676,7 @@ function registerIpc() {
     settings = { ...settings, ...patch };
     await saveSettings();
     if (patch.theme !== undefined) applyTheme();
+    if (patch.sessionLog !== undefined) sessionLog.setEnabled(settings.sessionLog === true);
     // Nastavení přenosů platí pro všechny otevřené relace, ne jen pro tu vpředu.
     for (const s of manager.all()) s.applySettings(settings);
     return settings;
@@ -841,6 +885,33 @@ function registerIpc() {
     return true;
   });
   /** Kopie souboru na serveru — bez stahování, když to server umožní. */
+  /**
+   * Stáhne soubor do dočasné složky a otevře ho v systémem přiřazené aplikaci.
+   * Změny se nesledují — na to je editace se zpětným nahráním.
+   */
+  handle('remote:openExternal', async ({ sid, remotePath }) => {
+    const session = sessionOf(sid);
+    const a = session.requireBrowse();
+    const dir = path.join(os.tmpdir(), 'charon-open');
+    await fsp.mkdir(dir, { recursive: true });
+    const local = path.join(dir, posix.basename(remotePath));
+
+    await a.download(remotePath, local, {});
+    const chyba = await shell.openPath(local);
+    if (chyba) throw new Error(chyba);
+    return { path: local };
+  });
+
+  handle('clipboard:write', async (text) => { clipboard.writeText(String(text || '')); return true; });
+
+  /** Otevře složku se záznamy ve Finderu — hledat ji ručně by byla otrava. */
+  handle('log:reveal', async () => {
+    const dir = path.join(app.getPath('userData'), 'logs');
+    await fsp.mkdir(dir, { recursive: true });
+    shell.openPath(dir);
+    return { dir };
+  });
+
   handle('remote:copy', async ({ sid, from, to }) => {
     const session = sessionOf(sid);
     const res = await session.requireBrowse().copy(from, to);
@@ -1069,16 +1140,24 @@ function registerIpc() {
   /** `mask === undefined` znamená „použij výchozí z nastavení". */
   const effectiveMask = (mask) => (mask === undefined ? settings.transferMask || '' : mask);
 
-  handle('transfer:upload', async ({ sid, items, remoteDir, mask, onlyNewer }) => {
+  handle('transfer:upload', async ({
+    sid, items, remoteDir, mask, onlyNewer, profile,
+  }) => {
     const { count, skipped, unchanged } = await enqueueUpload(
-      sessionOf(sid), items, remoteDir, { onlyNewer: Boolean(onlyNewer) }, effectiveMask(mask),
+      sessionOf(sid), items, remoteDir,
+      { onlyNewer: Boolean(onlyNewer), ...profileOptions(profile) },
+      effectiveMask(mask),
     );
     return { count, skipped, unchanged };
   });
 
-  handle('transfer:download', async ({ sid, items, localDir, mask, onlyNewer }) => {
+  handle('transfer:download', async ({
+    sid, items, localDir, mask, onlyNewer, profile,
+  }) => {
     const { count, skipped, unchanged } = await enqueueDownload(
-      sessionOf(sid), items, localDir, { onlyNewer: Boolean(onlyNewer) }, effectiveMask(mask),
+      sessionOf(sid), items, localDir,
+      { onlyNewer: Boolean(onlyNewer), ...profileOptions(profile) },
+      effectiveMask(mask),
     );
     return { count, skipped, unchanged };
   });
@@ -1253,11 +1332,20 @@ app.whenReady().then(async () => {
   await loadSettings();
   // Motiv nastavíme dřív, než vznikne okno — jinak by se mihlo v té špatné barvě.
   applyTheme();
+
+  // Při spuštění ze zdrojáků si Electron bere svou vlastní ikonu; v Docku pak
+  // svítí atom místo Charona. V sestavené aplikaci ji řeší electron-builder.
+  if (!app.isPackaged && process.platform === 'darwin') {
+    const ikona = path.join(__dirname, '..', '..', 'build', 'icon.iconset', 'icon_512x512.png');
+    try { app.dock.setIcon(ikona); } catch { /* ikona se ještě nevykreslila */ }
+  }
   sites = new SiteStore(app.getPath('userData'));
   await sites.load();
   manager = new SessionManager();
   queueStore = new QueueStore(app.getPath('userData'));
   await queueStore.load();
+  sessionLog = new SessionLog(path.join(app.getPath('userData'), 'logs'));
+  sessionLog.setEnabled(settings.sessionLog === true);
 
   prompts.register();
   registerIpc();

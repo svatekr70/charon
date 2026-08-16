@@ -120,11 +120,17 @@ class TransferQueue extends EventEmitter {
 
   /** Převod pro danou položku, nebo null když se přenáší binárně. */
   _textTransform(item) {
-    if (!this.textMask) return null;
-    const jmeno = item.direction === 'up'
-      ? posixBasename(item.remotePath)
-      : posixBasename(item.remotePath);
-    return this.textMask.match(jmeno, false) ? transformFor(item.direction, this.serverEol) : null;
+    const mask = item.text ? item.text.mask : this.textMask;
+    const eol = item.text ? item.text.eol : this.serverEol;
+    if (!mask) return null;
+    return mask.match(posixBasename(item.remotePath), false)
+      ? transformFor(item.direction, eol)
+      : null;
+  }
+
+  /** Práva pro danou položku — z profilu, jinak z nastavení. */
+  _permsFor(item) {
+    return item.perms || this.perms;
   }
 
   /** Práva nahraných souborů (Nastavení → Přenosy). */
@@ -196,6 +202,10 @@ class TransferQueue extends EventEmitter {
       // Pozastaveno ručně? Takovou položku nerozeběhne ani společné
       // „Pokračovat".
       held: false,
+      // Volby z profilu přenosu. Když chybí, platí nastavení aplikace —
+      // profil je jednorázová odchylka pro tuhle dávku, ne trvalá změna.
+      perms: j.perms || null,
+      text: j.text || null,
       speedLimit: Math.max(0, Math.floor(j.speedLimit) || 0),
       limiter: null,
       // Cesta rozepsaného souboru, dokud přenos běží.
@@ -582,7 +592,9 @@ class TransferQueue extends EventEmitter {
       // Práva až na konečné cestě: kdybychom je nastavili na `.filepart`,
       // přejmenování by je sice zachovalo, ale při vypnutém dočasném názvu
       // by se to chovalo jinak. Takhle je to stejné v obou případech.
-      const chyba = await perms.apply(adapter, item.remotePath, perms.fileMode(this.perms, local.mode));
+      const chyba = await perms.apply(
+        adapter, item.remotePath, perms.fileMode(this._permsFor(item), local.mode),
+      );
       if (chyba) item.note = `práva se nenastavila — ${chyba}`;
     } else {
       const remote = await adapter.stat(item.remotePath);

@@ -37,6 +37,12 @@ class FtpAdapter {
    */
   async connect(cfg, hooks = {}) {
     this._cfg = cfg;
+    // Záznam komunikace. basic-ftp posílá do `verbose` celý rozhovor včetně
+    // odpovědí serveru — přesně to, co je při potížích potřeba vidět.
+    if (hooks.log) {
+      this.client.ftp.verbose = true;
+      this.client.ftp.log = (zprava) => hooks.log(zprava);
+    }
     // Timeout se nastavuje na klientovi, ne v jednotlivých příkazech.
     if (Number(cfg.connectTimeoutMs)) this.client.ftp.timeout = Number(cfg.connectTimeoutMs);
     // Kódování názvů souborů. Starší servery UTF-8 neumí a názvy s diakritikou

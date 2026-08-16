@@ -42,6 +42,10 @@ const state = {
   settings: {},
   importData: null,
   syncActions: [],
+  /** Zvýrazňovat v panelech rozdíly proti druhé straně? */
+  compare: false,
+  /** Má druhý panel chodit stejným krokem? */
+  syncBrowse: false,
 };
 
 /** Záložka vpředu, nebo náhradní stav, když žádná není. */
@@ -78,7 +82,8 @@ const DEFAULT_SETTINGS = {
   queueDoneAction: 'none',
   editorRules: [], backupOverwritten: 'none',
   keepaliveSeconds: 10, connectTimeoutSeconds: 25,
-  textMask: '', serverEol: 'lf',
+  textMask: '', serverEol: 'lf', sessionLog: false,
+  transferProfiles: [],
   cacheListings: true,
   theme: 'system',
   uploadPerms: 'keep', uploadFileMode: '644', uploadDirMode: '755',
@@ -175,7 +180,10 @@ const localParent = (p) => posixParent(p);
  * @param {boolean} [opts.fromHistory] navigace tlačítky zpět/vpřed —
  *   nesmí do historie přidávat další záznam, jinak by se z ní nedalo vyjít
  */
-async function loadPane(side, targetPath, { fromHistory = false, refresh = false } = {}) {
+async function loadPane(side, targetPath, {
+  fromHistory = false, refresh = false, mirroring = false,
+} = {}) {
+  const predtim = state[side].path;
   const data = await call(side === 'local'
     ? window.api.local.list(targetPath)
     : window.api.remote.list(sid(), targetPath, refresh));
@@ -198,6 +206,59 @@ async function loadPane(side, targetPath, { fromHistory = false, refresh = false
   $('[data-role=path]', panes[side]).value = data.path;
   updateHistoryButtons(side);
   renderPane(side);
+
+  // Synchronizované procházení: stejný krok udělá i druhá strana.
+  if (state.syncBrowse && !mirroring && predtim && data.path !== predtim) {
+    await mirrorStep(side, predtim, data.path);
+  }
+  // Při zapnutém porovnání se druhá strana překreslí taky — zbarvení se
+  // odvíjí od obou seznamů, ne jen od toho, který se zrovna načetl.
+  if (state.compare) renderPane(side === 'local' ? 'remote' : 'local');
+}
+
+/**
+ * Provede v druhém panelu tentýž krok.
+ *
+ * Mirroruje se jen vstup do podsložky a návrat o úroveň výš — u skoku někam
+ * jinam by se druhá strana ocitla na cestě, která s ní nemá nic společného,
+ * a to je horší než nic. Když protějšek neexistuje, řekne se to a druhá
+ * strana zůstane, kde byla.
+ */
+async function mirrorStep(side, predtim, ted) {
+  const other = side === 'local' ? 'remote' : 'local';
+  if (other === 'remote' && !state.connected) return;
+
+  const sep = (s2) => (s2 === 'local' ? '/' : '/');
+  const jeUvnitr = ted.startsWith(predtim.replace(/\/$/, '') + sep(side));
+  const jeVys = predtim.startsWith(ted.replace(/\/$/, '') + sep(side));
+
+  let cil = null;
+  if (jeUvnitr) {
+    const zbytek = ted.slice(predtim.replace(/\/$/, '').length + 1);
+    cil = `${state[other].path.replace(/\/$/, '')}/${zbytek}`;
+  } else if (jeVys) {
+    const kroky = predtim.slice(ted.replace(/\/$/, '').length).split('/').filter(Boolean).length;
+    cil = state[other].path;
+    for (let i = 0; i < kroky; i += 1) {
+      cil = other === 'local' ? localParent(cil) : posixParent(cil);
+    }
+  }
+  if (!cil || cil === state[other].path) return;
+
+  const puvodni = state[other].path;
+  await loadPane(other, cil, { mirroring: true });
+  if (state[other].path === puvodni) {
+    setLog('warn', `Synchronizované procházení: ${cil} na druhé straně není`);
+  }
+}
+
+/** Zapne či vypne synchronizované procházení. */
+function toggleSyncBrowse() {
+  state.syncBrowse = !state.syncBrowse;
+  $('#btn-syncbrowse').classList.toggle('on', state.syncBrowse);
+  setLog('ok', state.syncBrowse
+    ? 'Synchronizované procházení zapnuto — druhá strana jde stejným krokem'
+    : 'Synchronizované procházení vypnuto');
 }
 
 function updateHistoryButtons(side) {
@@ -244,6 +305,39 @@ function sortedEntries(side) {
   });
 }
 
+/**
+ * Porovnání obou panelů podle názvu.
+ *
+ * Jen v aktuální složce, ne do hloubky — od toho je synchronizace. Zajímá nás
+ * odpověď na otázku „co tu mám jinak než tam", kterou si člověk klade pořád
+ * a kvůli které by jinak musel otevírat dialog.
+ *
+ * @returns {Map<string, 'same'|'newer'|'older'|'only'>}
+ */
+function compareSides(side) {
+  const out = new Map();
+  if (!state.compare || !state.connected) return out;
+
+  const other = side === 'local' ? 'remote' : 'local';
+  const protikus = new Map((state[other].entries || []).map((e) => [e.name, e]));
+  // FTP hlásí čas v textovém výpisu jen na minuty, tak s tím počítáme.
+  const tolerance = (active().info || {}).protocol === 'ftp' ? 61000 : 2000;
+
+  for (const e of state[side].entries || []) {
+    const p = protikus.get(e.name);
+    if (!p) { out.set(e.name, 'only'); continue; }
+    if (e.type === 'd' || p.type === 'd') { out.set(e.name, 'same'); continue; }
+
+    const rozdilCasu = (e.mtime || 0) - (p.mtime || 0);
+    if (e.size !== p.size || Math.abs(rozdilCasu) > tolerance) {
+      out.set(e.name, rozdilCasu > tolerance ? 'newer' : 'older');
+    } else {
+      out.set(e.name, 'same');
+    }
+  }
+  return out;
+}
+
 /** Velikost položky — u složek ta dopočítaná, když si ji uživatel vyžádal. */
 function sizeOf(side, entry) {
   if (entry.type !== 'd') return entry.size;
@@ -256,6 +350,7 @@ function renderPane(side) {
   const listEl = $('[data-role=list]', panes[side]);
   const rows = sortedEntries(side);
   st.view = rows;
+  const porovnani = compareSides(side);
 
   const frag = document.createDocumentFragment();
 
@@ -274,6 +369,8 @@ function renderPane(side) {
     // Ikonu vybírá styl podle škatulky; tu určuje sdílený modul, aby se
     // panel a dialog vlastností nikdy nerozcházely v tom, co je co.
     row.dataset.kind = window.FileKind.of(e.name, e.type).kind;
+    const stav = porovnani.get(e.name);
+    if (stav && stav !== 'same') row.dataset.cmp = stav;
     row.draggable = true;
     if (st.sel.has(e.name)) row.classList.add('sel');
 
@@ -328,11 +425,20 @@ function updateFoot(side) {
   const total = files.reduce((a, e) => a + (e.size || 0), 0);
   const dirs = (st.view || []).filter((e) => e.type === 'd').length;
   const hiddenByFilter = st.filter ? st.entries.length - st.view.length : 0;
+  // Při zapnutém porovnání se hodí vědět, co které zbarvení znamená.
+  const porovnano = state.compare && state.connected
+    ? (() => {
+      const m = compareSides(side);
+      const jine = [...m.values()].filter((v) => v !== 'same').length;
+      return jine ? ` · porovnáno: ${jine} ${plural(jine, 'položka se liší', 'položky se liší', 'položek se liší')}` : ' · porovnáno: shodné';
+    })()
+    : '';
   $('[data-role=foot]', panes[side]).textContent = st.sel.size
     ? `Vybráno ${st.sel.size} ${plural(st.sel.size, 'položka', 'položky', 'položek')}, ${fmtSize(selBytes)}`
     : `${files.length} ${plural(files.length, 'soubor', 'soubory', 'souborů')} (${fmtSize(total)}), `
       + `${dirs} ${plural(dirs, 'složka', 'složky', 'složek')}`
-      + (hiddenByFilter > 0 ? ` · filtr skrývá ${hiddenByFilter}` : '');
+      + (hiddenByFilter > 0 ? ` · filtr skrývá ${hiddenByFilter}` : '')
+      + porovnano;
 }
 
 /* ------------------------------------------------------------ interakce */
@@ -607,7 +713,7 @@ function showBookmarkMenu(side, anchor) {
  *   straně shodné nebo novější
  */
 async function transfer(from, to, {
-  move = false, mask, target, onlyNewer = false,
+  move = false, mask, target, onlyNewer = false, profile = null,
 } = {}) {
   if (!state.connected) return setLog('error', 'Nejste připojeni');
   const items = selectedEntries(from).map((e) => fullPath(from, e));
@@ -627,8 +733,8 @@ async function transfer(from, to, {
   }
 
   const r = from === 'local'
-    ? await call(window.api.transfer.upload(sid(), items, targetDir, mask, onlyNewer))
-    : await call(window.api.transfer.download(sid(), items, targetDir, mask, onlyNewer));
+    ? await call(window.api.transfer.upload(sid(), items, targetDir, mask, onlyNewer, profile))
+    : await call(window.api.transfer.download(sid(), items, targetDir, mask, onlyNewer, profile));
   if (!r) return undefined;
 
   // Kolik toho maska zahodila, se musí říct — jinak tiché vynechání vypadá,
@@ -666,10 +772,76 @@ function openTransferOptions(from) {
   xferForm.elements.target.value = to === 'local' ? state.local.path : state.remote.path;
   xferForm.elements.mask.value = state.settings.transferMask || '';
   xferForm.elements.onlyNewer.checked = false;
+  renderProfileOptions();
+  xferForm.elements.profileName.value = '';
   xferForm.elements.asDefault.checked = false;
   xferDlg.showModal();
   return undefined;
 }
+
+/** Naplní výběr profilů; vybraný zůstává, dokud existuje. */
+function renderProfileOptions() {
+  const sel = xferForm.elements.profile;
+  const drzeny = sel.value;
+  sel.replaceChildren(new Option('— bez profilu (platí nastavení) —', ''));
+  for (const p of state.settings.transferProfiles || []) sel.appendChild(new Option(p.name, p.id));
+  sel.value = (state.settings.transferProfiles || []).some((p) => p.id === drzeny) ? drzeny : '';
+}
+
+/** Profil, který je zrovna vybraný v dialogu. */
+function selectedProfile() {
+  const id = xferForm.elements.profile.value;
+  return (state.settings.transferProfiles || []).find((p) => p.id === id) || null;
+}
+
+// Výběr profilu předvyplní pole, ať je vidět, co se vlastně použije.
+xferForm.elements.profile.addEventListener('change', () => {
+  const p = selectedProfile();
+  if (!p) return;
+  xferForm.elements.mask.value = p.mask || '';
+  xferForm.elements.onlyNewer.checked = Boolean(p.onlyNewer);
+  xferForm.elements.profileName.value = p.name;
+});
+
+$('#xfer-save-profile').addEventListener('click', async () => {
+  const name = xferForm.elements.profileName.value.trim();
+  if (!name) return setLog('error', 'Zadejte název profilu');
+
+  // Profil bere i práva a textový režim z aktuálního nastavení — to jsou
+  // volby, které se u různých serverů liší nejčastěji.
+  const profil = {
+    id: `p${Date.now()}`,
+    name,
+    mask: xferForm.elements.mask.value.trim(),
+    onlyNewer: xferForm.elements.onlyNewer.checked,
+    uploadPerms: state.settings.uploadPerms || 'keep',
+    uploadFileMode: state.settings.uploadFileMode || '',
+    uploadDirMode: state.settings.uploadDirMode || '',
+    textMask: state.settings.textMask || '',
+    serverEol: state.settings.serverEol || 'lf',
+  };
+  const bezStejneho = (state.settings.transferProfiles || []).filter((p) => p.name !== name);
+  const saved = await call(window.api.settings.set({ transferProfiles: [...bezStejneho, profil] }));
+  if (!saved) return undefined;
+  applySettings(saved);
+  renderProfileOptions();
+  xferForm.elements.profile.value = profil.id;
+  setLog('ok', `Profil „${name}" uložen`);
+  return undefined;
+});
+
+$('#xfer-del-profile').addEventListener('click', async () => {
+  const p = selectedProfile();
+  if (!p) return setLog('warn', 'Nejdřív vyberte profil');
+  const saved = await call(window.api.settings.set({
+    transferProfiles: (state.settings.transferProfiles || []).filter((x) => x.id !== p.id),
+  }));
+  if (!saved) return undefined;
+  applySettings(saved);
+  renderProfileOptions();
+  setLog('ok', `Profil „${p.name}" smazán`);
+  return undefined;
+});
 
 xferDlg.addEventListener('close', async () => {
   if (xferDlg.returnValue !== 'ok') return;
@@ -684,6 +856,7 @@ xferDlg.addEventListener('close', async () => {
     mask,
     target: xferForm.elements.target.value.trim(),
     onlyNewer: xferForm.elements.onlyNewer.checked,
+    profile: selectedProfile(),
   });
 });
 
@@ -802,6 +975,9 @@ function showContextMenu(side, x, y) {
     if (side === 'remote' && sel.length) {
       items.push({ label: 'Změnit čas změny…', fn: () => touchRemote(sel) });
     }
+    if (side === 'remote' && sel.length === 1 && sel[0].type !== 'd') {
+      items.push({ label: '↗ Otevřít v přiřazené aplikaci', fn: () => openWithSystem(sel[0]) });
+    }
     const toTrash = side === 'local' || state.trash.enabled;
     items.push({
       label: `${toTrash ? 'Smazat do koše' : 'Smazat'} ${sel.length > 1 ? `(${sel.length})` : ''}`,
@@ -834,6 +1010,7 @@ function showContextMenu(side, x, y) {
   });
   items.push({ label: 'Obnovit', key: '⌘R', fn: () => loadPane(side, state[side].path, { refresh: true }) });
   items.push({ label: '⌨ Otevřít Terminál zde', fn: () => openTerminal(side) });
+  if (side === 'remote') items.push({ label: '⧉ Kopírovat adresu této složky', fn: () => copySessionUrl() });
   items.push({
     label: state[side].showHidden ? 'Skrýt skryté soubory' : 'Zobrazit skryté soubory',
     fn: () => { state[side].showHidden = !state[side].showHidden; renderPane(side); },
@@ -2003,6 +2180,80 @@ $('#bulk-go').addEventListener('click', async () => {
     + (r.failed.length ? `; ${r.failed.length} se nepovedlo: ${r.failed[0]}` : ''));
 });
 
+/**
+ * Připojení podle adresy.
+ *
+ * Relace se nikam neukládá — je to jednorázové připojení, typicky z adresy,
+ * kterou někdo poslal. Heslo v adrese se použije, ale dál se s ním nic nedělá.
+ */
+async function openFromUrl() {
+  const zadano = await promptDialog(
+    'Otevřít z adresy',
+    'např. sftp://uzivatel@server:2222/var/www',
+    '',
+  );
+  if (!zadano) return;
+
+  let cfg;
+  try {
+    cfg = window.UrlSession.parse(zadano);
+  } catch (err) {
+    setLog('error', err.message);
+    return;
+  }
+
+  const r = await call(window.api.sessions.open({ config: cfg }));
+  if (!r) return;
+  await adoptSession(r, { remote: cfg.remoteDir || undefined });
+}
+
+/** Adresa otevřené relace do schránky — bez hesla. */
+async function copySessionUrl() {
+  const info = active().info;
+  if (!info || !state.connected) return setLog('error', 'Nejste připojeni');
+
+  const adresa = window.UrlSession.format(
+    { protocol: info.protocol, host: info.host, port: info.port, username: info.username, ftps: info.ftps },
+    state.remote.path,
+  );
+  const ok = await call(window.api.clipboard.write(adresa));
+  if (ok) setLog('ok', `Adresa ve schránce: ${adresa}`);
+  return undefined;
+}
+
+/**
+ * Stáhne soubor a otevře ho tím, co má systém přiřazené.
+ *
+ * Na rozdíl od úprav v editoru se změny nesledují ani nenahrávají zpět —
+ * tohle je na prohlédnutí obrázku nebo PDF, ne na práci se souborem.
+ */
+async function openWithSystem(entry) {
+  const r = await call(window.api.remote.openExternal(sid(), fullPath('remote', entry)));
+  if (r) setLog('ok', `${entry.name} otevřen v přiřazené aplikaci (změny se nesledují)`);
+}
+
+/**
+ * Zapne či vypne porovnávání panelů.
+ *
+ * Je to přepínač, ne jednorázová akce: po přenosu nebo obnovení výpisu se
+ * zbarvení přepočítá samo, takže je hned vidět, co se srovnalo.
+ */
+function toggleCompare() {
+  state.compare = !state.compare;
+  $('#btn-compare').classList.toggle('on', state.compare);
+  renderPane('local');
+  renderPane('remote');
+  setLog('ok', state.compare
+    ? 'Porovnávání panelů zapnuto — zelená je novější, oranžová starší, modrá tu je navíc'
+    : 'Porovnávání panelů vypnuto');
+}
+$('#btn-log-reveal').addEventListener('click', async () => {
+  const r = await call(window.api.log.reveal());
+  if (r) setLog('ok', `Záznamy jsou v ${r.dir}`);
+});
+$('#btn-compare').addEventListener('click', toggleCompare);
+$('#btn-syncbrowse').addEventListener('click', toggleSyncBrowse);
+
 /* ------------------------------------------------------ správce relací */
 
 /**
@@ -3061,6 +3312,7 @@ $('#btn-settings').addEventListener('click', () => {
   f.tempNameMinKb.value = cur.tempNameMinKb || 0;
   f.doubleClick.value = cur.doubleClick;
   f.theme.value = cur.theme || 'system';
+  f.sessionLog.checked = cur.sessionLog === true;
   f.textMask.value = cur.textMask || '';
   f.serverEol.value = cur.serverEol || 'lf';
   f.backupOverwritten.value = cur.backupOverwritten || 'none';
@@ -3090,6 +3342,7 @@ setDlg.addEventListener('close', async () => {
     tempNameMinKb: Math.max(0, Number(f.tempNameMinKb.value) || 0),
     doubleClick: f.doubleClick.value,
     theme: f.theme.value,
+    sessionLog: f.sessionLog.checked,
     textMask: f.textMask.value.trim(),
     serverEol: f.serverEol.value,
     backupOverwritten: f.backupOverwritten.value,
@@ -3245,6 +3498,9 @@ window.api.onMenu(async (cmd) => {
   else if (cmd === 'commands') openCommands();
   else if (cmd === 'workspaces') openWorkspaces();
   else if (cmd === 'sites') openSites();
+  else if (cmd === 'compare') toggleCompare();
+  else if (cmd === 'openurl') openFromUrl();
+  else if (cmd === 'syncbrowse') toggleSyncBrowse();
   else if (cmd === 'refresh') $('#btn-refresh').click();
 });
 

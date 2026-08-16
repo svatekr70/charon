@@ -413,6 +413,14 @@ details[open] > summary { color: var(--accent); }
 .sites-detail dd { margin: 0; overflow-wrap: anywhere; }
 .sites-empty { color: var(--fg-dim); }
 
+/* ------------------------------------------------ porovnání panelů */
+/* Proužek u kraje řádku. Barvou se schválně nesahá na text — ten už nese
+   význam podle typu souboru a dvě barvy přes sebe by se pletly. */
+.row[data-cmp="newer"] { box-shadow: inset 3px 0 0 var(--ok); }
+.row[data-cmp="older"] { box-shadow: inset 3px 0 0 var(--warn); }
+.row[data-cmp="only"] { box-shadow: inset 3px 0 0 var(--accent); }
+button.on { background: var(--accent-2); border-color: var(--accent-2); color: var(--on-accent); }
+
 /* ------------------------------------------- rozlišení relace barvou */
 /* Proužek na záložce a nad serverovým panelem. Barvu nese atribut, takže
    se dá přidat další, aniž by se sahalo do skriptu. */

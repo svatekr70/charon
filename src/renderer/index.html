@@ -25,6 +25,8 @@
       <button id="btn-del-site" title="Smazat vybranou relaci">Smazat</button>
       <span class="spacer"></span>
       <button id="btn-refresh" title="Obnovit oba panely (⌘R)">⟳</button>
+      <button id="btn-compare" title="Zvýraznit rozdíly mezi panely (⌘D)">⇄ Porovnat</button>
+      <button id="btn-syncbrowse" title="Synchronizované procházení (⌘Y)">⇉</button>
       <button id="btn-sync" title="Synchronizace adresářů (⌘S)">⇅ Sync</button>
       <button id="btn-settings" title="Nastavení">⚙</button>
     </header>
@@ -420,6 +422,14 @@
         Některé servery ho totiž nesnesou a spojení kvůli němu naopak zavřou —
         když vám relace padá právě při nečinnosti, zkuste nulu.</p>
 
+      <label class="check"><input type="checkbox" name="sessionLog" /> Zaznamenávat komunikaci se serverem do souboru</label>
+      <div class="row">
+        <button type="button" id="btn-log-reveal">Otevřít složku se záznamy</button>
+      </div>
+      <p class="muted">Když se server chová divně, je záznam jediné, co pomůže — ve stavovém
+        řádku je vidět závěr, v záznamu celý rozhovor. Hesla se do něj nedostanou
+        (<code>PASS</code> se zkracuje). Soubor je jeden na den a nad 5 MB se odloží stranou.</p>
+
       <h3>Vzhled</h3>
       <label>Motiv
         <select name="theme">
@@ -700,6 +710,9 @@
     <form method="dialog" class="dlg">
       <h2 id="xfer-title">Přenést s volbami</h2>
       <p class="muted" id="xfer-what"></p>
+      <label>Profil přenosu
+        <select name="profile"><option value="">— bez profilu (platí nastavení) —</option></select>
+      </label>
       <label>Cílová složka<input name="target" spellcheck="false" /></label>
       <label>Maska souborů
         <input name="mask" placeholder="prázdné = vše; např. *.php | .git/; node_modules/" spellcheck="false" />
@@ -711,6 +724,13 @@
         soubory se do fronty vůbec nedostanou. Když se stav cíle nedá zjistit, soubor se
         přenese — přeskočit něco, o čem nic nevíme, by znamenalo tvářit se, že je hotovo.</p>
       <label class="check"><input type="checkbox" name="asDefault" /> Uložit masku jako výchozí pro všechny přenosy</label>
+      <div class="row">
+        <input name="profileName" placeholder="název nového profilu" spellcheck="false" />
+        <button type="button" id="xfer-save-profile">Uložit jako profil</button>
+        <button type="button" id="xfer-del-profile">Smazat profil</button>
+      </div>
+      <p class="muted">Profil si pamatuje masku, „jen nové a změněné", práva nahraných souborů
+        a textový režim. Platí jen pro tenhle přenos — nastavení aplikace nemění.</p>
       <menu>
         <button value="cancel">Zrušit</button>
         <button value="ok" class="primary">Přenést</button>
@@ -786,6 +806,7 @@
   <script src="../common/mask.js"></script>
   <script src="../common/filekind.js"></script>
   <script src="../common/rename.js"></script>
+  <script src="../common/urlsession.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

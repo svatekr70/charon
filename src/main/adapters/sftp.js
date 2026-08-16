@@ -63,6 +63,9 @@ class SftpAdapter {
 
     // Ověření identity serveru. `hostHash` schválně nenastavujeme, ať dostaneme
     // syrový klíč a otisk si spočítáme sami (stejně jako OpenSSH).
+    // Knihovna umí hlásit průběh handshaku i jednotlivé zprávy protokolu.
+    if (hooks.log) opts.debug = (zprava) => hooks.log(zprava);
+
     this._hostKeyRejected = null;
     opts.hostVerifier = (keyBuffer, verify) => {
       Promise.resolve()
