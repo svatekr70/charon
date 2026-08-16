@@ -22,6 +22,7 @@ const {
 } = require('./browse');
 const FileMask = require('../common/mask');
 const { AdapterPool } = require('./pool');
+const { FolderWatcher } = require('./watcher');
 
 let win = null;
 let sites = null;
@@ -34,6 +35,7 @@ let settings = {
   tempName: true, tempNameMinKb: 0,
 };
 let pool = null;
+let folderWatcher = null;
 
 const conn = {
   browse: null,     // spojení pro procházení adresářů
@@ -395,6 +397,7 @@ function buildMenu() {
         { label: 'Import z WinSCP…', click: () => send('menu', 'import') },
         { type: 'separator' },
         { label: 'Synchronizovat adresáře…', accelerator: 'Cmd+S', click: () => send('menu', 'sync') },
+        { label: 'Hlídat složku a nahrávat změny…', accelerator: 'Cmd+U', click: () => send('menu', 'watch') },
         // Bez akcelerátoru schválně: ⌘F si obsluhuje okno samo, aby v levém
         // panelu otevřelo filtr a v pravém hledání na serveru.
         { label: 'Najít soubory na serveru…', click: () => send('menu', 'find') },
@@ -736,6 +739,20 @@ function registerIpc() {
   handle('edit:stop', async (remotePath) => { await editWatcher?.stop(remotePath); return true; });
   handle('edit:stopAll', async () => { await editWatcher?.stopAll(); return true; });
   handle('edit:list', async () => (editWatcher ? editWatcher.list() : []));
+
+  // --- hlídání složky s automatickým nahráváním ---
+  handle('watch:start', async (opts) => {
+    requireBrowse();
+    const res = await folderWatcher.start(opts);
+    log('ok', `Hlídám ${opts.localDir} → ${opts.remoteDir}`);
+    return res;
+  });
+  handle('watch:stop', async () => {
+    const res = await folderWatcher.stop();
+    log('ok', 'Hlídání složky zastaveno');
+    return res;
+  });
+  handle('watch:status', async () => folderWatcher.status());
 }
 
 function normalizeRemote(p) {
@@ -746,6 +763,7 @@ function normalizeRemote(p) {
 
 async function disconnectAll() {
   queue?.cancelAll();
+  await folderWatcher?.stop().catch(() => {});
   await editWatcher?.stopAll().catch(() => {});
   editWatcher = null;
   if (pool) { await pool.closeAll().catch(() => {}); pool = null; }
@@ -786,6 +804,22 @@ app.whenReady().then(async () => {
 
   queue.setSpeedLimit((settings.speedLimitKb || 0) * 1024);
   queue.setTempName(settings.tempName !== false, (settings.tempNameMinKb || 0) * 1024);
+
+  folderWatcher = new FolderWatcher({
+    queue,
+    getAdapter: async () => requireBrowse(),
+    // Mazání jde do koše na serveru, když ho relace má zapnutý. Automatika
+    // je od toho, aby ulehčila práci, ne aby zahazovala soubory nenávratně.
+    removeRemote: async (remotePath) => {
+      const trash = getTrash();
+      if (trash) { await trash.moveToTrash(remotePath); return; }
+      const a = requireBrowse();
+      if (await remoteIsDir(a, remotePath)) await a.removeDir(remotePath, true);
+      else await a.removeFile(remotePath);
+    },
+  });
+  folderWatcher.on('update', (st) => send('watch', st));
+  folderWatcher.on('log', ({ level, text }) => log(level, text));
 
   prompts.register();
   registerIpc();

@@ -33,6 +33,7 @@ předlohy vozí i zpátky.
 | Masky souborů pro přenosy i synchronizaci | ✅ |
 | Souběžné přenosy a omezení rychlosti | ✅ |
 | Přenos přes dočasný název | ✅ |
+| Hlídání složky s automatickým nahráváním | ✅ |
 
 Nepodporuje SCP, WebDAV ani S3 — relace v těchto protokolech se při importu
 zobrazí, ale nejdou naimportovat.
@@ -233,6 +234,7 @@ v Keychain, ne v souboru.
 | psaní | Skok na položku podle názvu |
 | `⌘R` | Obnovit oba panely |
 | `⌘S` | Synchronizace adresářů |
+| `⌘U` | Hlídat složku a nahrávat změny |
 | `⌘O` / `⌘D` | Připojit / odpojit |
 
 ## Editace se zpětným nahráním
@@ -349,6 +351,27 @@ rovnou stahovat, otevřít soubor v editoru nebo skočit na jeho místo v panelu
 Hledání se zastaví na 5000 nálezech a hloubce 40 úrovní — obojí je pojistka
 proti překlepu v masce, ne technický limit.
 
+## Hlídání složky
+
+`⌘U` nebo *Soubor → Hlídat složku a nahrávat změny*. Charon sleduje lokální
+strom a každou změnu rovnou nahraje — uložíš soubor v editoru a je nahoře.
+Ve WinSCP se tomu říká *Keep remote directory up to date*.
+
+Volba **Nejdřív srovnat, co se liší** projede obě strany a dorovná rozdíly,
+než se začne hlídat. Bez ní se nahrává jen to, co se změní potom.
+
+Platí tu maska, takže `.git/` a `node_modules/` se dají vyloučit. Rozepsané
+soubory `.filepart` se ignorují vždycky — vznikají při stahování do hlídané
+složky a nahrát je zpátky by byl kolotoč.
+
+**Mazání na serveru je ve výchozím stavu vypnuté.** Hlídání běží na pozadí bez
+potvrzování a smazaný soubor je nevratná věc, takže tohle rozhodnutí má padnout
+vědomě. Když ho zapnete, smazané položky jdou do koše na serveru — pokud ho má
+relace zapnutý; jinak zmizí nenávratně a aplikace na to před spuštěním upozorní.
+
+Že něco běží na pozadí, je vidět ve stavovém řádku i v samotném dialogu,
+včetně počtu nahraných souborů a poslední akce.
+
 ## Synchronizace
 
 Porovná lokální a vzdálený strom a **nejdřív ukáže seznam akcí** — teprve po
@@ -385,6 +408,9 @@ npm test
   že vyloučená složka neprojde ani jako ručně vybraný kořen
 - `test/tempname.test.js` — přenos přes dočasný název; hlavně to, že cílový
   soubor zůstane během přenosu nedotčený
+- `test/watcher.test.js` — hlídání složky. U automatiky je stejně důležité,
+  na co nereaguje: bez výslovného zapnutí nesmí nic smazat a rozepsané soubory
+  nesmí nahrávat dokola
 - `test/parallel.test.js` — souběžné přenosy, zásoba spojení a omezení
   rychlosti. Rychlost se měří proti hodinkám, ne proti počítadlu omezovače;
   zrychlení souběžností se ověřuje proti serveru s umělou latencí, protože

@@ -101,6 +101,7 @@
     <footer class="status">
       <span id="conn-status" class="badge off">Odpojeno</span>
       <span id="edit-status" class="muted"></span>
+      <span id="watch-status" class="muted"></span>
       <span class="spacer"></span>
       <span id="log-line" class="muted"></span>
     </footer>
@@ -260,6 +261,37 @@
       <label class="check"><input type="checkbox" name="colGroup" /> Zobrazit skupinu</label>
       <menu><button value="cancel">Zrušit</button><button value="save" class="primary">Uložit</button></menu>
     </form>
+  </dialog>
+
+  <!-- hlídání složky -->
+  <dialog id="dlg-watch">
+    <div class="dlg wide">
+      <h2>Hlídat složku a nahrávat změny</h2>
+      <p class="muted">Charon bude sledovat lokální složku a každou změnu rovnou nahraje
+        na server. Hodí se na vývoj: uložíš soubor v editoru a je nahoře.</p>
+
+      <div class="sync-paths">
+        <label>Lokální složka<input id="watch-local" spellcheck="false" /></label>
+        <label>Vzdálená složka<input id="watch-remote" spellcheck="false" /></label>
+      </div>
+      <label>Maska souborů
+        <input id="watch-mask" placeholder="prázdné = vše; např. | .git/; node_modules/; *.log" spellcheck="false" />
+      </label>
+      <label class="check"><input type="checkbox" id="watch-initial" checked /> Nejdřív srovnat, co se liší</label>
+      <label class="check"><input type="checkbox" id="watch-delete" /> Mazat na serveru i to, co smažu lokálně</label>
+      <div class="warn" id="watch-warn" hidden>
+        Mazání běží na pozadí bez potvrzování. Smazané položky jdou do koše na serveru,
+        pokud ho má relace zapnutý — jinak zmizí nenávratně.
+      </div>
+
+      <div class="watch-state" id="watch-state" hidden></div>
+
+      <menu>
+        <button id="watch-close">Zavřít</button>
+        <button id="watch-stop" hidden>Zastavit hlídání</button>
+        <button id="watch-go" class="primary">Spustit hlídání</button>
+      </menu>
+    </div>
   </dialog>
 
   <!-- přenos s volbami -->

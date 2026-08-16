@@ -26,6 +26,7 @@ const state = {
   editing: [],
   settings: {},
   trash: { enabled: false, path: '' },
+  watch: { running: false },
   importData: null,
   syncActions: [],
 };
@@ -706,6 +707,7 @@ function showContextMenu(side, x, y) {
   if (side === 'remote') {
     items.push({ label: '🔍 Najít soubory…', key: '⌘F', fn: () => openFind() });
     items.push({ label: '⇅ Synchronizovat tuto složku…', fn: () => openSync() });
+    items.push({ label: '⟳ Hlídat lokální složku…', key: '⌘U', fn: () => openWatch() });
     if (state.trash.enabled) items.push({ label: 'Vysypat koš na serveru…', fn: () => emptyRemoteTrash() });
   }
 
@@ -828,6 +830,97 @@ async function editRemote(remotePath) {
   const r = await call(window.api.edit.open(remotePath));
   if (r) setLog('ok', `${remotePath} — změny se budou nahrávat automaticky`);
 }
+
+/* --------------------------------------------------- hlídání složky */
+
+const watchDlg = $('#dlg-watch');
+
+function openWatch() {
+  if (!state.connected) return setLog('error', 'Nejste připojeni');
+  const st = state.watch;
+  if (!st.running) {
+    $('#watch-local').value = state.local.path;
+    $('#watch-remote').value = state.remote.path;
+    if (!$('#watch-mask').value) $('#watch-mask').value = state.settings.transferMask || '';
+  }
+  renderWatchState();
+  watchDlg.showModal();
+  return undefined;
+}
+
+function renderWatchState() {
+  const st = state.watch;
+  const running = Boolean(st.running);
+
+  $('#watch-go').hidden = running;
+  $('#watch-stop').hidden = !running;
+  for (const id of ['#watch-local', '#watch-remote', '#watch-mask', '#watch-initial', '#watch-delete']) {
+    $(id).disabled = running;
+  }
+  $('#watch-warn').hidden = !$('#watch-delete').checked;
+
+  const box = $('#watch-state');
+  box.hidden = !running;
+  if (running) {
+    const since = st.startedAt ? new Date(st.startedAt) : null;
+    const p = (n) => String(n).padStart(2, '0');
+    box.innerHTML = `<b>Běží</b> od ${since ? `${p(since.getHours())}:${p(since.getMinutes())}` : '—'}`
+      + ` · nahráno ${st.uploaded || 0}`
+      + (st.deleted ? ` · smazáno ${st.deleted}` : '')
+      + (st.errors ? ` · chyb ${st.errors}` : '')
+      + (st.pending ? ` · čeká ${st.pending}` : '');
+    if (st.lastEvent) {
+      const last = document.createElement('span');
+      last.className = 'last';
+      last.textContent = st.lastEvent.text;
+      box.appendChild(last);
+    }
+  }
+
+  // Ve stavovém řádku má být vidět, že něco běží na pozadí.
+  const bar = $('#watch-status');
+  bar.classList.toggle('on', running);
+  bar.textContent = running
+    ? `⟳ hlídám ${st.localDir || ''} (nahráno ${st.uploaded || 0})`
+    : '';
+}
+
+$('#watch-delete').addEventListener('change', renderWatchState);
+$('#watch-close').addEventListener('click', () => watchDlg.close());
+
+$('#watch-go').addEventListener('click', async () => {
+  const deleteRemote = $('#watch-delete').checked;
+  if (deleteRemote && !window.confirm('Mazání na serveru poběží na pozadí bez ptaní.\n\n'
+    + (state.trash.enabled
+      ? `Smazané položky půjdou do koše (${state.trash.path}).`
+      : 'Koš na serveru je u této relace vypnutý — smazané položky zmizí nenávratně.')
+    + '\n\nPokračovat?')) return;
+
+  const res = await call(window.api.watch.start({
+    localDir: $('#watch-local').value.trim(),
+    remoteDir: $('#watch-remote').value.trim(),
+    mask: $('#watch-mask').value.trim(),
+    deleteRemote,
+    initialSync: $('#watch-initial').checked,
+  }));
+  if (res) {
+    state.watch = res;
+    renderWatchState();
+  }
+});
+
+$('#watch-stop').addEventListener('click', async () => {
+  const res = await call(window.api.watch.stop());
+  if (res) {
+    state.watch = res;
+    renderWatchState();
+  }
+});
+
+window.api.onWatch((st) => {
+  state.watch = st;
+  renderWatchState();
+});
 
 /* ------------------------------------------------ hledání souborů */
 
@@ -1155,6 +1248,8 @@ function applyConnState(connected, site) {
     : 'Odpojeno';
   if (!connected) {
     state.trash = { enabled: false, path: '' };
+    state.watch = { running: false };
+    renderWatchState();
     state.remote.entries = [];
     state.remote.path = '';
     $('[data-role=path]', panes.remote).value = '';
@@ -1661,6 +1756,7 @@ window.api.onMenu(async (cmd) => {
   else if (cmd === 'sync') openSync();
   else if (cmd === 'emptytrash') emptyRemoteTrash();
   else if (cmd === 'find') openFind();
+  else if (cmd === 'watch') openWatch();
   else if (cmd === 'refresh') $('#btn-refresh').click();
 });
 

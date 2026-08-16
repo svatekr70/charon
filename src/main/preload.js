@@ -63,6 +63,11 @@ contextBridge.exposeInMainWorld('api', {
     download: (items, localDir, mask) => invoke('transfer:download', { items, localDir, mask }),
     move: (items, targetDir, from, mask) => invoke('transfer:move', { items, targetDir, from, mask }),
   },
+  watch: {
+    start: (opts) => invoke('watch:start', opts),
+    stop: () => invoke('watch:stop'),
+    status: () => invoke('watch:status'),
+  },
   find: {
     start: (opts) => invoke('find:start', opts),
     cancel: () => invoke('find:cancel'),
@@ -97,6 +102,7 @@ contextBridge.exposeInMainWorld('api', {
   onAsk: (cb) => on('conflict', cb),
   answer: (id, answer) => invoke('prompt:answer', { id, answer }),
   onFind: (cb) => on('find', cb),
+  onWatch: (cb) => on('watch', cb),
   onQueue: (cb) => on('queue', cb),
   onConn: (cb) => on('conn', cb),
   onEdit: (cb) => on('edit', cb),
