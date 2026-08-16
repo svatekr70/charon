@@ -67,6 +67,8 @@ class Session {
     this.queue.setSpeedLimit((settings.speedLimitKb || 0) * 1024);
     this.queue.setTempName(settings.tempName !== false, (settings.tempNameMinKb || 0) * 1024);
     this.queue.setPermissions(settings);
+    this.queue.setBackup(settings.backupOverwritten, (a, p, mode) => this.backupBeforeOverwrite(a, p, mode));
+    this.queue.setTextMode(settings.textMask, settings.serverEol);
     this.listCache.setEnabled(settings.cacheListings !== false);
     this.queue.on('update', (snap) => {
       // Dokončený přenos změnil obsah serveru — uložené výpisy už neplatí.
@@ -80,6 +82,11 @@ class Session {
       if (deps.rememberQueue && this.queueAdopted) {
         deps.rememberQueue(this.persistKey, snap.items, this.describe().name);
       }
+    });
+
+    // Fronta dojela — hlavní proces podle nastavení upozorní, odpojí nebo uspí.
+    this.queue.on('drained', (souhrn) => {
+      if (deps.onQueueDrained) deps.onQueueDrained(this, souhrn);
     });
 
     this.editWatcher = new EditWatcher({
@@ -193,6 +200,33 @@ class Session {
     }
   }
 
+  /**
+   * Odloží původní soubor, než ho přepíše nová verze.
+   *
+   * `suffix` ho přejmenuje vedle (zůstane na očích, takže je vidět, že tam
+   * něco je), `trash` ho pošle do koše na serveru (uklizené, ale je potřeba
+   * vědět, kde koš je). Když soubor neexistuje, není co zálohovat.
+   *
+   * @returns {Promise<string|null>} kam se původní verze uložila
+   */
+  async backupBeforeOverwrite(adapter, remotePath, mode) {
+    if (!await adapter.exists(remotePath)) return null;
+
+    if (mode === 'trash') {
+      const trash = this.getTrash();
+      if (!trash) throw new Error('koš na serveru není u této relace zapnutý');
+      return trash.moveToTrash(remotePath);
+    }
+
+    const d = new Date();
+    const p2 = (n) => String(n).padStart(2, '0');
+    const razitko = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}`
+      + `-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
+    const kam = `${remotePath}.bak-${razitko}`;
+    await adapter.rename(remotePath, kam);
+    return kam;
+  }
+
   transferPool() {
     if (!this.pool || this.pool.closed) {
       this.pool = new AdapterPool({
@@ -242,6 +276,8 @@ class Session {
     this.queue.setSpeedLimit((settings.speedLimitKb || 0) * 1024);
     this.queue.setTempName(settings.tempName !== false, (settings.tempNameMinKb || 0) * 1024);
     this.queue.setPermissions(settings);
+    this.queue.setBackup(settings.backupOverwritten, (a, p, mode) => this.backupBeforeOverwrite(a, p, mode));
+    this.queue.setTextMode(settings.textMask, settings.serverEol);
     this.listCache.setEnabled(settings.cacheListings !== false);
     if (this.pool && !this.pool.closed) this.pool.setMax(settings.maxConcurrent || 1);
   }

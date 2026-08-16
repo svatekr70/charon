@@ -8,6 +8,8 @@ const { EventEmitter } = require('events');
 
 const { RateLimiter } = require('./throttle');
 const perms = require('./perms');
+const { transformFor } = require('./eol');
+const FileMask = require('../common/mask');
 
 /**
  * Přípona rozepsaného souboru. Stejnou používá WinSCP, takže když se přenos
@@ -75,8 +77,14 @@ class TransferQueue extends EventEmitter {
     // Kolik bajtů fronta opravdu přenesla, a vzorky pro výpočet rychlosti.
     this.moved = 0;
     this.samples = [];
+    // Proběhl od posledního vyprázdnění nějaký přenos?
+    this.didWork = false;
     // Práva nahraných souborů; výchozí je nechat je na serveru.
     this.perms = {};
+    this.backupMode = 'none';
+    this.onBackup = null;
+    this.textMask = null;
+    this.serverEol = 'lf';
     this.workers = 0;
     /** id položky → přerušovací token právě běžícího přenosu */
     this.active = new Map();
@@ -97,9 +105,43 @@ class TransferQueue extends EventEmitter {
     this.tempNameMinBytes = 0;
   }
 
+  /**
+   * Textový režim: u kterých souborů převádět konce řádků.
+   *
+   * Maska je prázdná = vypnuto. Textový režim vylučuje navazování přenosu:
+   * po převodu neodpovídá počet bajtů zdroji, takže „dopiš od pozice N"
+   * nedává smysl a soubor by se poškodil.
+   */
+  setTextMode(maskText, serverEol) {
+    const compiled = maskText && String(maskText).trim() ? FileMask.compile(maskText) : null;
+    this.textMask = compiled && !compiled.empty ? compiled : null;
+    this.serverEol = serverEol === 'crlf' ? 'crlf' : 'lf';
+  }
+
+  /** Převod pro danou položku, nebo null když se přenáší binárně. */
+  _textTransform(item) {
+    if (!this.textMask) return null;
+    const jmeno = item.direction === 'up'
+      ? posixBasename(item.remotePath)
+      : posixBasename(item.remotePath);
+    return this.textMask.match(jmeno, false) ? transformFor(item.direction, this.serverEol) : null;
+  }
+
   /** Práva nahraných souborů (Nastavení → Přenosy). */
   setPermissions(settings) {
     this.perms = settings || {};
+  }
+
+  /**
+   * Co udělat s původním souborem, než ho přepíšeme.
+   *
+   * Koš na serveru řeší mazání, tohle řeší přepis — druhý způsob, jak přijít
+   * o data, a na rozdíl od mazání se stane bez ptaní pokaždé, když se nahrává
+   * novější verze.
+   */
+  setBackup(mode, handler) {
+    this.backupMode = mode || 'none';
+    this.onBackup = handler || null;
   }
 
   setTempName(enabled, minBytes = 0) {
@@ -379,6 +421,12 @@ class TransferQueue extends EventEmitter {
         // zahodit ji smíme teprve když dojedou všichni pracovníci.
         if (this.workers === 0 && !this.items.some((i) => i.status === 'pending')) {
           this.policy = null;
+          // Fronta dojela. Hlásíme to jen tehdy, když se opravdu něco dělo —
+          // jinak by se akce po dokončení spustila i po prázdném kliknutí.
+          if (this.didWork) {
+            this.didWork = false;
+            this.emit('drained', this.summary());
+          }
         }
         this._emitUpdate(true);
         // Pokud mezitím přibyla práce (typicky Pauza a hned Pokračovat),
@@ -437,12 +485,23 @@ class TransferQueue extends EventEmitter {
           item.error = err ? err.message : 'Neznámá chyba';
         }
       } finally {
+        // Práce proběhla, ať už dopadla jakkoliv. Dávka, ve které všechno
+        // selhalo, je zrovna ta, o které chce člověk vědět nejvíc.
+        if (['done', 'error'].includes(item.status)) this.didWork = true;
         this.active.delete(item.id);
         item.limiter = null;
         if (adapter) this.releaseAdapter(adapter);
         this._emitUpdate(true);
       }
     }
+  }
+
+  /** Krátký souhrn poslední dávky — do hlášky po dokončení. */
+  summary() {
+    const done = this.items.filter((i) => i.status === 'done').length;
+    const failed = this.items.filter((i) => i.status === 'error').length;
+    const skipped = this.items.filter((i) => i.status === 'skipped').length;
+    return { done, failed, skipped, bytes: this.moved };
   }
 
   async _transfer(item, adapter, token) {
@@ -474,14 +533,34 @@ class TransferQueue extends EventEmitter {
       const writePath = suffix ? item.remotePath + suffix : item.remotePath;
       item.tempPath = suffix ? writePath : null;
 
-      const startAt = await this._resumeOffset(item, local.size, () => adapter.stat(writePath));
+      // V textovém režimu se navazovat nedá: po převodu konců řádků
+      // neodpovídá počet bajtů zdroji, takže „dopiš od pozice N" by soubor
+      // rozsypalo. Radši se přenese celý znovu.
+      const prevod = this._textTransform(item);
+      const startAt = prevod
+        ? 0
+        : await this._resumeOffset(item, local.size, () => adapter.stat(writePath));
       item.transferred = startAt;
+      if (prevod) item.note = 'textový režim';
 
       const parent = posixDirname(item.remotePath);
       if (parent && parent !== '.') await adapter.mkdir(parent, true).catch(() => {});
 
+      // Záloha se dělá až tady: po dotazu na konflikt (uživatel mohl přenos
+      // odmítnout) a před samotným zápisem.
+      if (this.backupMode !== 'none' && this.onBackup && startAt === 0) {
+        try {
+          const kam = await this.onBackup(adapter, item.remotePath, this.backupMode);
+          if (kam) item.note = `původní verze uložena jako ${posixBasename(kam)}`;
+        } catch (err) {
+          item.note = `zálohu původní verze se nepodařilo udělat: ${err.message}`;
+        }
+      }
+
       if (startAt < local.size || local.size === 0) {
-        await adapter.upload(item.localPath, writePath, { startAt, onProgress, signal: token, limiters });
+        await adapter.upload(item.localPath, writePath, {
+          startAt, onProgress, signal: token, limiters, transform: prevod,
+        });
       }
 
       // Čas změny nastavujeme ještě na rozepsaném souboru — přejmenování ho
@@ -520,11 +599,17 @@ class TransferQueue extends EventEmitter {
       item.tempPath = suffix ? writePath : null;
 
       await fsp.mkdir(path.dirname(item.localPath), { recursive: true });
-      const startAt = await this._resumeOffset(item, remote.size, () => fsp.stat(writePath));
+      const prevod = this._textTransform(item);
+      const startAt = prevod
+        ? 0
+        : await this._resumeOffset(item, remote.size, () => fsp.stat(writePath));
       item.transferred = startAt;
+      if (prevod) item.note = 'textový režim';
 
       if (startAt < remote.size || remote.size === 0) {
-        await adapter.download(item.remotePath, writePath, { startAt, onProgress, signal: token, limiters });
+        await adapter.download(item.remotePath, writePath, {
+          startAt, onProgress, signal: token, limiters, transform: prevod,
+        });
       }
 
       if (remote.mtime) {

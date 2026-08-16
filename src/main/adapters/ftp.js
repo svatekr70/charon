@@ -37,6 +37,8 @@ class FtpAdapter {
    */
   async connect(cfg, hooks = {}) {
     this._cfg = cfg;
+    // Timeout se nastavuje na klientovi, ne v jednotlivých příkazech.
+    if (Number(cfg.connectTimeoutMs)) this.client.ftp.timeout = Number(cfg.connectTimeoutMs);
     // Kódování názvů souborů. Starší servery UTF-8 neumí a názvy s diakritikou
     // pak dorazí jako změť; „auto" nechá rozhodnout server podle FEAT.
     this.client.ftp.encoding = encodingOf(cfg);
@@ -254,6 +256,16 @@ class FtpAdapter {
     await this.client.rename(from, to);
   }
 
+  /** FTP kopii na serveru neumí; protokol pro ni nemá příkaz. */
+  async copy() {
+    throw new Error('Kopie na serveru jde jen přes SFTP — FTP na to nemá příkaz. '
+      + 'Stáhněte soubor a nahrajte ho pod jiným názvem.');
+  }
+
+  async symlink() {
+    throw new Error('Symbolické odkazy umí jen SFTP');
+  }
+
   async chmod(remotePath, mode) {
     // Není součástí FTP standardu; většina serverů rozumí SITE CHMOD.
     await this.client.send(`SITE CHMOD ${mode.toString(8).padStart(3, '0')} ${remotePath}`);
@@ -271,29 +283,41 @@ class FtpAdapter {
     await this.client.send(`MFMT ${stamp} ${remotePath}`);
   }
 
-  async download(remotePath, localPath, { startAt = 0, onProgress, signal, limiters } = {}) {
+  async download(remotePath, localPath, {
+    startAt = 0, onProgress, signal, limiters, transform,
+  } = {}) {
     await this.ensureConnected();
     return this._withProgress(startAt, onProgress, signal, async () => {
       const ws = fs.createWriteStream(localPath, startAt > 0 ? { flags: 'a' } : { flags: 'w' });
       const throttle = makeThrottle(limiters);
-      if (!throttle) {
+      // Textový režim: převod konců řádků těsně před zápisem na disk.
+      const prevod = transform ? transform() : null;
+
+      if (!throttle && !prevod) {
         await this.client.downloadTo(ws, remotePath, startAt);
         return;
       }
-      // Knihovna zapisuje do toho, co jí předáme — podstrčíme jí omezovač
-      // a ten teprve sype do souboru.
-      throttle.pipe(ws);
-      await this.client.downloadTo(throttle, remotePath, startAt);
+      // Knihovna zapisuje do toho, co jí předáme — podstrčíme jí začátek
+      // řetězu a ten teprve sype do souboru.
+      const prvni = throttle || prevod;
+      let proud = prvni;
+      if (throttle && prevod) proud = proud.pipe(prevod);
+      proud.pipe(ws);
+      await this.client.downloadTo(prvni, remotePath, startAt);
     });
   }
 
-  async upload(localPath, remotePath, { startAt = 0, onProgress, signal, limiters } = {}) {
+  async upload(localPath, remotePath, {
+    startAt = 0, onProgress, signal, limiters, transform,
+  } = {}) {
     await this.ensureConnected();
     return this._withProgress(startAt, onProgress, signal, async () => {
       const throttle = makeThrottle(limiters);
       const source = () => {
         const rs = fs.createReadStream(localPath, startAt > 0 ? { start: startAt } : {});
-        return throttle ? rs.pipe(throttle) : rs;
+        let proud = throttle ? rs.pipe(throttle) : rs;
+        if (transform) proud = proud.pipe(transform());
+        return proud;
       };
       if (startAt > 0) await this.client.appendFrom(source(), remotePath);
       else await this.client.uploadFrom(source(), remotePath);

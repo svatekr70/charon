@@ -54,8 +54,10 @@ class SftpAdapter {
       host: cfg.host,
       port: Number(cfg.port) || 22,
       username: cfg.username,
-      readyTimeout: 25000,
-      keepaliveInterval: 10000,
+      // Keepalive drží spojení při nečinnosti, ale některé servery ho
+      // nesnesou a spojení kvůli němu naopak zavřou. Proto se dá vypnout.
+      readyTimeout: Number(cfg.connectTimeoutMs) || 25000,
+      keepaliveInterval: cfg.keepaliveMs === 0 ? 0 : (Number(cfg.keepaliveMs) || 10000),
       keepaliveCountMax: 6,
     };
 
@@ -182,6 +184,42 @@ class SftpAdapter {
     await this.client.rename(from, to);
   }
 
+  /**
+   * Kopie souboru přímo na serveru.
+   *
+   * Nejdřív zkusíme `cp` přes shell — data pak vůbec neopustí server a kopie
+   * je hotová okamžitě i u velkého souboru.
+   *
+   * Když to nevyjde, protéká kopie skrz nás. Důvodů je víc než jeden: server
+   * nemusí shell pouštět vůbec, a i když ho pustí, může být SFTP uzavřené
+   * v jiném kořeni než shell — pak `cp` tutéž cestu prostě nenajde. V obou
+   * případech je záskok lepší než odmítnout práci.
+   */
+  async copy(from, to) {
+    let duvod = null;
+    try {
+      const res = await this.exec(`cp -p -- ${shellQuote(from)} ${shellQuote(to)}`, { timeoutMs: 60000 });
+      if (res.code === 0) return { serverSide: true };
+      duvod = (res.output || '').trim() || `cp skončilo s kódem ${res.code}`;
+    } catch (err) {
+      duvod = err && err.message ? err.message : 'shell není k dispozici';
+    }
+
+    try {
+      await this.client.rcopy(from, to);
+      return { serverSide: false, reason: duvod };
+    } catch (err) {
+      throw new Error(`${err.message} (přes shell to taky nešlo: ${duvod})`);
+    }
+  }
+
+  /** Symbolický odkaz. Cíl se nekontroluje — smí ukazovat i jinam. */
+  async symlink(target, linkPath) {
+    return new Promise((resolve, reject) => {
+      this.client.sftp.symlink(target, linkPath, (err) => (err ? reject(err) : resolve()));
+    });
+  }
+
   async chmod(remotePath, mode) {
     await this.client.chmod(remotePath, mode);
   }
@@ -255,7 +293,9 @@ class SftpAdapter {
       };
 
       client.exec(full, (err, stream) => {
-        if (err) { finish(reject, err); return; }
+        // Servery nastavené jen pro přenos souborů shell nepustí. Označíme to,
+        // ať se volající může zařídit jinak místo aby to hlásil jako chybu.
+        if (err) { finish(reject, Object.assign(err, { noShell: true })); return; }
 
         timer = setTimeout(() => {
           try { stream.close(); } catch { /* už zavřený */ }
@@ -293,11 +333,13 @@ class SftpAdapter {
    * Stažení s podporou navázání. `startAt > 0` znamená, že lokální soubor
    * už obsahuje prvních startAt bajtů a dopisujeme za ně.
    */
-  download(remotePath, localPath, { startAt = 0, onProgress, signal, limiters } = {}) {
+  download(remotePath, localPath, {
+    startAt = 0, onProgress, signal, limiters, transform,
+  } = {}) {
     return new Promise((resolve, reject) => {
       const rs = this.client.createReadStream(remotePath, startAt > 0 ? { start: startAt } : {});
       const ws = fs.createWriteStream(localPath, startAt > 0 ? { flags: 'a' } : { flags: 'w' });
-      pumpStreams(rs, ws, startAt, onProgress, signal, resolve, reject, limiters);
+      pumpStreams(rs, ws, startAt, onProgress, signal, resolve, reject, limiters, transform);
     });
   }
 
@@ -310,22 +352,27 @@ class SftpAdapter {
    * a přijdeme o už přenesenou část. S 'r+' a explicitním `start` je pozice
    * nastavená rovnou v konstruktoru a žádný závod nevzniká.
    */
-  upload(localPath, remotePath, { startAt = 0, onProgress, signal, limiters } = {}) {
+  upload(localPath, remotePath, {
+    startAt = 0, onProgress, signal, limiters, transform,
+  } = {}) {
     return new Promise((resolve, reject) => {
       const rs = fs.createReadStream(localPath, startAt > 0 ? { start: startAt } : {});
       const ws = this.client.createWriteStream(
         remotePath,
         startAt > 0 ? { flags: 'r+', start: startAt } : { flags: 'w' },
       );
-      pumpStreams(rs, ws, startAt, onProgress, signal, resolve, reject, limiters);
+      pumpStreams(rs, ws, startAt, onProgress, signal, resolve, reject, limiters, transform);
     });
   }
 }
 
-function pumpStreams(rs, ws, startAt, onProgress, signal, resolve, reject, limiters) {
+function pumpStreams(rs, ws, startAt, onProgress, signal, resolve, reject, limiters, transform) {
   let transferred = startAt;
   let settled = false;
   const throttle = makeThrottle(limiters);
+  // Textový režim: převod konců řádků. Řadí se hned za čtení, aby se počítal
+  // průběh podle zdroje — velikost po převodu je jiná a ukazatel by lhal.
+  const prevod = transform ? transform() : null;
 
   const finish = (err) => {
     if (settled) return;
@@ -334,6 +381,7 @@ function pumpStreams(rs, ws, startAt, onProgress, signal, resolve, reject, limit
     if (err) {
       rs.destroy();
       if (throttle) throttle.destroy();
+      if (prevod) prevod.destroy();
       ws.destroy();
       reject(err);
     } else {
@@ -359,10 +407,13 @@ function pumpStreams(rs, ws, startAt, onProgress, signal, resolve, reject, limit
   rs.on('error', finish);
   ws.on('error', finish);
   if (throttle) throttle.on('error', finish);
+  if (prevod) prevod.on('error', finish);
   ws.on('close', () => finish(null));
 
-  if (throttle) rs.pipe(throttle).pipe(ws);
-  else rs.pipe(ws);
+  let proud = rs;
+  if (throttle) proud = proud.pipe(throttle);
+  if (prevod) proud = proud.pipe(prevod);
+  proud.pipe(ws);
   return undefined;
 }
 

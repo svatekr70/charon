@@ -147,6 +147,23 @@ function startTestServer({
             sftp.on('STAT', doStat);
             sftp.on('LSTAT', doStat);
 
+            // Pořadí argumentů je u SYMLINK proslulá past: norma říká
+            // (odkaz, cíl), OpenSSH to má prohozené a ssh2 podle toho emituje
+            // jinak. Naše protistrana v testu je ssh2, tedy pořadí podle normy.
+            sftp.on('SYMLINK', (id, linkPath, targetPath) => {
+              try {
+                fs.symlinkSync(targetPath, real(linkPath));
+                sftp.status(id, STATUS_CODE.OK);
+              } catch { sftp.status(id, STATUS_CODE.FAILURE); }
+            });
+
+            sftp.on('READLINK', (id, p) => {
+              try {
+                const cil = fs.readlinkSync(real(p));
+                sftp.name(id, [{ filename: cil, longname: cil, attrs: {} }]);
+              } catch { sftp.status(id, STATUS_CODE.FAILURE); }
+            });
+
             sftp.on('FSTAT', (id, h) => {
               const st = getHandle(h);
               if (!st) return sftp.status(id, STATUS_CODE.FAILURE);

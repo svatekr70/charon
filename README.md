@@ -56,6 +56,13 @@ předlohy vozí i zpátky.
 | Kódování názvů a časový posun u starších FTP | ✅ |
 | Hromadné přejmenování s náhledem | ✅ |
 | Otevření Terminálu v aktuální cestě | ✅ |
+| Akce po vyprázdnění fronty | ✅ |
+| Přenos jen nových a změněných souborů | ✅ |
+| Kopie, symlink a ruční čas na serveru | ✅ |
+| Editor podle přípony | ✅ |
+| Záloha přepsaných souborů | ✅ |
+| Nastavitelné keepalive a timeouty | ✅ |
+| Textový režim a konverze konců řádků | ✅ |
 
 Nepodporuje SCP, WebDAV ani S3 — relace v těchto protokolech se při importu
 zobrazí, ale nejdou naimportovat.
@@ -420,6 +427,33 @@ cizího shellu a heslo bychom tam stejně nedostali. Název složky se uzavírá
 apostrofů; že z něj nemůže vzniknout příkaz, hlídá `test/terminal.test.js`
 skutečným `/bin/sh`.
 
+## Drobné operace na serveru
+
+V kontextovém menu serverového panelu:
+
+- **Duplikovat na serveru** — kopie bez stahování. Zkusí se `cp` přes shell,
+  takže data server vůbec neopustí. Když shell není k dispozici (nebo je SFTP
+  uzavřené v jiném kořeni než shell), kopie proteče přes tento počítač a řekne
+  se to.
+- **Vytvořit odkaz** — symbolický odkaz. Jen SFTP; FTP na to nemá příkaz.
+- **Změnit čas změny** — ruční nastavení razítka, i pro víc položek naráz.
+
+## Editor podle přípony
+
+V **Nastavení → Editor** se dají zapsat pravidla `maska = aplikace` oddělená
+svislítkem, třeba `*.png; *.jpg = Preview | *.sql = TablePlus`. Platí první,
+které sedne, takže obecné patří nakonec. Bez pravidla se použije výchozí
+editor; bez něj rozhodne systém — u obrázku nebo PDF je to jediné rozumné.
+
+## Keepalive a timeouty
+
+**Nastavení → Síť**. Keepalive drží spojení při nečinnosti; `0` ho vypne.
+Některé servery ho totiž nesnesou a spojení kvůli němu naopak zavřou — když
+vám relace padá právě při nečinnosti, zkuste nulu.
+
+Aktivní režim FTP (`PORT`/`EPRT`) Charon **neumí**: knihovna, na které stojí
+FTP, implementuje jen pasivní režim. Anonymní přihlášení zaškrtnete u relace.
+
 ## Klávesové zkratky
 
 | Klávesa | Akce |
@@ -518,6 +552,46 @@ na serveru — takže se řídí pevnou hodnotou vedle.
 Práva se nastavují až na konečné cestě, aby to dopadlo stejně s dočasným názvem
 i bez něj. Když je server nastavit neumí (starší FTP bez `SITE CHMOD`), přenos
 kvůli tomu neselže a jen se to připíše k položce.
+
+## Textový režim
+
+**Nastavení → Přenosy → Textový režim**: maska souborů, kterých se to týká,
+a jaké konce řádků má mít soubor na serveru. Při stažení se sjednocuje vždycky
+na `LF` (konvence macOS), při nahrání podle volby.
+
+Skript s `CRLF` se na Unixu neprovede a `.bat` s `LF` zase na Windows —
+tohle je jediný způsob, jak to řešit jinak než ručně.
+
+Dvě věci, které z toho plynou:
+
+- **Navazování přerušeného přenosu se v textovém režimu nepoužije.** Po převodu
+  neodpovídá počet bajtů zdroji, takže „dopiš od pozice N" by soubor rozsypalo.
+  Soubor se radši přenese celý.
+- Soubor má na druhé straně jinou velikost, proto se u něj *jen nové a změněné*
+  neřídí velikostí, ale jen časem změny. Jinak by se přenášel pořád dokola.
+
+Binární soubory, které se do masky připletou, se nepoškodí: osamocené `CR` se
+nemaže a žádný jiný bajt se nemění. Ale masku je stejně lepší psát úzce.
+
+## Záloha před přepsáním
+
+Koš na serveru řeší mazání, tohle přepis — druhý způsob, jak přijít o data,
+a na rozdíl od mazání se děje bez ptaní pokaždé, když nahrajete novější verzi.
+V **Nastavení → Přenosy** se dá zvolit odložení vedle jako `.bak-datum`, nebo
+přesun do koše na serveru.
+
+Záloha se dělá jen při plném nahrání; při navazování rozepsaného přenosu ne —
+tam už je stejně přepsáno. Když se nepovede, přenos kvůli tomu neselže a jen
+se to připíše k položce.
+
+## Po dokončení fronty
+
+Vpravo v hlavičce fronty je volba **Po dokončení**: nic, upozornit, odpojit,
+uspat Mac. Rozhoduje se o ní ve chvíli, kdy se pouští velký přenos, proto je
+u fronty a ne schovaná v nastavení.
+
+Odpojení ani uspání se neprovede, když něco selhalo — po chybě chce člověk
+vidět, co se stalo, ne najít ráno uspaný počítač.
 
 ## Omezení rychlosti
 
@@ -753,6 +827,19 @@ npm test
   a pořadí kroků, ve kterém se nic nepřepíše
 - `test/terminal.test.js` — uzavírání cesty do apostrofů. Ověřuje skutečný
   `/bin/sh`, že ze složky `'; touch OVLADNUTO` vznikne argument, ne příkaz
+- `test/eol.test.js` — převod konců řádků, hlavně na hranicích mezi kusy dat:
+  když jeden skončí `CR` a další začne `LF`, patří k sobě. Testuje se i po
+  jednotlivých bajtech
+- `test/textmode.test.js` — textový režim při skutečném přenosu: že se použije
+  jen na masku, že se u něj nenavazuje a že binární soubor přežije
+- `test/backup.test.js` — záloha před přepsáním; hlavně že selhání zálohy
+  nezastaví přenos a že u nového souboru není co zálohovat
+- `test/queuedone.test.js` — akce po dokončení fronty. Testuje se hlavně, kdy
+  se hlásit **nemá**: po prázdném kliknutí a na pauze
+- `test/fileops.test.js` — kopie, odkaz a ruční čas proti skutečnému serveru,
+  včetně záskoku, když shell cestu nevidí
+- `test/network.test.js` — keepalive, timeouty a anonymní přihlášení; nula
+  musí opravdu vypínat, ne se spolknout jako „nezadáno"
 - `test/session.test.js` — správce záložek: pořadí, přepínání a úklid
 - `test/editconflict.test.js` — detekce cizí změny při ukládání z editoru
 - `test/properties.test.js` — rekurzivní práva a kontrolní součty proti

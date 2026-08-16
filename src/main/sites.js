@@ -94,6 +94,7 @@ class SiteStore {
       tlsFingerprint: existing ? existing.tlsFingerprint || '' : '',
       // Vizuální pojistka: barva a poznámka, aby se produkce nepletla s testem.
       // Jen pro FTP: starší servery neumí UTF-8 a hlásí čas v místní zóně.
+      anonymous: Boolean(site.anonymous),
       encoding: site.encoding || 'auto',
       timeShiftMinutes: Number(site.timeShiftMinutes) || 0,
       color: site.color || '',

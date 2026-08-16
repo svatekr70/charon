@@ -55,6 +55,9 @@ contextBridge.exposeInMainWorld('api', {
     rename: (sid, from, to) => invoke('remote:rename', { sid, from, to }),
     chmod: (sid, remotePath, mode) => invoke('remote:chmod', { sid, remotePath, mode }),
     remove: (sid, paths, permanent) => invoke('remote:delete', { sid, paths, permanent: Boolean(permanent) }),
+    copy: (sid, from, to) => invoke('remote:copy', { sid, from, to }),
+    symlink: (sid, target, linkPath) => invoke('remote:symlink', { sid, target, linkPath }),
+    touch: (sid, paths, mtime) => invoke('remote:touch', { sid, paths, mtime }),
     dirSize: (sid, path) => invoke('remote:dirSize', { sid, path }),
     properties: (sid, paths) => invoke('remote:properties', { sid, paths }),
     applyProperties: (sid, opts) => invoke('remote:applyProperties', { sid, ...opts }),
@@ -76,8 +79,8 @@ contextBridge.exposeInMainWorld('api', {
     dirSize: (p) => invoke('local:dirSize', p),
   },
   transfer: {
-    upload: (sid, items, remoteDir, mask) => invoke('transfer:upload', { sid, items, remoteDir, mask }),
-    download: (sid, items, localDir, mask) => invoke('transfer:download', { sid, items, localDir, mask }),
+    upload: (sid, items, remoteDir, mask, onlyNewer) => invoke('transfer:upload', { sid, items, remoteDir, mask, onlyNewer }),
+    download: (sid, items, localDir, mask, onlyNewer) => invoke('transfer:download', { sid, items, localDir, mask, onlyNewer }),
     move: (sid, items, targetDir, from, mask) => invoke('transfer:move', { sid, items, targetDir, from, mask }),
   },
   find: {

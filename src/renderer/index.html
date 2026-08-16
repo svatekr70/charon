@@ -96,6 +96,14 @@
         <span id="queue-summary" class="muted">prázdná</span>
         <span id="queue-speed" class="muted"></span>
         <span class="spacer"></span>
+        <label class="q-after">Po dokončení
+          <select id="q-after">
+            <option value="none">nic</option>
+            <option value="notify">upozornit</option>
+            <option value="disconnect">odpojit</option>
+            <option value="sleep">uspat Mac</option>
+          </select>
+        </label>
         <button id="q-pause">⏸ Pauza</button>
         <button id="q-resume" hidden>▶ Pokračovat</button>
         <button id="q-cancel">✕ Zrušit vše</button>
@@ -128,6 +136,7 @@
         <label>Port<input name="port" type="number" min="1" max="65535" /></label>
         <label>Uživatel<input name="username" /></label>
         <label>Heslo<input name="password" type="password" placeholder="beze změny" /></label>
+        <label class="check" data-when="ftp" hidden><input type="checkbox" name="anonymous" /> Anonymní přihlášení</label>
         <label data-when="ftp" hidden>Šifrování
           <select name="ftps"><option value="none">Žádné</option><option value="explicit">Explicitní TLS</option><option value="implicit">Implicitní TLS</option></select>
         </label>
@@ -309,6 +318,14 @@
       </label>
       <p class="muted">Název aplikace tak, jak se jmenuje ve složce Aplikace. Soubor se stáhne do dočasné složky, otevře v editoru a při každém uložení se sám nahraje zpět.</p>
 
+      <label>Podle přípony
+        <input name="editorRules" spellcheck="false"
+               placeholder="*.png; *.jpg = Preview | *.sql = TablePlus" />
+      </label>
+      <p class="muted">Pravidla oddělená svislítkem, v každém <code>maska = aplikace</code>.
+        Platí první, které sedne, takže obecné patří nakonec. Bez pravidla se použije editor
+        výše; bez něj rozhodne systém — u obrázku nebo PDF je to jediné rozumné.</p>
+
       <h3>Přenosy</h3>
       <div class="grid">
         <label>Souběžných přenosů
@@ -331,6 +348,35 @@
         dokončení. Na živém webu tak návštěvník nikdy netrefí poloviční soubor. Stojí to jedno
         přejmenování navíc na soubor — u tisíců drobných souborů přes pomalou linku se vyplatí
         nastavit spodní hranici.</p>
+
+      <label>Textový režim — maska souborů
+        <input name="textMask" spellcheck="false" placeholder="prázdné = vypnuto; např. *.php; *.txt; *.sh" />
+      </label>
+      <div class="grid">
+        <label>Konce řádků na serveru
+          <select name="serverEol">
+            <option value="lf">LF (Unix, běžné servery)</option>
+            <option value="crlf">CRLF (Windows)</option>
+          </select>
+        </label>
+      </div>
+      <p class="muted">U souborů, které sednou na masku, se převedou konce řádků: při stažení
+        vždycky na <code>LF</code> (konvence macOS), při nahrání podle volby vedle. Skript
+        s <code>CRLF</code> se na Unixu neprovede a <code>.bat</code> s <code>LF</code>
+        zase na Windows. <b>Navazování přerušeného přenosu se v textovém režimu nepoužije</b> —
+        po převodu neodpovídá počet bajtů zdroji, takže dopisovat od poloviny nejde.</p>
+
+      <label>Před přepsáním souboru
+        <select name="backupOverwritten">
+          <option value="none">nic (rovnou přepsat)</option>
+          <option value="suffix">odložit vedle jako .bak-datum</option>
+          <option value="trash">přesunout do koše na serveru</option>
+        </select>
+      </label>
+      <p class="muted">Koš řeší mazání, tohle přepis — druhý způsob, jak přijít o data,
+        a na rozdíl od mazání se stane bez ptaní pokaždé, když nahrajete novější verzi.
+        Záloha se dělá jen při plném nahrání; při navazování rozepsaného přenosu ne,
+        tam už je stejně přepsáno.</p>
 
       <label>Práva nahraných souborů
         <select name="uploadPerms">
@@ -360,6 +406,19 @@
       <p class="muted">Uplatní se na každý přenos přes F5 a přetažení. Typicky
         <code>| .DS_Store; .git/; node_modules/</code> — svislítko na začátku znamená
         „ber vše kromě". Kolik souborů maska vynechala, se vždycky napíše do stavového řádku.</p>
+
+      <h3>Síť</h3>
+      <div class="grid">
+        <label>Keepalive (s)
+          <input name="keepaliveSeconds" type="number" min="0" max="600" placeholder="10" />
+        </label>
+        <label>Limit na navázání spojení (s)
+          <input name="connectTimeoutSeconds" type="number" min="5" max="300" placeholder="25" />
+        </label>
+      </div>
+      <p class="muted">Keepalive drží spojení při nečinnosti; <code>0</code> ho vypne.
+        Některé servery ho totiž nesnesou a spojení kvůli němu naopak zavřou —
+        když vám relace padá právě při nečinnosti, zkuste nulu.</p>
 
       <h3>Vzhled</h3>
       <label>Motiv
@@ -647,6 +706,10 @@
       </label>
       <p class="muted">Výluka za svislítkem má přednost. Na složky platí jen výluky —
         maska <code>*.php</code> tedy nezakáže vstup do podsložek.</p>
+      <label class="check"><input type="checkbox" name="onlyNewer" /> Jen nové a změněné soubory</label>
+      <p class="muted">Porovná se velikost a čas změny s druhou stranou; shodné a starší
+        soubory se do fronty vůbec nedostanou. Když se stav cíle nedá zjistit, soubor se
+        přenese — přeskočit něco, o čem nic nevíme, by znamenalo tvářit se, že je hotovo.</p>
       <label class="check"><input type="checkbox" name="asDefault" /> Uložit masku jako výchozí pro všechny přenosy</label>
       <menu>
         <button value="cancel">Zrušit</button>

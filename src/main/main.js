@@ -1,7 +1,7 @@
 'use strict';
 
 const {
-  app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme, clipboard,
+  app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme, clipboard, Notification,
 } = require('electron');
 const fs = require('fs');
 const fsp = fs.promises;
@@ -45,6 +45,18 @@ let settings = {
   uploadPerms: 'keep', uploadFileMode: '644', uploadDirMode: '755',
   cacheListings: true,
   collapsedFolders: [],
+  // Co udělat, až fronta dojede: 'none' | 'notify' | 'disconnect' | 'sleep'.
+  queueDoneAction: 'none',
+  // Čím otevřít soubor podle názvu; první sedící pravidlo vyhrává.
+  editorRules: [],
+  // Co s původním souborem před přepsáním: 'none' | 'suffix' | 'trash'.
+  backupOverwritten: 'none',
+  // Síť: keepalive v sekundách (0 vypíná) a limit na navázání spojení.
+  keepaliveSeconds: 10,
+  connectTimeoutSeconds: 25,
+  // Textový režim: kterých souborů se týká a jaké konce řádků chce server.
+  textMask: '',
+  serverEol: 'lf',
 };
 
 // ---------------------------------------------------------------- pomocné
@@ -68,6 +80,24 @@ function makeAdapter(protocol) {
  * neptáme znovu — jen zkontrolujeme, že sedí. Když ne, spojení se neotevře;
  * ptát se tady podruhé by bylo matoucí.
  */
+/**
+ * Doplní do konfigurace to, co je společné pro všechna spojení.
+ *
+ * Keepalive i timeout jsou v nastavení, ne u relace: potíž s nimi bývá
+ * v síti mezi počítačem a serverem, ne v jednom konkrétním serveru.
+ */
+function withNetwork(cfg) {
+  const keep = settings.keepaliveSeconds;
+  return {
+    ...cfg,
+    keepaliveMs: keep === 0 ? 0 : (Number(keep) || 10) * 1000,
+    connectTimeoutMs: (Number(settings.connectTimeoutSeconds) || 25) * 1000,
+    // Anonymní přihlášení je jen zavedená dvojice jméno/heslo.
+    username: cfg.anonymous ? 'anonymous' : cfg.username,
+    password: cfg.anonymous ? 'anonymous@' : cfg.password,
+  };
+}
+
 async function openAdapterFor(config) {
   const a = makeAdapter(config.protocol);
   const hooks = config.protocol === 'ftp'
@@ -76,7 +106,7 @@ async function openAdapterFor(config) {
       verifyHostKey: makeHostKeyHook(config).hook,
       verifyTunnelHostKey: config.tunnelHost ? makeHostKeyHook(tunnelCfgOf(config)).hook : undefined,
     };
-  await a.connect(config, hooks);
+  await a.connect(withNetwork(config), hooks);
   return a;
 }
 
@@ -246,7 +276,7 @@ async function connectVerified(cfg, siteId) {
       : { verifyHostKey: hostKey.hook, verifyTunnelHostKey: tunnelKey ? tunnelKey.hook : undefined };
 
     try {
-      await adapter.connect(effective, hooks);
+      await adapter.connect(withNetwork(effective), hooks);
       return { adapter, config: effective };
     } catch (err) {
       await adapter.disconnect().catch(() => {});
@@ -333,7 +363,64 @@ function sessionDeps() {
     askEditOverwrite: (sid, info) => prompts.ask(win, 'editconflict', { sid, ...info }, { action: 'skip' }),
     trashLocal: (p) => shell.trashItem(p),
     rememberQueue: (key, items, name) => queueStore.remember(key, items, { name }),
+    onQueueDrained: (session, souhrn) => afterQueue(session, souhrn),
   };
+}
+
+/**
+ * Co udělat, až fronta dojede.
+ *
+ * Odpojení i uspání jsou nevratné zásahy, takže se dělají jen na výslovné
+ * přání a nikdy, když něco selhalo — po chybě chce člověk vidět, co se stalo,
+ * ne najít uspaný počítač.
+ */
+async function afterQueue(session, souhrn) {
+  const akce = settings.queueDoneAction || 'none';
+  if (akce === 'none' || (!souhrn.done && !souhrn.failed)) return;
+
+  const kde = session.describe().name;
+  const co = `${souhrn.done} ${souhrn.done === 1 ? 'položka' : souhrn.done < 5 ? 'položky' : 'položek'}`;
+  const potiz = souhrn.failed
+    ? `, ${souhrn.failed} ${souhrn.failed === 1 ? 'selhala' : 'selhalo'}`
+    : '';
+
+  if (Notification.isSupported()) {
+    new Notification({
+      title: souhrn.failed ? 'Přenosy skončily s chybou' : 'Přenosy dokončeny',
+      body: `${kde}: ${co}${potiz}`,
+    }).show();
+  }
+  log(souhrn.failed ? 'warn' : 'ok', `${kde}: fronta dojela — ${co}${potiz}`);
+
+  // Po chybě se neodpojujeme ani neusínáme; to by chybu jen schovalo.
+  if (souhrn.failed) return;
+
+  if (akce === 'disconnect') {
+    await manager.remove(session.id).catch(() => {});
+    sendSessions();
+    log('ok', `${kde}: odpojeno po dokončení fronty`);
+  } else if (akce === 'sleep') {
+    log('ok', 'Usínám po dokončení fronty…');
+    // Necháme hlášku doběhnout do okna, ať je po probuzení vidět, co se stalo.
+    setTimeout(() => { execFileAsync('pmset', ['sleepnow']).catch(() => {}); }, 1500);
+  }
+}
+
+/**
+ * Aplikace, ve které se má soubor otevřít.
+ *
+ * Pravidla se čtou odshora a platí první, které sedne — tak se dá obecné
+ * pravidlo nechat dole. Bez pravidel platí výchozí editor; bez něj rozhodne
+ * systém podle přípony, což je u obrázku či PDF to jediné rozumné.
+ */
+function editorFor(remotePath) {
+  const jmeno = posix.basename(remotePath);
+  for (const pravidlo of settings.editorRules || []) {
+    if (!pravidlo || !pravidlo.mask || !pravidlo.app) continue;
+    const m = compileMask(pravidlo.mask);
+    if (m && m.match(jmeno, false)) return pravidlo.app;
+  }
+  return settings.editor || undefined;
 }
 
 /** Relace, na kterou míří požadavek z okna. */
@@ -370,8 +457,22 @@ async function enqueueUpload(session, items, remoteDir, extra = {}, maskText = '
 
   // Příznaky (třeba moveFrom) musí být na položce hned při zařazení. Fronta
   // se rozeběhne okamžitě, takže dodatečné označení už nemusí stihnout.
-  const files = jobs.filter((x) => x.direction === 'up').map((j) => ({ ...j, ...extra }));
-  return { count: files.length, skipped: stats.skipped, ids: session.queue.add(files) };
+  const { onlyNewer: jenNove, ...priznaky } = extra;
+  let files = jobs.filter((x) => x.direction === 'up').map((j) => ({ ...j, ...priznaky }));
+  let unchanged = 0;
+  if (jenNove) {
+    const b = await session.transferPool().acquire();
+    try {
+      const res = await onlyNewer(b, files, { direction: 'up' });
+      files = res.jobs;
+      unchanged = res.skipped;
+    } finally {
+      session.transferPool().release(b);
+    }
+  }
+  return {
+    count: files.length, skipped: stats.skipped, unchanged, ids: session.queue.add(files),
+  };
 }
 
 /** Stažení vybraných vzdálených položek do lokální složky. */
@@ -385,8 +486,57 @@ async function enqueueDownload(session, items, localDir, extra = {}, maskText = 
     const localTarget = path.join(localDir, posix.basename(remotePath));
     await expandRemote(a, remotePath, localTarget, jobs, mask, stats);
   }
-  const files = jobs.map((j) => ({ ...j, ...extra }));
-  return { count: files.length, skipped: stats.skipped, ids: session.queue.add(files) };
+  const { onlyNewer: jenNove, ...priznaky } = extra;
+  let files = jobs.map((j) => ({ ...j, ...priznaky }));
+  let unchanged = 0;
+  if (jenNove) {
+    const res = await onlyNewer(a, files, { direction: 'down' });
+    files = res.jobs;
+    unchanged = res.skipped;
+  }
+  return {
+    count: files.length, skipped: stats.skipped, unchanged, ids: session.queue.add(files),
+  };
+}
+
+/**
+ * Vyřadí soubory, které na druhé straně už jsou stejné.
+ *
+ * Porovnává se velikost a čas změny se stejnou tolerancí jako u synchronizace
+ * — FTP hlásí čas často jen na minuty. Když se stav cíle nedá zjistit, položka
+ * ve frontě zůstává: přeskočit soubor, o kterém nic nevíme, by znamenalo
+ * tvářit se, že je přenesený.
+ */
+async function onlyNewer(adapter, jobs, { direction }) {
+  const tolerance = adapter.protocol === 'ftp' ? 61000 : 2000;
+  // V textovém režimu se mění konce řádků, takže velikost na obou stranách
+  // sedět nemůže. U takových souborů rozhoduje jen čas — jinak by se pořád
+  // dokola přenášely znovu.
+  const textMask = compileMask(settings.textMask || '');
+  const out = [];
+  let skipped = 0;
+
+  for (const j of jobs) {
+    try {
+      const [zdroj, cil] = direction === 'up'
+        ? [await fsp.stat(j.localPath), await adapter.stat(j.remotePath)]
+        : [await adapter.stat(j.remotePath), await fsp.stat(j.localPath)];
+
+      const jeText = textMask && textMask.match(posix.basename(j.remotePath), false);
+      const zdrojCas = zdroj.mtimeMs ?? zdroj.mtime;
+      const cilCas = cil.mtimeMs ?? cil.mtime;
+      const stejne = (jeText || zdroj.size === cil.size)
+        && zdrojCas && cilCas && Math.abs(zdrojCas - cilCas) <= tolerance;
+      // Starší zdroj taky nemá co přepisovat — od toho je „jen nové a změněné".
+      const starsi = zdrojCas && cilCas && cilCas - zdrojCas > tolerance;
+
+      if (stejne || starsi) { skipped += 1; continue; }
+    } catch {
+      // Cíl neexistuje (nebo se nedá přečíst) — tedy nový soubor, přenášíme.
+    }
+    out.push(j);
+  }
+  return { jobs: out, skipped };
 }
 
 /**
@@ -690,6 +840,37 @@ function registerIpc() {
     sessionOf(sid).listCache.clear();
     return true;
   });
+  /** Kopie souboru na serveru — bez stahování, když to server umožní. */
+  handle('remote:copy', async ({ sid, from, to }) => {
+    const session = sessionOf(sid);
+    const res = await session.requireBrowse().copy(from, to);
+    session.listCache.clear();
+    if (res && res.serverSide === false) {
+      log('warn', 'Server nepustil shell, kopie tekla přes tento počítač');
+    }
+    return res || {};
+  });
+
+  handle('remote:symlink', async ({ sid, target, linkPath }) => {
+    const session = sessionOf(sid);
+    await session.requireBrowse().symlink(target, linkPath);
+    session.listCache.clear();
+    return true;
+  });
+
+  /** Ruční nastavení času změny; v adaptéru už je kvůli synchronizaci. */
+  handle('remote:touch', async ({ sid, paths, mtime }) => {
+    const session = sessionOf(sid);
+    const a = session.requireBrowse();
+    // Adaptéry pracují s milisekundami, stejně jako `fs`.
+    const failed = [];
+    for (const p of paths) {
+      try { await a.utimes(p, mtime, mtime); } catch (err) { failed.push(`${p}: ${err.message}`); }
+    }
+    session.listCache.clear();
+    return { count: paths.length - failed.length, failed };
+  });
+
   handle('remote:dirSize', async ({ sid, path: p }) => remoteDirSize(browseOf(sid), p));
 
   /** Podklady pro dialog vlastností. */
@@ -888,14 +1069,18 @@ function registerIpc() {
   /** `mask === undefined` znamená „použij výchozí z nastavení". */
   const effectiveMask = (mask) => (mask === undefined ? settings.transferMask || '' : mask);
 
-  handle('transfer:upload', async ({ sid, items, remoteDir, mask }) => {
-    const { count, skipped } = await enqueueUpload(sessionOf(sid), items, remoteDir, {}, effectiveMask(mask));
-    return { count, skipped };
+  handle('transfer:upload', async ({ sid, items, remoteDir, mask, onlyNewer }) => {
+    const { count, skipped, unchanged } = await enqueueUpload(
+      sessionOf(sid), items, remoteDir, { onlyNewer: Boolean(onlyNewer) }, effectiveMask(mask),
+    );
+    return { count, skipped, unchanged };
   });
 
-  handle('transfer:download', async ({ sid, items, localDir, mask }) => {
-    const { count, skipped } = await enqueueDownload(sessionOf(sid), items, localDir, {}, effectiveMask(mask));
-    return { count, skipped };
+  handle('transfer:download', async ({ sid, items, localDir, mask, onlyNewer }) => {
+    const { count, skipped, unchanged } = await enqueueDownload(
+      sessionOf(sid), items, localDir, { onlyNewer: Boolean(onlyNewer) }, effectiveMask(mask),
+    );
+    return { count, skipped, unchanged };
   });
 
   handle('transfer:move', async ({ sid, items, targetDir, from, mask }) => {
@@ -963,7 +1148,7 @@ function registerIpc() {
         // porovnání ukáže totéž a nikdo nebude vědět proč.
         case 'touchRemote':
           try {
-            await a.utimes(act.remotePath, act.mtime / 1000, act.mtime / 1000);
+            await a.utimes(act.remotePath, act.mtime, act.mtime);
             touched += 1;
           } catch (err) {
             failed.push(`${act.rel}: ${err.message}`);
@@ -994,7 +1179,7 @@ function registerIpc() {
   handle('edit:open', async ({ sid, remotePath }) => {
     const session = sessionOf(sid);
     session.requireBrowse();
-    return session.editWatcher.open(remotePath, { editor: settings.editor || undefined });
+    return session.editWatcher.open(remotePath, { editor: editorFor(remotePath) });
   });
   handle('edit:stop', async ({ sid, remotePath }) => { await sessionOf(sid).editWatcher.stop(remotePath); return true; });
   handle('edit:stopAll', async ({ sid }) => { await sessionOf(sid).editWatcher.stopAll(); return true; });

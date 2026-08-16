@@ -75,6 +75,10 @@ const DEFAULT_SETTINGS = {
   editor: '', doubleClick: 'edit', typeAhead: true, colOwner: false, colGroup: false,
   transferMask: '', maxConcurrent: 3, speedLimitKb: 0, commands: [], workspaces: [],
   collapsedFolders: [],
+  queueDoneAction: 'none',
+  editorRules: [], backupOverwritten: 'none',
+  keepaliveSeconds: 10, connectTimeoutSeconds: 25,
+  textMask: '', serverEol: 'lf',
   cacheListings: true,
   theme: 'system',
   uploadPerms: 'keep', uploadFileMode: '644', uploadDirMode: '755',
@@ -599,8 +603,12 @@ function showBookmarkMenu(side, anchor) {
  * @param {string}  [opts.mask]   maska jen pro tenhle přenos; když se nepředá,
  *   použije se výchozí z nastavení
  * @param {string}  [opts.target] jiná cílová složka než ta otevřená v panelu
+ * @param {boolean} [opts.onlyNewer] vynechat soubory, které jsou na druhé
+ *   straně shodné nebo novější
  */
-async function transfer(from, to, { move = false, mask, target } = {}) {
+async function transfer(from, to, {
+  move = false, mask, target, onlyNewer = false,
+} = {}) {
   if (!state.connected) return setLog('error', 'Nejste připojeni');
   const items = selectedEntries(from).map((e) => fullPath(from, e));
   if (!items.length) return setLog('warn', 'Nic není vybráno');
@@ -619,8 +627,8 @@ async function transfer(from, to, { move = false, mask, target } = {}) {
   }
 
   const r = from === 'local'
-    ? await call(window.api.transfer.upload(sid(), items, targetDir, mask))
-    : await call(window.api.transfer.download(sid(), items, targetDir, mask));
+    ? await call(window.api.transfer.upload(sid(), items, targetDir, mask, onlyNewer))
+    : await call(window.api.transfer.download(sid(), items, targetDir, mask, onlyNewer));
   if (!r) return undefined;
 
   // Kolik toho maska zahodila, se musí říct — jinak tiché vynechání vypadá,
@@ -628,8 +636,14 @@ async function transfer(from, to, { move = false, mask, target } = {}) {
   const skipped = r.skipped
     ? `, maska vynechala ${r.skipped} ${plural(r.skipped, 'položku', 'položky', 'položek')}`
     : '';
-  if (r.count === 0 && r.skipped) setLog('warn', `Maska nepustila nic — vynecháno ${r.skipped}`);
-  else setLog('ok', `Zařazeno ${r.count} ${plural(r.count, 'soubor', 'soubory', 'souborů')} do fronty${skipped}`);
+  // Totéž platí pro vynechané shodné soubory — beze slova by to vypadalo,
+  // že se něco ztratilo.
+  const stejne = r.unchanged
+    ? `, ${r.unchanged} ${plural(r.unchanged, 'byl beze změny', 'byly beze změny', 'bylo beze změny')}`
+    : '';
+  if (r.count === 0 && r.unchanged) setLog('ok', `Nic k přenosu — ${r.unchanged} ${plural(r.unchanged, 'soubor je', 'soubory jsou', 'souborů je')} beze změny`);
+  else if (r.count === 0 && r.skipped) setLog('warn', `Maska nepustila nic — vynecháno ${r.skipped}`);
+  else setLog('ok', `Zařazeno ${r.count} ${plural(r.count, 'soubor', 'soubory', 'souborů')} do fronty${skipped}${stejne}`);
   return undefined;
 }
 
@@ -651,6 +665,7 @@ function openTransferOptions(from) {
     : `Přenáší se ${sel.length} ${plural(sel.length, 'položka', 'položky', 'položek')}`;
   xferForm.elements.target.value = to === 'local' ? state.local.path : state.remote.path;
   xferForm.elements.mask.value = state.settings.transferMask || '';
+  xferForm.elements.onlyNewer.checked = false;
   xferForm.elements.asDefault.checked = false;
   xferDlg.showModal();
   return undefined;
@@ -668,6 +683,7 @@ xferDlg.addEventListener('close', async () => {
   await transfer(from, from === 'local' ? 'remote' : 'local', {
     mask,
     target: xferForm.elements.target.value.trim(),
+    onlyNewer: xferForm.elements.onlyNewer.checked,
   });
 });
 
@@ -779,6 +795,13 @@ function showContextMenu(side, x, y) {
     items.push(null);
     if (sel.length === 1) items.push({ label: 'Přejmenovat…', key: 'F2', fn: () => renameSelected(side) });
     if (sel.length > 1) items.push({ label: `Hromadně přejmenovat ${sel.length} položek…`, fn: () => openBulkRename(side) });
+    if (side === 'remote' && sel.length === 1 && sel[0].type !== 'd') {
+      items.push({ label: 'Duplikovat na serveru…', fn: () => duplicateRemote(sel[0]) });
+      items.push({ label: 'Vytvořit odkaz…', fn: () => makeSymlink(sel[0]) });
+    }
+    if (side === 'remote' && sel.length) {
+      items.push({ label: 'Změnit čas změny…', fn: () => touchRemote(sel) });
+    }
     const toTrash = side === 'local' || state.trash.enabled;
     items.push({
       label: `${toTrash ? 'Smazat do koše' : 'Smazat'} ${sel.length > 1 ? `(${sel.length})` : ''}`,
@@ -1785,6 +1808,76 @@ async function refreshSites(selectId) {
 }
 
 /**
+ * Kopie souboru na serveru.
+ *
+ * Přes shell se data serveru vůbec neopustí. Když shell není, protéká kopie
+ * přes nás — aplikace to v takovém případě řekne, ať se člověk u velkého
+ * souboru nediví, proč to trvá.
+ */
+async function duplicateRemote(entry) {
+  const zaklad = entry.name;
+  const navrh = zaklad.includes('.')
+    ? `${zaklad.slice(0, zaklad.lastIndexOf('.'))} (kopie)${zaklad.slice(zaklad.lastIndexOf('.'))}`
+    : `${zaklad} (kopie)`;
+
+  const jmeno = await promptDialog('Duplikovat na serveru', 'Název kopie', navrh);
+  if (!jmeno || jmeno === entry.name) return;
+  if (jmeno.includes('/')) return setLog('error', 'Název nesmí obsahovat lomítko');
+
+  const dir = state.remote.path;
+  const r = await call(window.api.remote.copy(sid(), `${dir}/${entry.name}`.replace('//', '/'), `${dir}/${jmeno}`.replace('//', '/')));
+  if (!r) return;
+  await loadPane('remote', dir, { refresh: true });
+  setLog('ok', `Vytvořena kopie ${jmeno}${r.serverSide === false ? ' (přes tento počítač)' : ''}`);
+}
+
+/** Symbolický odkaz na serveru. */
+async function makeSymlink(entry) {
+  const jmeno = await promptDialog('Vytvořit odkaz', 'Název odkazu', `${entry.name}.odkaz`);
+  if (!jmeno) return;
+  if (jmeno.includes('/')) return setLog('error', 'Název nesmí obsahovat lomítko');
+
+  const cil = await promptDialog('Vytvořit odkaz', 'Kam má ukazovat', entry.name);
+  if (!cil) return;
+
+  const dir = state.remote.path;
+  const r = await call(window.api.remote.symlink(sid(), cil, `${dir}/${jmeno}`.replace('//', '/')));
+  if (!r) return;
+  await loadPane('remote', dir, { refresh: true });
+  setLog('ok', `Odkaz ${jmeno} → ${cil} vytvořen`);
+}
+
+/** Ruční nastavení času změny. */
+async function touchRemote(entries) {
+  const prvni = entries[0];
+  const now = prvni.mtime ? new Date(prvni.mtime) : new Date();
+  const p2 = (n) => String(n).padStart(2, '0');
+  const navrh = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())} `
+    + `${p2(now.getHours())}:${p2(now.getMinutes())}`;
+
+  const zadano = await promptDialog(
+    entries.length === 1 ? `Čas souboru ${prvni.name}` : `Čas ${entries.length} položek`,
+    'Datum a čas ve tvaru RRRR-MM-DD HH:MM',
+    navrh,
+  );
+  if (!zadano) return;
+
+  // Zadaný čas bereme v místním pásmu — to je to, co člověk vidí ve sloupci.
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(zadano.trim());
+  if (!m) return setLog('error', 'Čas musí být ve tvaru RRRR-MM-DD HH:MM');
+  const kdy = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+  if (Number.isNaN(kdy.getTime())) return setLog('error', 'Takový čas neexistuje');
+
+  const paths = entries.map((e) => fullPath('remote', e));
+  const r = await call(window.api.remote.touch(sid(), paths, kdy.getTime()));
+  if (!r) return;
+  await loadPane('remote', state.remote.path, { refresh: true });
+  setLog(r.failed.length ? 'warn' : 'ok',
+    `Čas nastaven u ${r.count} ${plural(r.count, 'položky', 'položek', 'položek')}`
+    + (r.failed.length ? `; ${r.failed.length} se nepovedlo: ${r.failed[0]}` : ''));
+}
+
+/**
  * Otevře Terminál v aktuální cestě.
  *
  * U serveru se příkaz `ssh` jen připraví do schránky. Spustit ho za uživatele
@@ -2376,6 +2469,7 @@ function openSiteDialog(site) {
   f.useRecycleBin.checked = site ? site.useRecycleBin !== false : true;
   f.recycleBinPath.value = site?.recycleBinPath || '';
   f.recycleBinDays.value = site?.recycleBinDays || '';
+  f.anonymous.checked = Boolean(site?.anonymous);
   f.encoding.value = site?.encoding || 'auto';
   f.timeShiftMinutes.value = site?.timeShiftMinutes || '';
   f.color.value = site?.color || '';
@@ -2428,6 +2522,7 @@ siteDlg.addEventListener('close', async () => {
     useRecycleBin: f.useRecycleBin.checked,
     recycleBinPath: f.recycleBinPath.value.trim(),
     recycleBinDays: Number(f.recycleBinDays.value) || 0,
+    anonymous: f.anonymous.checked,
     encoding: f.encoding.value,
     timeShiftMinutes: Number(f.timeShiftMinutes.value) || 0,
     color: f.color.value,
@@ -2966,6 +3061,13 @@ $('#btn-settings').addEventListener('click', () => {
   f.tempNameMinKb.value = cur.tempNameMinKb || 0;
   f.doubleClick.value = cur.doubleClick;
   f.theme.value = cur.theme || 'system';
+  f.textMask.value = cur.textMask || '';
+  f.serverEol.value = cur.serverEol || 'lf';
+  f.backupOverwritten.value = cur.backupOverwritten || 'none';
+  f.keepaliveSeconds.value = cur.keepaliveSeconds === 0 ? '0' : (cur.keepaliveSeconds || '');
+  f.connectTimeoutSeconds.value = cur.connectTimeoutSeconds || '';
+  // Pravidla se zapisují jako text; pole objektů by se do jednoho řádku nevešlo.
+  f.editorRules.value = (cur.editorRules || []).map((r) => `${r.mask} = ${r.app}`).join(' | ');
   f.uploadPerms.value = cur.uploadPerms || 'keep';
   f.uploadFileMode.value = cur.uploadFileMode || '';
   f.uploadDirMode.value = cur.uploadDirMode || '';
@@ -2988,6 +3090,20 @@ setDlg.addEventListener('close', async () => {
     tempNameMinKb: Math.max(0, Number(f.tempNameMinKb.value) || 0),
     doubleClick: f.doubleClick.value,
     theme: f.theme.value,
+    textMask: f.textMask.value.trim(),
+    serverEol: f.serverEol.value,
+    backupOverwritten: f.backupOverwritten.value,
+    // Nula je platná hodnota (vypnuto), takže se nesmí spolknout jako prázdno.
+    keepaliveSeconds: f.keepaliveSeconds.value === '' ? 10 : Number(f.keepaliveSeconds.value),
+    connectTimeoutSeconds: Number(f.connectTimeoutSeconds.value) || 25,
+    editorRules: f.editorRules.value.split('|')
+      .map((cast) => cast.trim())
+      .filter(Boolean)
+      .map((cast) => {
+        const i = cast.indexOf('=');
+        return i === -1 ? null : { mask: cast.slice(0, i).trim(), app: cast.slice(i + 1).trim() };
+      })
+      .filter((r) => r && r.mask && r.app),
     uploadPerms: f.uploadPerms.value,
     uploadFileMode: f.uploadFileMode.value.trim(),
     uploadDirMode: f.uploadDirMode.value.trim(),
@@ -3003,7 +3119,19 @@ function applySettings(next) {
   $('#app').classList.toggle('c-owner', Boolean(state.settings.colOwner));
   $('#app').classList.toggle('c-group', Boolean(state.settings.colGroup));
   applyTheme(state.settings.theme);
+  $('#q-after').value = state.settings.queueDoneAction || 'none';
 }
+
+// Volba je schválně u fronty, ne schovaná v nastavení: rozhoduje se o ní
+// ve chvíli, kdy se pouští velký přenos.
+$('#q-after').addEventListener('change', async () => {
+  const saved = await call(window.api.settings.set({ queueDoneAction: $('#q-after').value }));
+  if (saved) {
+    state.settings = { ...state.settings, queueDoneAction: saved.queueDoneAction };
+    const popis = { none: 'nic', notify: 'upozornit', disconnect: 'odpojit', sleep: 'uspat Mac' };
+    setLog('ok', `Po dokončení fronty: ${popis[saved.queueDoneAction]}`);
+  }
+});
 
 /**
  * Nastaví motiv.
