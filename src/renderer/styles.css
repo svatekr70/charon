@@ -1,18 +1,56 @@
+/* Barvy jsou jen tady, a každá jen jednou.
+   `light-dark()` vybírá podle použitého color-scheme, takže přepnutí motivu
+   je jediná vlastnost na <html>: „systém" nechá rozhodnout systém, ruční
+   volba ho přebije v obou směrech. Zároveň se tím správně obarví i to, co
+   nekreslíme sami — posuvníky, zaškrtávátka, textová pole. */
 :root {
-  --bg: #1b1d23;
-  --bg-2: #22252d;
-  --bg-3: #2a2e38;
-  --line: #363b47;
-  --fg: #e4e7ee;
-  --fg-dim: #99a0b0;
-  --accent: #4c8dff;
-  --accent-2: #2f6fe0;
-  --ok: #47c26a;
-  --warn: #e0a33c;
-  --err: #e55b64;
+  color-scheme: light dark;
+
+  --bg: light-dark(#ffffff, #1b1d23);          /* seznamy a hlavní plocha */
+  --bg-2: light-dark(#f0f2f6, #22252d);        /* lišty, patičky, dialogy */
+  --bg-3: light-dark(#e3e7ee, #2a2e38);        /* ovládací prvky */
+  --line: light-dark(#cfd5e0, #363b47);
+  --fg: light-dark(#1a1d24, #e4e7ee);
+  --fg-dim: light-dark(#626b7b, #99a0b0);
+  --accent: light-dark(#1e63d6, #4c8dff);
+  --accent-2: light-dark(#1a56bd, #2f6fe0);
+  --on-accent: #ffffff;                        /* text na barevném podkladu */
+  --ok: light-dark(#1c7a3e, #47c26a);
+  --warn: light-dark(#8c5f08, #e0a33c);
+  --err: light-dark(#c22c2c, #e55b64);
+
+  --hover: light-dark(#d6dbe5, #333846);       /* tlačítko pod myší */
+  --row-alt: light-dark(rgba(16, 24, 40, .022), rgba(255, 255, 255, .018));
+  --row-hover: light-dark(rgba(16, 24, 40, .055), rgba(255, 255, 255, .05));
+  --sel-bg: light-dark(#cfe0fb, #35507e);      /* výběr v nezaostřeném panelu */
+  /* Plovoucí nabídka: ve světlém motivu bílá jako v systému, v tmavém
+     naopak světlejší než pozadí — jinak by splynula. */
+  --pop: light-dark(#ffffff, #2a2e38);
+
+  --dir: light-dark(#1a56bd, #8fb8ff);
+  --link: light-dark(#7a35b8, #c39bea);
+  --violet: light-dark(#7a35b8, #d0a5ff);
+  --ok-2: light-dark(#1c7a3e, #7fd79a);        /* na měkkém podkladu štítků */
+  --err-2: light-dark(#c22c2c, #ff9098);
+  --info: light-dark(#1e63d6, #7fb4ff);
+
+  --soft-ok: light-dark(#dcf0e3, #1f3a2b);
+  --soft-warn: light-dark(#faefd6, #3a3527);
+  --soft-err: light-dark(#fbe1e1, #3d262a);
+  --soft-info: light-dark(#dde8fb, #23384f);
+  --soft-violet: light-dark(#eee0fa, #40304a);
+
+  --shadow-dialog: light-dark(0 18px 50px rgba(16, 24, 40, .22), 0 20px 60px rgba(0, 0, 0, .55));
+  --shadow-menu: light-dark(0 12px 32px rgba(16, 24, 40, .18), 0 12px 32px rgba(0, 0, 0, .5));
+  --backdrop: light-dark(rgba(16, 24, 40, .3), rgba(0, 0, 0, .5));
+
   --row-h: 24px;
   font-size: 13px;
 }
+
+/* Vlastní volba v Nastavení → Vzhled. */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 * { box-sizing: border-box; }
 
@@ -44,9 +82,9 @@ button, select, input {
   border-radius: 6px; padding: 4px 9px;
 }
 button { cursor: pointer; }
-button:hover:not(:disabled) { background: #333846; }
+button:hover:not(:disabled) { background: var(--hover); }
 button:disabled { opacity: .45; cursor: default; }
-button.primary { background: var(--accent-2); border-color: var(--accent-2); }
+button.primary { background: var(--accent-2); border-color: var(--accent-2); color: var(--on-accent); }
 button.primary:hover:not(:disabled) { background: var(--accent); }
 button.icon { padding: 3px 7px; }
 select { min-width: 180px; }
@@ -75,7 +113,7 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
 .tab .name { overflow: hidden; text-overflow: ellipsis; }
 .tab .busy { color: var(--accent); font-size: 11px; font-variant-numeric: tabular-nums; }
 .tab .x { color: var(--fg-dim); font-size: 13px; padding: 0 2px; border-radius: 3px; }
-.tab .x:hover { color: var(--err); background: rgba(255,255,255,.08); }
+.tab .x:hover { color: var(--err); background: var(--row-hover); }
 .tab-add {
   padding: 6px 12px; background: var(--bg-2); border: none; color: var(--fg-dim);
   border-radius: 0; font-size: 14px; cursor: pointer;
@@ -125,20 +163,29 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
 .row .size.computed { color: var(--accent); }
 
 .list { flex: 1; overflow: auto; outline: none; }
+/* Zaostřený panel maluje výběr plnou barvou — pak musí zesvětlat i všechno,
+   co má vlastní barvu, jinak by se název složky ztratil v modré. */
 .list:focus-within .row.sel { background: var(--accent-2); }
+.list:focus-within .row.sel,
+.list:focus-within .row.sel .name,
+.list:focus-within .row.sel .size,
+.list:focus-within .row.sel .date,
+.list:focus-within .row.sel .perm,
+.list:focus-within .row.sel .owner,
+.list:focus-within .row.sel .group { color: var(--on-accent); }
 
 .row {
   height: var(--row-h); line-height: var(--row-h);
   font-size: 12.5px; white-space: nowrap; cursor: default;
 }
-.row:nth-child(even) { background: rgba(255,255,255,.018); }
-.row:hover { background: rgba(255,255,255,.05); }
-.row.sel { background: #35507e; }
+.row:nth-child(even) { background: var(--row-alt); }
+.row:hover { background: var(--row-hover); }
+.row.sel { background: var(--sel-bg); }
 .row .name { overflow: hidden; text-overflow: ellipsis; }
 .row .size, .row .perm { text-align: right; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
 .row .date { color: var(--fg-dim); font-variant-numeric: tabular-nums; font-size: 11.5px; }
-.row.dir .name { color: #8fb8ff; font-weight: 500; }
-.row.link .name { color: #c39bea; font-style: italic; }
+.row.dir .name { color: var(--dir); font-weight: 500; }
+.row.link .name { color: var(--link); font-style: italic; }
 .row.hidden-file { opacity: .55; }
 .row.drop-target { box-shadow: inset 0 0 0 2px var(--accent); }
 
@@ -185,15 +232,18 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
 /* -------------------------------------------------------------- status */
 .status { display: flex; align-items: center; gap: 10px; padding: 4px 10px; font-size: 11.5px; background: var(--bg); border-top: 1px solid var(--line); }
 .badge { padding: 1px 8px; border-radius: 10px; font-size: 11px; }
-.badge.off { background: #3a2c2f; color: var(--err); }
-.badge.on { background: #263a2c; color: var(--ok); }
-.badge.wait { background: #3a3527; color: var(--warn); }
+.badge.off { background: var(--soft-err); color: var(--err); }
+.badge.on { background: var(--soft-ok); color: var(--ok); }
+.badge.wait { background: var(--soft-warn); color: var(--warn); }
 .muted { color: var(--fg-dim); }
 .log-ok { color: var(--ok); } .log-error { color: var(--err); } .log-warn { color: var(--warn); }
 
 /* ------------------------------------------------------------- dialogy */
-dialog { border: none; border-radius: 12px; padding: 0; background: var(--bg-2); color: var(--fg); box-shadow: 0 20px 60px rgba(0,0,0,.55); max-width: 92vw; }
-dialog::backdrop { background: rgba(0,0,0,.5); }
+/* Dialog se nesmí přerůst přes okno — jinak zůstanou tlačítka pod hranou
+   obrazovky a nejde je zmáčknout. */
+dialog { border: none; border-radius: 12px; padding: 0; background: var(--bg-2); color: var(--fg);
+  box-shadow: var(--shadow-dialog); max-width: 92vw; max-height: 88vh; overflow: auto; }
+dialog::backdrop { background: var(--backdrop); }
 .dlg { padding: 18px 20px 14px; min-width: 460px; }
 .dlg.wide { min-width: 720px; }
 .dlg h2 { margin: 0 0 12px; font-size: 15px; }
@@ -205,9 +255,12 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 .dlg .row input { flex: 1; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
 .grid label.check { grid-column: 1 / -1; }
-menu { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 0 0; margin: 0; border-top: 1px solid var(--line); }
-code { font-family: "SF Mono", ui-monospace, monospace; background: var(--bg); padding: 1px 4px; border-radius: 3px; }
-.warn { background: #3a3527; color: var(--warn); padding: 8px 10px; border-radius: 6px; margin-bottom: 10px; font-size: 12px; }
+/* Lišta tlačítek zůstává vidět i u dlouhého dialogu, který se roluje. */
+menu { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 0 0; margin: 0;
+  border-top: 1px solid var(--line); position: sticky; bottom: -14px; background: var(--bg-2);
+  padding-bottom: 14px; margin-bottom: -14px; }
+code { font-family: "SF Mono", ui-monospace, monospace; background: var(--bg-3); padding: 1px 4px; border-radius: 3px; }
+.warn { background: var(--soft-warn); color: var(--warn); padding: 8px 10px; border-radius: 6px; margin-bottom: 10px; font-size: 12px; }
 
 .import-table, .sync-result { max-height: 330px; overflow: auto; border: 1px solid var(--line); border-radius: 7px; margin-bottom: 10px; }
 .import-table .ir, .sync-result .sr {
@@ -219,12 +272,12 @@ code { font-family: "SF Mono", ui-monospace, monospace; background: var(--bg); p
 .import-table .ir span, .sync-result .sr span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sync-result .sr { grid-template-columns: 22px 96px minmax(0,2fr) 82px minmax(0,1.3fr); }
 .tag { font-size: 10.5px; padding: 1px 6px; border-radius: 4px; background: var(--bg-3); color: var(--fg-dim); }
-.tag.up { background: #23384f; color: #7fb4ff; }
-.tag.down { background: #1f3a2b; color: #7fd79a; }
-.tag.del { background: #3d262a; color: #ff9098; }
-.tag.mk { background: #3a3527; color: var(--warn); }
-.tag.conflict { background: #40304a; color: #d0a5ff; }
-.tag.bad { background: #3d262a; color: #ff9098; }
+.tag.up { background: var(--soft-info); color: var(--info); }
+.tag.down { background: var(--soft-ok); color: var(--ok-2); }
+.tag.del { background: var(--soft-err); color: var(--err-2); }
+.tag.mk { background: var(--soft-warn); color: var(--warn); }
+.tag.conflict { background: var(--soft-violet); color: var(--violet); }
+.tag.bad { background: var(--soft-err); color: var(--err-2); }
 
 /* porovnání zdroje a cíle při konfliktu */
 .cmp { display: grid; grid-template-columns: 88px 1fr 1fr; gap: 1px; background: var(--line);
@@ -290,7 +343,7 @@ table.ph td:first-child { width: 150px; }
 .find-results .fr span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .find-results .fr .p { direction: rtl; text-align: left; font-family: "SF Mono", ui-monospace, monospace; font-size: 11.5px; }
 .find-results .fr .n { text-align: right; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
-.find-results .fr.dir .p { color: #8fb8ff; }
+.find-results .fr.dir .p { color: var(--dir); }
 
 details { margin: 4px 0 10px; }
 details > summary { cursor: pointer; font-size: 12px; color: var(--fg-dim);
@@ -308,10 +361,14 @@ details[open] > summary { color: var(--accent); }
 /* --------------------------------------------------- kontextové menu */
 .ctxmenu {
   position: fixed; z-index: 100; min-width: 190px; padding: 4px;
-  background: var(--bg-3); border: 1px solid var(--line); border-radius: 8px;
-  box-shadow: 0 12px 32px rgba(0,0,0,.5);
+  background: var(--pop); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: var(--shadow-menu);
+  /* Delší nabídka než okno se roluje; jinak by se horní položky ocitly nad
+     jeho hranou a nešly zmáčknout. */
+  max-height: calc(100vh - 16px); overflow: auto;
 }
 .ctxmenu button { display: block; width: 100%; text-align: left; background: none; border: none; border-radius: 5px; padding: 5px 10px; font-size: 12.5px; }
-.ctxmenu button:hover:not(:disabled) { background: var(--accent-2); }
+.ctxmenu button:hover:not(:disabled) { background: var(--accent-2); color: var(--on-accent); }
+.ctxmenu button:hover:not(:disabled) .shortcut { color: var(--on-accent); opacity: .75; }
 .ctxmenu hr { border: none; border-top: 1px solid var(--line); margin: 4px 2px; }
 .ctxmenu .shortcut { float: right; color: var(--fg-dim); font-size: 11px; }

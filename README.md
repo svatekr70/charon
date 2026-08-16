@@ -42,6 +42,7 @@ předlohy vozí i zpátky.
 | Automatické obnovení spadlého spojení | ✅ |
 | SSH brána (jump host) a proxy SOCKS5 / HTTP | ✅ |
 | Pracovní plochy — uložená sada otevřených záložek | ✅ |
+| Světlý, tmavý a systémový motiv | ✅ |
 
 Nepodporuje SCP, WebDAV ani S3 — relace v těchto protokolech se při importu
 zobrazí, ale nejdou naimportovat.
@@ -300,6 +301,17 @@ kolik jich z kolika vyšlo.
 
 Hesla se do `sites.json` zapisují zašifrovaná (AES-256-GCM); klíč leží
 v Keychain, ne v souboru.
+
+## Vzhled
+
+**Nastavení → Vzhled → Motiv** nabízí *Podle systému* (výchozí), *Světlý*
+a *Tmavý*. Volba platí i pro systémové dialogy, rám okna a posuvníky.
+
+Barvy jsou v jednom bloku na začátku `styles.css` a každá je zapsaná jednou,
+funkcí `light-dark()`. Přepnutí motivu je pak jediná vlastnost na `<html>`:
+bez ní rozhoduje systém, s `data-theme` uživatel. Že se barva nezačne psát
+natvrdo někde v pravidlech, hlídá `test/theme.test.js` — v tom druhém motivu
+by se to projevilo jako nečitelné místo a všiml by si toho až uživatel.
 
 ## Klávesové zkratky
 
@@ -581,6 +593,8 @@ npm test
 
 - `test/winscp-import.test.js` — dekódování hesel WinSCP, parsování `.ini` i `.reg`
 - `test/mask.test.js` — zápis masek souborů
+- `test/theme.test.js` — světlý a tmavý motiv: že se barvy píšou jen v paletě,
+  že má každá obě podoby a že volba přebije systém v obou směrech
 - `test/session.test.js` — správce záložek: pořadí, přepínání a úklid
 - `test/editconflict.test.js` — detekce cizí změny při ukládání z editoru
 - `test/properties.test.js` — rekurzivní práva a kontrolní součty proti

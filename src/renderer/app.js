@@ -74,6 +74,7 @@ Object.defineProperty(state, 'connected', {
 const DEFAULT_SETTINGS = {
   editor: '', doubleClick: 'edit', typeAhead: true, colOwner: false, colGroup: false,
   transferMask: '', maxConcurrent: 3, speedLimitKb: 0, commands: [], workspaces: [],
+  theme: 'system',
   tempName: true, tempNameMinKb: 0,
 };
 
@@ -814,9 +815,11 @@ function openMenu(items, x, y) {
   }));
 
   menu.hidden = false;
+  // Nabídka se vejde do okna, ale nikdy nezačne nad jeho horní hranou —
+  // u delší nabídky než okno by se jinak první položky staly nedostupnými.
   const r = menu.getBoundingClientRect();
-  menu.style.left = `${Math.min(x, window.innerWidth - r.width - 8)}px`;
-  menu.style.top = `${Math.min(y, window.innerHeight - r.height - 8)}px`;
+  menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - r.width - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - r.height - 8))}px`;
 }
 
 document.addEventListener('click', (ev) => {
@@ -2371,6 +2374,7 @@ $('#btn-settings').addEventListener('click', () => {
   f.tempName.checked = cur.tempName !== false;
   f.tempNameMinKb.value = cur.tempNameMinKb || 0;
   f.doubleClick.value = cur.doubleClick;
+  f.theme.value = cur.theme || 'system';
   f.typeAhead.checked = cur.typeAhead !== false;
   f.colOwner.checked = Boolean(cur.colOwner);
   f.colGroup.checked = Boolean(cur.colGroup);
@@ -2388,6 +2392,7 @@ setDlg.addEventListener('close', async () => {
     tempName: f.tempName.checked,
     tempNameMinKb: Math.max(0, Number(f.tempNameMinKb.value) || 0),
     doubleClick: f.doubleClick.value,
+    theme: f.theme.value,
     typeAhead: f.typeAhead.checked,
     colOwner: f.colOwner.checked,
     colGroup: f.colGroup.checked,
@@ -2399,6 +2404,19 @@ function applySettings(next) {
   state.settings = { ...DEFAULT_SETTINGS, ...next };
   $('#app').classList.toggle('c-owner', Boolean(state.settings.colOwner));
   $('#app').classList.toggle('c-group', Boolean(state.settings.colGroup));
+  applyTheme(state.settings.theme);
+}
+
+/**
+ * Nastaví motiv.
+ *
+ * „Podle systému" se pozná tak, že na <html> není nic — pak rozhoduje
+ * color-scheme: light dark a systémové nastavení. Vlastní volba ho přebije.
+ */
+function applyTheme(theme) {
+  const root = document.documentElement;
+  if (theme === 'light' || theme === 'dark') root.dataset.theme = theme;
+  else delete root.dataset.theme;
 }
 
 /* ----------------------------------------------------------- rozdělovač */

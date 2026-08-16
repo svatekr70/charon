@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme } = require('electron');
 const fs = require('fs');
 const fsp = fs.promises;
 const os = require('os');
@@ -33,6 +33,7 @@ let settings = {
   maxConcurrent: 3, speedLimitKb: 0,
   tempName: true, tempNameMinKb: 0,
   commands: [], workspaces: [],
+  theme: 'system',
 };
 
 // ---------------------------------------------------------------- pomocné
@@ -272,6 +273,24 @@ async function connectVerified(cfg, siteId) {
   throw new Error('Připojení selhalo');
 }
 
+/**
+ * Motiv se musí propsat i mimo okno.
+ *
+ * `nativeTheme` řídí systémové dialogy (potvrzení otisku klíče, výběr souboru)
+ * a rám okna; barva pozadí okna se ukáže v tom zlomku vteřiny, než se stránka
+ * vykreslí — v tmavém motivu by bílý záblesk praštil do očí.
+ */
+function windowBackground() {
+  const dark = settings.theme === 'dark'
+    || (settings.theme !== 'light' && nativeTheme.shouldUseDarkColors);
+  return dark ? '#1b1d23' : '#ffffff';
+}
+
+function applyTheme() {
+  nativeTheme.themeSource = ['light', 'dark'].includes(settings.theme) ? settings.theme : 'system';
+  if (win) win.setBackgroundColor(windowBackground());
+}
+
 function settingsPath() {
   return path.join(app.getPath('userData'), 'settings.json');
 }
@@ -377,7 +396,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 560,
     titleBarStyle: 'hiddenInset',
-    backgroundColor: '#1b1d23',
+    backgroundColor: windowBackground(),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -448,6 +467,7 @@ function registerIpc() {
   handle('settings:set', async (patch) => {
     settings = { ...settings, ...patch };
     await saveSettings();
+    if (patch.theme !== undefined) applyTheme();
     // Nastavení přenosů platí pro všechny otevřené relace, ne jen pro tu vpředu.
     for (const s of manager.all()) s.applySettings(settings);
     return settings;
@@ -893,6 +913,8 @@ function normalizeRemote(p) {
 
 app.whenReady().then(async () => {
   await loadSettings();
+  // Motiv nastavíme dřív, než vznikne okno — jinak by se mihlo v té špatné barvě.
+  applyTheme();
   sites = new SiteStore(app.getPath('userData'));
   await sites.load();
   manager = new SessionManager();
