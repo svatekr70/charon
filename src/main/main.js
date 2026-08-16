@@ -63,6 +63,9 @@ let settings = {
   sessionLog: false,
   // Pojmenované sady voleb pro přenos.
   transferProfiles: [],
+  // Segmentovaný přenos: od jaké velikosti (MB) a na kolik spojení. 0 vypíná.
+  segmentedMinMb: 0,
+  segmentCount: 4,
 };
 
 // ---------------------------------------------------------------- pomocné

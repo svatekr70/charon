@@ -60,7 +60,7 @@ class TransferQueue extends EventEmitter {
    * @param {number} [opts.concurrency] kolik přenosů naráz
    */
   constructor({
-    getAdapter, acquireAdapter, releaseAdapter, remoteJoin,
+    getAdapter, acquireAdapter, releaseAdapter, tryAcquireAdapter, remoteJoin,
     onConflict, onMoveSource, concurrency = 1,
   }) {
     super();
@@ -69,6 +69,8 @@ class TransferQueue extends EventEmitter {
     // (typicky testy s jedním spojením).
     this.acquireAdapter = acquireAdapter || getAdapter;
     this.releaseAdapter = releaseAdapter || (() => {});
+    // Nepovinné: bez něj se segmentovaný přenos prostě nepoužije.
+    this.tryAcquireAdapter = tryAcquireAdapter || null;
     this.remoteJoin = remoteJoin;
     this.onConflict = onConflict || null;
     this.onMoveSource = onMoveSource || null;
@@ -85,6 +87,8 @@ class TransferQueue extends EventEmitter {
     this.onBackup = null;
     this.textMask = null;
     this.serverEol = 'lf';
+    this.segmentMin = 0;
+    this.segmentCount = 4;
     this.workers = 0;
     /** id položky → přerušovací token právě běžícího přenosu */
     this.active = new Map();
@@ -126,6 +130,17 @@ class TransferQueue extends EventEmitter {
     return mask.match(posixBasename(item.remotePath), false)
       ? transformFor(item.direction, eol)
       : null;
+  }
+
+  /**
+   * Segmentovaný přenos: velký soubor si rozdělí víc spojení mezi sebe.
+   *
+   * @param {number} minBytes od jaké velikosti to má smysl; 0 vypíná
+   * @param {number} count na kolik úseků nejvýš
+   */
+  setSegments(minBytes, count) {
+    this.segmentMin = Math.max(0, Number(minBytes) || 0);
+    this.segmentCount = Math.min(8, Math.max(2, Number(count) || 4));
   }
 
   /** Práva pro danou položku — z profilu, jinak z nastavení. */
@@ -600,7 +615,11 @@ class TransferQueue extends EventEmitter {
       const remote = await adapter.stat(item.remotePath);
       item.size = remote.size;
 
-      const suffix = this._tempFor(remote.size);
+      // Segmentovaný přenos jde vždycky přes dočasný název. Kdyby jeden úsek
+      // selhal, zůstal by na cíli soubor správné velikosti s dírou uvnitř —
+      // a to se pozná až při použití, ne při přenosu.
+      const budeSegmentovat = this._wantsSegments(remote.size, adapter, item);
+      const suffix = budeSegmentovat ? TEMP_SUFFIX : this._tempFor(remote.size);
       const decision = await this._checkConflict(adapter, item, {
         size: remote.size, mtime: remote.mtime,
       }, suffix ? item.localPath + suffix : item.localPath);
@@ -612,16 +631,22 @@ class TransferQueue extends EventEmitter {
 
       await fsp.mkdir(path.dirname(item.localPath), { recursive: true });
       const prevod = this._textTransform(item);
-      const startAt = prevod
-        ? 0
-        : await this._resumeOffset(item, remote.size, () => fsp.stat(writePath));
-      item.transferred = startAt;
-      if (prevod) item.note = 'textový režim';
 
-      if (startAt < remote.size || remote.size === 0) {
-        await adapter.download(item.remotePath, writePath, {
-          startAt, onProgress, signal: token, limiters, transform: prevod,
-        });
+      if (budeSegmentovat) {
+        item.transferred = 0;
+        await this._segmentedDownload(item, adapter, token, writePath, remote.size, onProgress, limiters);
+      } else {
+        const startAt = prevod
+          ? 0
+          : await this._resumeOffset(item, remote.size, () => fsp.stat(writePath));
+        item.transferred = startAt;
+        if (prevod) item.note = 'textový režim';
+
+        if (startAt < remote.size || remote.size === 0) {
+          await adapter.download(item.remotePath, writePath, {
+            startAt, onProgress, signal: token, limiters, transform: prevod,
+          });
+        }
       }
 
       if (remote.mtime) {
@@ -636,6 +661,90 @@ class TransferQueue extends EventEmitter {
       }
     }
     return 'done';
+  }
+
+  /**
+   * Má se soubor stahovat víc spojeními?
+   *
+   * Nejde to dohromady s převodem konců řádků (úseky by se rozešly na
+   * hranicích) ani s navazováním (rozepsaný soubor má díry, ne konec).
+   */
+  _wantsSegments(size, adapter, item) {
+    return this.segmentMin > 0
+      && size >= this.segmentMin
+      && !this._textTransform(item)
+      && typeof adapter.downloadRange === 'function'
+      && Boolean(this.tryAcquireAdapter);
+  }
+
+  /**
+   * Stáhne soubor víc spojeními naráz.
+   *
+   * Na rychlé lince s pomalým serverem je jedno spojení úzké hrdlo — server
+   * často škrtí propustnost jednoho proudu, ne celého účtu. Úseky se stahují
+   * do jednoho souboru, každý na svou pozici.
+   *
+   * Spojení navíc se berou jen když jsou volná: kdyby se na ně čekalo,
+   * segmentovaný přenos by si vzal to, co potřebuje jiná položka fronty,
+   * a fronta by uvázla sama o sobě. Když nezbývá nic, teče to jedním proudem.
+   */
+  async _segmentedDownload(item, adapter, token, writePath, size, onProgress, limiters) {
+    const dalsi = [];
+    try {
+      for (let i = 1; i < this.segmentCount; i += 1) {
+        const a = await this.tryAcquireAdapter();
+        if (!a) break;
+        dalsi.push(a);
+      }
+      const adaptery = [adapter, ...dalsi];
+
+      if (adaptery.length < 2) {
+        // Nic volného — obyčejný přenos je pořád lepší než čekání.
+        await adapter.download(item.remotePath, writePath, {
+          startAt: 0, onProgress, signal: token, limiters,
+        });
+        return;
+      }
+
+      const useky = [];
+      const kus = Math.ceil(size / adaptery.length);
+      for (let i = 0; i < adaptery.length; i += 1) {
+        const start = i * kus;
+        if (start >= size) break;
+        useky.push({ start, end: Math.min(size, start + kus) - 1, adapter: adaptery[i] });
+      }
+      item.note = `${useky.length} spojení naráz`;
+
+      // Soubor si předem natáhneme na plnou velikost, aby měl každý úsek kam
+      // zapisovat. Proto se taky segmentovaný přenos nedá navazovat — dokud
+      // nedojede, je v souboru díra a z velikosti se nic nepozná.
+      const fh = await fsp.open(writePath, 'w+');
+      try {
+        await fh.truncate(size);
+        let celkem = 0;
+        await Promise.all(useky.map((u) => u.adapter.downloadRange(
+          item.remotePath, fh.fd, u.start, u.end,
+          {
+            signal: token,
+            limiters,
+            onProgress: (delta) => {
+              celkem += delta;
+              onProgress(celkem);
+            },
+          },
+        )));
+
+        // Kontrola na závěr: kdyby některý úsek dojel kratší, vznikl by
+        // soubor správné velikosti s dírou uvnitř — a to se nepozná jinak.
+        if (celkem !== size) {
+          throw new Error(`Segmentovaný přenos přenesl ${celkem} z ${size} bajtů`);
+        }
+      } finally {
+        await fh.close();
+      }
+    } finally {
+      for (const a of dalsi) this.releaseAdapter(a);
+    }
   }
 
   /**

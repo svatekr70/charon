@@ -84,6 +84,7 @@ const DEFAULT_SETTINGS = {
   keepaliveSeconds: 10, connectTimeoutSeconds: 25,
   textMask: '', serverEol: 'lf', sessionLog: false,
   transferProfiles: [],
+  segmentedMinMb: 0, segmentCount: 4,
   cacheListings: true,
   theme: 'system',
   uploadPerms: 'keep', uploadFileMode: '644', uploadDirMode: '755',
@@ -3313,6 +3314,8 @@ $('#btn-settings').addEventListener('click', () => {
   f.doubleClick.value = cur.doubleClick;
   f.theme.value = cur.theme || 'system';
   f.sessionLog.checked = cur.sessionLog === true;
+  f.segmentedMinMb.value = cur.segmentedMinMb || '';
+  f.segmentCount.value = cur.segmentCount || '';
   f.textMask.value = cur.textMask || '';
   f.serverEol.value = cur.serverEol || 'lf';
   f.backupOverwritten.value = cur.backupOverwritten || 'none';
@@ -3343,6 +3346,8 @@ setDlg.addEventListener('close', async () => {
     doubleClick: f.doubleClick.value,
     theme: f.theme.value,
     sessionLog: f.sessionLog.checked,
+    segmentedMinMb: Number(f.segmentedMinMb.value) || 0,
+    segmentCount: Number(f.segmentCount.value) || 4,
     textMask: f.textMask.value.trim(),
     serverEol: f.serverEol.value,
     backupOverwritten: f.backupOverwritten.value,

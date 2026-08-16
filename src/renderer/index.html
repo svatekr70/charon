@@ -351,6 +351,21 @@
         přejmenování navíc na soubor — u tisíců drobných souborů přes pomalou linku se vyplatí
         nastavit spodní hranici.</p>
 
+      <div class="grid">
+        <label>Víc spojení na jeden soubor od (MB)
+          <input name="segmentedMinMb" type="number" min="0" max="10000" placeholder="0 = vypnuto" />
+        </label>
+        <label>Nejvýš úseků
+          <input name="segmentCount" type="number" min="2" max="8" placeholder="4" />
+        </label>
+      </div>
+      <p class="muted">Velký soubor si rozdělí víc spojení mezi sebe. Má to smysl, když server
+        škrtí jeden proud, ale celkem pustí víc — na rychlé lince je rozdíl znát, na pomalé ne.
+        Zatím jen pro stahování přes SFTP. Spojení navíc se berou jen když jsou volná, jinak
+        by si to vzalo, co potřebuje jiná položka fronty. <b>Segmentovaný přenos se nedá
+        navazovat</b> — dokud nedojede, je v souboru díra a z velikosti se nic nepozná —
+        a nejde dohromady s textovým režimem.</p>
+
       <label>Textový režim — maska souborů
         <input name="textMask" spellcheck="false" placeholder="prázdné = vypnuto; např. *.php; *.txt; *.sh" />
       </label>

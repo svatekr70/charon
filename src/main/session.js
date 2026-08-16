@@ -61,6 +61,7 @@ class Session {
       concurrency: settings.maxConcurrent || 1,
       acquireAdapter: () => this.transferPool().acquire(),
       releaseAdapter: (a) => this.transferPool().release(a),
+      tryAcquireAdapter: () => this.transferPool().tryAcquire(),
       onConflict: (info) => deps.askConflict(this.id, info),
       onMoveSource: (item) => this.removeSource(item),
     });
@@ -69,6 +70,7 @@ class Session {
     this.queue.setPermissions(settings);
     this.queue.setBackup(settings.backupOverwritten, (a, p, mode) => this.backupBeforeOverwrite(a, p, mode));
     this.queue.setTextMode(settings.textMask, settings.serverEol);
+    this.queue.setSegments((settings.segmentedMinMb || 0) * 1024 * 1024, settings.segmentCount);
     this.listCache.setEnabled(settings.cacheListings !== false);
     this.queue.on('update', (snap) => {
       // Dokončený přenos změnil obsah serveru — uložené výpisy už neplatí.
@@ -278,6 +280,7 @@ class Session {
     this.queue.setPermissions(settings);
     this.queue.setBackup(settings.backupOverwritten, (a, p, mode) => this.backupBeforeOverwrite(a, p, mode));
     this.queue.setTextMode(settings.textMask, settings.serverEol);
+    this.queue.setSegments((settings.segmentedMinMb || 0) * 1024 * 1024, settings.segmentCount);
     this.listCache.setEnabled(settings.cacheListings !== false);
     if (this.pool && !this.pool.closed) this.pool.setMax(settings.maxConcurrent || 1);
   }

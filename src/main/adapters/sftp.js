@@ -347,6 +347,22 @@ class SftpAdapter {
   }
 
   /**
+   * Stažení jednoho úseku souboru do už otevřeného souboru na disku.
+   *
+   * Používá se u segmentovaného přenosu, kdy si velký soubor rozdělí víc
+   * spojení mezi sebe. Každý úsek zapisuje na svou pozici, takže se nemíchají;
+   * `end` je včetně, jak to má SFTP i HTTP.
+   */
+  downloadRange(remotePath, fd, start, end, { onProgress, signal, limiters } = {}) {
+    return new Promise((resolve, reject) => {
+      const rs = this.client.createReadStream(remotePath, { start, end });
+      // autoClose vypnuté: soubor drží volající, který do něj pouští víc úseků.
+      const ws = fs.createWriteStream(null, { fd, start, autoClose: false });
+      pumpRange(rs, ws, onProgress, signal, resolve, reject, limiters);
+    });
+  }
+
+  /**
    * Upload s podporou navázání (dopsání za existující bajty na serveru).
    *
    * Pro navázání schválně nepoužíváme režim 'a'. Knihovna si v něm zjišťuje
@@ -417,6 +433,54 @@ function pumpStreams(rs, ws, startAt, onProgress, signal, resolve, reject, limit
   if (throttle) proud = proud.pipe(throttle);
   if (prevod) proud = proud.pipe(prevod);
   proud.pipe(ws);
+  return undefined;
+}
+
+/**
+ * Přenos jednoho úseku.
+ *
+ * Proti `pumpStreams` je tu jeden podstatný rozdíl: zapisovací proud soubor
+ * nezavírá (drží ho volající), takže se čeká na `finish`, ne na `close` —
+ * ten by u nezavíraného proudu nepřišel a přenos by visel.
+ */
+function pumpRange(rs, ws, onProgress, signal, resolve, reject, limiters) {
+  let transferred = 0;
+  let settled = false;
+  const throttle = makeThrottle(limiters);
+
+  const finish = (err) => {
+    if (settled) return;
+    settled = true;
+    if (signal) signal.removeListener('abort', onAbort);
+    if (err) {
+      rs.destroy();
+      if (throttle) throttle.destroy();
+      ws.destroy();
+      reject(err);
+    } else {
+      resolve(transferred);
+    }
+  };
+
+  const onAbort = () => finish(Object.assign(new Error('Přenos přerušen'), { aborted: true }));
+  if (signal) {
+    if (signal.aborted) return onAbort();
+    signal.once('abort', onAbort);
+  }
+
+  const counted = throttle || rs;
+  counted.on('data', (chunk) => {
+    transferred += chunk.length;
+    if (onProgress) onProgress(chunk.length);
+  });
+
+  rs.on('error', finish);
+  ws.on('error', finish);
+  if (throttle) throttle.on('error', finish);
+  ws.on('finish', () => finish(null));
+
+  if (throttle) rs.pipe(throttle).pipe(ws);
+  else rs.pipe(ws);
   return undefined;
 }
 

@@ -65,6 +65,37 @@ class AdapterPool {
     }
   }
 
+  /**
+   * Spojení, které je k dispozici hned — nikdy se nečeká.
+   *
+   * Používá se tam, kde je souběžnost jen k lepšímu, ne nutná: segmentovaný
+   * přenos si takhle vezme, co zbývá, a když nezbývá nic, poteče jedním
+   * proudem. Čekáním by si vzal spojení, které potřebuje jiný přenos, a
+   * fronta by se zablokovala sama o sebe.
+   *
+   * @returns {Promise<object|null>}
+   */
+  async tryAcquire() {
+    if (this.closed) return null;
+
+    const reused = this._takeFree();
+    if (reused) return reused;
+    if (this.all.length >= this.max) return null;
+
+    try {
+      const adapter = await this.open();
+      this.all.push(adapter);
+      return adapter;
+    } catch (err) {
+      // Server další spojení nepustil — zmenšíme se a jedeme s tím, co je.
+      if (this.all.length > 0) {
+        this.max = this.all.length;
+        this.onShrink(this.max, err);
+      }
+      return null;
+    }
+  }
+
   release(adapter) {
     if (!adapter) return;
     // Spadlé spojení do zásoby nevracíme, jen ho zapomeneme.

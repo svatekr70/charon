@@ -69,6 +69,7 @@ předlohy vozí i zpátky.
 | Synchronizované procházení | ✅ |
 | Profily nastavení přenosu | ✅ |
 | Záznam komunikace do souboru | ✅ |
+| Víc spojení na jeden velký soubor | ✅ |
 
 Nepodporuje SCP, WebDAV ani S3 — relace v těchto protokolech se při importu
 zobrazí, ale nejdou naimportovat.
@@ -601,6 +602,32 @@ Vypnout jde v *Nastavení → Přenosy*; tam se dá nastavit i spodní hranice
 velikosti. Přejmenování je jedno kolo navíc na soubor, takže u tisíců drobných
 souborů přes pomalou linku se vyplatí ho pro ně přeskočit.
 
+## Víc spojení na jeden soubor
+
+**Nastavení → Přenosy → Víc spojení na jeden soubor od (MB).** Velký soubor si
+rozdělí víc spojení mezi sebe, každé stahuje svůj úsek do jednoho souboru na
+svou pozici. Výchozí je vypnuto (`0`).
+
+Má to smysl, když server škrtí jeden proud, ale celkem pustí víc — což je na
+sdíleném hostingu běžné. Změřeno proti serveru s odezvou 12 ms: 8 MB jedním
+spojením 5,3 s, čtyřmi 1,4 s, tedy **3,7× rychleji**. Na místní síti se
+nezmění nic.
+
+Zatím jen **stahování přes SFTP**; FTP by na to potřebovalo pro každý úsek
+zvlášť řídicí spojení a odstřelovat přenos po přečtení N bajtů, což je křehké.
+
+Tři věci, které z toho plynou:
+
+- Spojení navíc se berou, **jen když jsou volná**. Kdyby se na ně čekalo, vzal
+  by si segmentovaný přenos to, co potřebuje jiná položka fronty, a fronta by
+  uvázla sama o sobě. Když nezbývá nic, teče to jedním proudem.
+- **Přenáší se vždycky přes dočasný název**, i když je jinak vypnutý. Kdyby
+  jeden úsek selhal, zůstal by na cíli soubor správné velikosti s dírou
+  uvnitř — a to se pozná až při použití.
+- **Nenavazuje se.** Dokud přenos nedojede, je v souboru díra a z velikosti se
+  nic nepozná. Nejde to dohromady ani s textovým režimem, protože úseky by se
+  rozešly na hranicích převodu.
+
 ## Odhad zbývajícího času
 
 Fronta hlásí, kolik toho zbývá a jak dlouho to potrvá. Rychlost se měří jako
@@ -913,6 +940,10 @@ npm test
   nastavení aplikace — jinak by se jednorázová odchylka stala trvalou
 - `test/sessionlog.test.js` — záznam komunikace: že v něm je, co má být,
   a že v něm není heslo
+- `test/segmented.test.js` — přenos víc spojeními. Skládat soubor z kusů je
+  nejrychlejší způsob, jak ho tiše poškodit, takže se všechno kontroluje
+  otiskem proti zdroji — a hlavně se ověřuje, co se stane, když jeden úsek
+  selže nebo když spojení navíc nejsou
 - `test/session.test.js` — správce záložek: pořadí, přepínání a úklid
 - `test/editconflict.test.js` — detekce cizí změny při ukládání z editoru
 - `test/properties.test.js` — rekurzivní práva a kontrolní součty proti
