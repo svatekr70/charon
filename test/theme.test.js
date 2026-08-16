@@ -50,12 +50,14 @@ const tokeny = [...paleta.matchAll(/^\s*(--[a-z0-9-]+):/gm)].map((m) => m[1]);
 truthy('paleta má tokeny', tokeny.length > 20, `${tokeny.length}`);
 
 // ============================================ každý token má obě polohy
-// Výjimky: --on-accent je bílá v obou motivech, --row-h a --cols nejsou barvy.
-const bezMotivu = ['--on-accent', '--row-h', '--cols'];
+// Za barvu považujeme hodnotu, ve které je zápis barvy — písmo, velikost ani
+// výška řádku se motivem nemění, tak je nemá smysl vyjmenovávat ručně.
+// Výjimka je jediná: --on-accent je bílá v obou motivech schválně.
+const jeBarva = (hodnota) => /#[0-9a-fA-F]{3,8}|rgba?\(|light-dark\(/.test(hodnota);
 const jenJednaBarva = tokeny.filter((t) => {
-  if (bezMotivu.includes(t)) return false;
+  if (t === '--on-accent') return false;
   const radek = paleta.match(new RegExp(`${t}:([^;]+);`));
-  return radek && !radek[1].includes('light-dark(');
+  return radek && jeBarva(radek[1]) && !radek[1].includes('light-dark(');
 });
 check('každá barva má světlou i tmavou podobu', jenJednaBarva, []);
 

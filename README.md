@@ -70,6 +70,9 @@ předlohy vozí i zpátky.
 | Profily nastavení přenosu | ✅ |
 | Záznam komunikace do souboru | ✅ |
 | Víc spojení na jeden velký soubor | ✅ |
+| Vlastní písmo, velikost a přiblížení | ✅ |
+| Nastavení rozdělené na oddíly | ✅ |
+| Kontrola aktualizací | ✅ |
 
 Nepodporuje SCP, WebDAV ani S3 — relace v těchto protokolech se při importu
 zobrazí, ale nejdou naimportovat.
@@ -373,6 +376,33 @@ Rasterizérem je Chromium z Electronu — přidávat kvůli jedné ikoně dalš�
 závislost by bylo víc práce než užitku. Na Retině vrací snímek dvojnásobek
 bodů, takže se výsledek ještě srovnává na přesnou velikost; `iconutil` na ní
 trvá.
+
+## Písmo a velikost
+
+**Nastavení → Vzhled.** Písmo rozhraní a písmo pro cesty a výpisy se vybírají
+z toho, co máte v systému; u druhého jsou nabídnutá jen neproporcionální
+(poznají se změřením — v takovém písmu je „i" stejně široké jako „W").
+
+Velikost písma platí pro **seznamy souborů**, kde na ní záleží nejvíc; výška
+řádku se přizpůsobí sama. Zvětšit celé rozhraní jde přiblížením
+(`⌘+`, `⌘−`, `⌘0`) — to je ostřejší a nic se nerozsype, protože se zvětší
+všechno proporcionálně, ne jen text.
+
+## Nastavení
+
+Voleb je přes třicet, takže je dialog rozdělený na oddíly: Přenosy, Editor,
+Vzhled, Panely, Síť, Relace. Formulář zůstává jeden a všechna pole v něm —
+schovávají se jen oddíly, takže ukládání neřeší, co je zrovna vidět.
+
+## Aktualizace
+
+**Nastavení → Relace → Repozitář na GitHubu.** Zjistí se jen to, že je venku
+novější vydání, a dostanete odkaz — nic se nestahuje ani neinstaluje;
+automatická instalace by potřebovala podepsanou aplikaci. Dokud repozitář
+nezadáte, nekontroluje se nic: předstírat kontrolu, když není kam se dívat,
+je horší než ji nemít.
+
+Verzi a na čem to běží ukáže **Charon → O aplikaci Charon**.
 
 ## Vzhled
 
@@ -944,6 +974,10 @@ npm test
   nejrychlejší způsob, jak ho tiše poškodit, takže se všechno kontroluje
   otiskem proti zdroji — a hlavně se ověřuje, co se stane, když jeden úsek
   selže nebo když spojení navíc nejsou
+- `test/version.test.js` — porovnávání verzí. Textově by `1.10.0` vyšlo starší
+  než `1.9.0` a beta by se vnucovala uživateli finální verze
+- `test/dialogs.test.js` — stavba dialogů: že lišta tlačítek je uvnitř
+  formuláře. Tlačítko mimo něj vypadá stejně a nedělá vůbec nic
 - `test/session.test.js` — správce záložek: pořadí, přepínání a úklid
 - `test/editconflict.test.js` — detekce cizí změny při ukládání z editoru
 - `test/properties.test.js` — rekurzivní práva a kontrolní součty proti

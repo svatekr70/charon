@@ -27,6 +27,7 @@ const perms = require('./perms');
 const { Session, SessionManager, isDir: remoteIsDir } = require('./session');
 const { QueueStore } = require('./queue-store');
 const { SessionLog } = require('./sessionlog');
+const Version = require('../common/version');
 const { expand, findPrompts, runLocal } = require('./commands');
 const { sshCommand } = require('./terminal');
 const { promisify } = require('util');
@@ -66,6 +67,11 @@ let settings = {
   // Segmentovaný přenos: od jaké velikosti (MB) a na kolik spojení. 0 vypíná.
   segmentedMinMb: 0,
   segmentCount: 4,
+  // Písmo a přiblížení okna.
+  uiFont: '', monoFont: '', listFontSize: 12.5, zoom: 1,
+  // Odkud se dozvíme o nové verzi. Prázdné = nekontroluje se nic.
+  updateRepo: '',
+  checkUpdatesOnStart: false,
 };
 
 // ---------------------------------------------------------------- pomocné
@@ -343,9 +349,60 @@ function windowBackground() {
   return dark ? '#1b1d23' : '#ffffff';
 }
 
+/**
+ * Přiblížení okna.
+ *
+ * Dělá se přes zoom, ne přes velikost písma: celé rozhraní se zvětší
+ * proporcionálně a nic se nerozsype. Nastavuje to hlavní proces, protože
+ * okno k `webFrame` z izolovaného kontextu nemá přístup.
+ */
+function applyZoom() {
+  if (!win) return;
+  const z = Math.min(2, Math.max(0.6, Number(settings.zoom) || 1));
+  win.webContents.setZoomFactor(z);
+}
+
 function applyTheme() {
   nativeTheme.themeSource = ['light', 'dark'].includes(settings.theme) ? settings.theme : 'system';
   if (win) win.setBackgroundColor(windowBackground());
+}
+
+/**
+ * Zjistí, jestli je venku novější verze.
+ *
+ * Ptáme se GitHubu na poslední vydání zadaného repozitáře. Dokud není kam se
+ * dívat, nekontroluje se nic — stahovat aktualizace odnikud nejde a předstírat
+ * kontrolu by bylo horší než ji nemít.
+ *
+ * Nic se nestahuje ani neinstaluje: dozvíte se, že je nová verze, a odkaz si
+ * otevřete sami. Automatická instalace by potřebovala podepsanou aplikaci
+ * a to je jiná liga.
+ */
+async function checkForUpdate() {
+  const repo = String(settings.updateRepo || '').trim().replace(/^https?:\/\/github\.com\//, '');
+  const current = app.getVersion();
+  if (!repo || !/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+    return { current, configured: false };
+  }
+
+  const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
+    headers: { Accept: 'application/vnd.github+json', 'User-Agent': `Charon/${current}` },
+    signal: AbortSignal.timeout(15000),
+  });
+  if (res.status === 404) throw new Error(`Repozitář ${repo} nemá žádné vydání (nebo neexistuje)`);
+  if (!res.ok) throw new Error(`GitHub odpověděl ${res.status}`);
+
+  const data = await res.json();
+  const latest = String(data.tag_name || data.name || '').trim();
+  return {
+    current,
+    configured: true,
+    latest,
+    newer: Version.isNewer(current, latest),
+    url: data.html_url || `https://github.com/${repo}/releases`,
+    notes: String(data.body || '').slice(0, 2000),
+    published: data.published_at || null,
+  };
 }
 
 function settingsPath() {
@@ -609,6 +666,8 @@ function createWindow() {
     },
   });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  // Přiblížení se musí nastavit až po načtení; před ním ho Chromium zahodí.
+  win.webContents.once('did-finish-load', applyZoom);
   // Nástroje pro vývojáře jen na výslovné vyžádání. Pouhé spuštění ze zdrojáků
   // (`npm run dev`) je otevírat nemá — překážejí a k ničemu nejsou.
   if (process.argv.includes('--devtools')) win.webContents.openDevTools({ mode: 'detach' });
@@ -616,7 +675,16 @@ function createWindow() {
 
 function buildMenu() {
   const template = [
-    { role: 'appMenu' },
+    {
+      label: 'Charon',
+      submenu: [
+        { label: 'O aplikaci Charon', click: () => send('menu', 'about') },
+        { type: 'separator' },
+        { role: 'services' }, { type: 'separator' },
+        { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
+        { type: 'separator' }, { role: 'quit' },
+      ],
+    },
     {
       label: 'Soubor',
       submenu: [
@@ -640,6 +708,10 @@ function buildMenu() {
         { label: 'Najít soubory na serveru…', click: () => send('menu', 'find') },
         { label: 'Obnovit', accelerator: 'Cmd+R', click: () => send('menu', 'refresh') },
         { label: 'Porovnat panely', accelerator: 'Cmd+D', click: () => send('menu', 'compare') },
+        { type: 'separator' },
+        { label: 'Zvětšit', accelerator: 'Cmd+Plus', click: () => send('menu', 'zoomin') },
+        { label: 'Zmenšit', accelerator: 'Cmd+-', click: () => send('menu', 'zoomout') },
+        { label: 'Původní velikost', accelerator: 'Cmd+0', click: () => send('menu', 'zoomreset') },
         { label: 'Synchronizované procházení', accelerator: 'Cmd+Y', click: () => send('menu', 'syncbrowse') },
         { type: 'separator' },
         { label: 'Otevřít z adresy…', accelerator: 'Cmd+L', click: () => send('menu', 'openurl') },
@@ -679,6 +751,7 @@ function registerIpc() {
     settings = { ...settings, ...patch };
     await saveSettings();
     if (patch.theme !== undefined) applyTheme();
+    if (patch.zoom !== undefined) applyZoom();
     if (patch.sessionLog !== undefined) sessionLog.setEnabled(settings.sessionLog === true);
     // Nastavení přenosů platí pro všechny otevřené relace, ne jen pro tu vpředu.
     for (const s of manager.all()) s.applySettings(settings);
@@ -906,6 +979,22 @@ function registerIpc() {
   });
 
   handle('clipboard:write', async (text) => { clipboard.writeText(String(text || '')); return true; });
+
+  handle('app:info', async () => ({
+    version: app.getVersion(),
+    electron: process.versions.electron,
+    chromium: process.versions.chrome,
+    node: process.versions.node,
+    packaged: app.isPackaged,
+  }));
+
+  handle('app:checkUpdate', async () => checkForUpdate());
+  handle('app:openExternal', async (url) => {
+    // Jen http(s); `openExternal` jinak umí spustit i jiné druhy odkazů.
+    if (!/^https?:\/\//i.test(String(url || ''))) throw new Error('Neplatný odkaz');
+    await shell.openExternal(url);
+    return true;
+  });
 
   /** Otevře složku se záznamy ve Finderu — hledat ji ručně by byla otrava. */
   handle('log:reveal', async () => {

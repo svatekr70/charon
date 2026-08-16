@@ -27,6 +27,11 @@ contextBridge.exposeInMainWorld('api', {
     renameMany: (sid, opts) => invoke('files:renameMany', { sid, ...opts }),
     openTerminal: (sid, side, dir) => invoke('term:open', { sid, side, dir }),
   },
+  app: {
+    info: () => invoke('app:info'),
+    checkUpdate: () => invoke('app:checkUpdate'),
+    openExternal: (url) => invoke('app:openExternal', url),
+  },
   log: {
     reveal: () => invoke('log:reveal'),
   },

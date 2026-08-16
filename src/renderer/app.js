@@ -85,6 +85,8 @@ const DEFAULT_SETTINGS = {
   textMask: '', serverEol: 'lf', sessionLog: false,
   transferProfiles: [],
   segmentedMinMb: 0, segmentCount: 4,
+  uiFont: '', monoFont: '', listFontSize: 12.5, zoom: 1,
+  updateRepo: '', checkUpdatesOnStart: false,
   cacheListings: true,
   theme: 'system',
   uploadPerms: 'keep', uploadFileMode: '644', uploadDirMode: '755',
@@ -2252,6 +2254,16 @@ $('#btn-log-reveal').addEventListener('click', async () => {
   const r = await call(window.api.log.reveal());
   if (r) setLog('ok', `Záznamy jsou v ${r.dir}`);
 });
+/** Přiblížení okna; ukládá se, aby platilo i po restartu. */
+async function changeZoom(delta, reset = false) {
+  const soucasny = state.settings.zoom || 1;
+  const novy = reset ? 1 : Math.min(2, Math.max(0.6, Math.round((soucasny + delta) * 100) / 100));
+  const saved = await call(window.api.settings.set({ zoom: novy }));
+  if (!saved) return;
+  applySettings(saved);
+  setLog('ok', `Přiblížení ${Math.round(novy * 100)} %`);
+}
+
 $('#btn-compare').addEventListener('click', toggleCompare);
 $('#btn-syncbrowse').addEventListener('click', toggleSyncBrowse);
 
@@ -3314,6 +3326,13 @@ $('#btn-settings').addEventListener('click', () => {
   f.doubleClick.value = cur.doubleClick;
   f.theme.value = cur.theme || 'system';
   f.sessionLog.checked = cur.sessionLog === true;
+  f.updateRepo.value = cur.updateRepo || '';
+  f.checkUpdatesOnStart.checked = cur.checkUpdatesOnStart === true;
+  f.uiFont.value = cur.uiFont || '';
+  f.monoFont.value = cur.monoFont || '';
+  f.listFontSize.value = cur.listFontSize || '';
+  f.zoomPercent.value = Math.round((cur.zoom || 1) * 100);
+  loadFontList();
   f.segmentedMinMb.value = cur.segmentedMinMb || '';
   f.segmentCount.value = cur.segmentCount || '';
   f.textMask.value = cur.textMask || '';
@@ -3346,6 +3365,12 @@ setDlg.addEventListener('close', async () => {
     doubleClick: f.doubleClick.value,
     theme: f.theme.value,
     sessionLog: f.sessionLog.checked,
+    updateRepo: f.updateRepo.value.trim(),
+    checkUpdatesOnStart: f.checkUpdatesOnStart.checked,
+    uiFont: f.uiFont.value.trim(),
+    monoFont: f.monoFont.value.trim(),
+    listFontSize: Number(f.listFontSize.value) || 12.5,
+    zoom: Math.min(2, Math.max(0.6, (Number(f.zoomPercent.value) || 100) / 100)),
     segmentedMinMb: Number(f.segmentedMinMb.value) || 0,
     segmentCount: Number(f.segmentCount.value) || 4,
     textMask: f.textMask.value.trim(),
@@ -3377,6 +3402,7 @@ function applySettings(next) {
   $('#app').classList.toggle('c-owner', Boolean(state.settings.colOwner));
   $('#app').classList.toggle('c-group', Boolean(state.settings.colGroup));
   applyTheme(state.settings.theme);
+  applyFonts(state.settings);
   $('#q-after').value = state.settings.queueDoneAction || 'none';
 }
 
@@ -3392,6 +3418,63 @@ $('#q-after').addEventListener('change', async () => {
 });
 
 /**
+ * Písmo a hustota seznamu.
+ *
+ * Prázdná hodnota znamená „nech, co je ve stylu" — proto se proměnná
+ * v takovém případě maže, ne nastavuje na prázdno.
+ */
+function applyFonts(nastaveni) {
+  const root = document.documentElement;
+  const nastav = (jmeno, hodnota) => {
+    if (hodnota) root.style.setProperty(jmeno, hodnota);
+    else root.style.removeProperty(jmeno);
+  };
+
+  // Vybrané písmo dáváme před systémové, ne místo něj: kdyby v něm chyběla
+  // diakritika nebo se přestalo dodávat, spadne to na systémové.
+  nastav('--ui-font', nastaveni.uiFont
+    ? `"${nastaveni.uiFont}", -apple-system, BlinkMacSystemFont, system-ui, sans-serif`
+    : '');
+  nastav('--mono-font', nastaveni.monoFont
+    ? `"${nastaveni.monoFont}", "SF Mono", ui-monospace, monospace`
+    : '');
+  nastav('--list-size', nastaveni.listFontSize ? `${nastaveni.listFontSize}px` : '');
+}
+
+/**
+ * Naplní nabídku písem tím, co je v systému.
+ *
+ * Neproporcionální písma se poznají změřením: v takovém písmu je „i" stejně
+ * široké jako „W". Seznam se načítá až při otevření nastavení — pět set písem
+ * se prochází znatelně dlouho a při startu by to nikdo nechtěl.
+ */
+let pismaNactena = false;
+async function loadFontList() {
+  if (pismaNactena || typeof window.queryLocalFonts !== 'function') return;
+  pismaNactena = true;
+
+  let pisma;
+  try {
+    pisma = await window.queryLocalFonts();
+  } catch {
+    return; // systém přístup k písmům nepovolil; zůstane volné pole
+  }
+
+  const rodiny = [...new Set(pisma.map((f) => f.family))].sort((a, b) => a.localeCompare(b, 'cs'));
+  const platno = document.createElement('canvas').getContext('2d');
+  const jeMono = (rodina) => {
+    platno.font = `16px "${rodina}"`;
+    return Math.abs(platno.measureText('i').width - platno.measureText('W').width) < 0.5;
+  };
+
+  const vse = $('#pisma');
+  const mono = $('#pisma-mono');
+  vse.replaceChildren(...rodiny.map((r) => Object.assign(document.createElement('option'), { value: r })));
+  mono.replaceChildren(...rodiny.filter(jeMono)
+    .map((r) => Object.assign(document.createElement('option'), { value: r })));
+}
+
+/**
  * Nastaví motiv.
  *
  * „Podle systému" se pozná tak, že na <html> není nic — pak rozhoduje
@@ -3401,6 +3484,82 @@ function applyTheme(theme) {
   const root = document.documentElement;
   if (theme === 'light' || theme === 'dark') root.dataset.theme = theme;
   else delete root.dataset.theme;
+}
+
+/* ------------------------------------------------------------ o aplikaci */
+
+const aboutDlg = $('#dlg-about');
+
+async function openAbout() {
+  const info = await call(window.api.app.info());
+  const dl = $('#about-info');
+  dl.replaceChildren();
+  const radek = (k, v) => {
+    dl.appendChild(Object.assign(document.createElement('dt'), { textContent: k }));
+    dl.appendChild(Object.assign(document.createElement('dd'), { textContent: v }));
+  };
+  if (info) {
+    radek('Verze', info.version);
+    radek('Electron', info.electron);
+    radek('Chromium', info.chromium);
+    radek('Node', info.node);
+    radek('Sestaveno', info.packaged ? 'jako aplikace' : 'běží ze zdrojáků');
+  }
+  $('#about-update').textContent = '';
+  aboutDlg.showModal();
+}
+
+/**
+ * Podívá se, jestli je venku novější verze.
+ *
+ * Výsledek se vypisuje i tehdy, když je všechno v pořádku — kontrola, o které
+ * není poznat, jestli proběhla, je k ničemu.
+ */
+async function checkUpdates({ tise = false } = {}) {
+  const cil = $('#about-update');
+  if (!tise) cil.textContent = 'Dívám se…';
+
+  const r = await call(window.api.app.checkUpdate(), { silent: tise });
+  if (!r) { if (!tise) cil.textContent = 'Kontrola se nepovedla.'; return; }
+
+  if (!r.configured) {
+    if (!tise) cil.textContent = 'Není kam se dívat — v nastavení chybí repozitář.';
+    return;
+  }
+  if (!r.newer) {
+    if (!tise) cil.textContent = `Máte nejnovější verzi (${r.current}).`;
+    return;
+  }
+
+  cil.textContent = `Je venku ${r.latest} (máte ${r.current}).`;
+  setLog('ok', `K dispozici je nová verze ${r.latest}`);
+
+  // Při kontrole po spuštění se jen napíše do stavového řádku. Vyskočit
+  // někomu do práce dialogem kvůli aktualizaci je otrava — kdo o ni stojí,
+  // otevře si O aplikaci sám.
+  if (tise) return;
+  if (window.confirm(`Je k dispozici verze ${r.latest}, máte ${r.current}.\n\nOtevřít stránku s vydáním?`)) {
+    await call(window.api.app.openExternal(r.url));
+  }
+}
+
+$('#about-close').addEventListener('click', () => aboutDlg.close());
+$('#about-check').addEventListener('click', () => checkUpdates());
+
+/**
+ * Přepínání oddílů nastavení.
+ *
+ * Formulář zůstává jeden a všechna pole v něm — schovávají se jen oddíly.
+ * Kdyby se pole odstraňovala, ukládání by muselo řešit, co zrovna v dialogu
+ * je, a to je zbytečná složitost.
+ */
+function showSettingsTab(klic) {
+  for (const tab of $$('.set-tab')) tab.classList.toggle('on', tab.dataset.tab === klic);
+  for (const panel of $$('.set-panel')) panel.hidden = panel.dataset.tab !== klic;
+  $('.set-body').scrollTop = 0;
+}
+for (const tab of $$('.set-tab')) {
+  tab.addEventListener('click', () => showSettingsTab(tab.dataset.tab));
 }
 
 /* ----------------------------------------------------------- rozdělovač */
@@ -3506,6 +3665,10 @@ window.api.onMenu(async (cmd) => {
   else if (cmd === 'compare') toggleCompare();
   else if (cmd === 'openurl') openFromUrl();
   else if (cmd === 'syncbrowse') toggleSyncBrowse();
+  else if (cmd === 'zoomin') changeZoom(0.1);
+  else if (cmd === 'zoomout') changeZoom(-0.1);
+  else if (cmd === 'zoomreset') changeZoom(0, true);
+  else if (cmd === 'about') openAbout();
   else if (cmd === 'refresh') $('#btn-refresh').click();
 });
 
@@ -3518,4 +3681,10 @@ window.api.onMenu(async (cmd) => {
   await loadPane('local', await call(window.api.local.home()));
   renderQueue(state.queue);
   setActive('local');
+
+  // Kontrola aktualizací až nakonec a jen když si o ni uživatel řekl —
+  // start aplikace se kvůli ní zdržovat nemá.
+  if (state.settings.checkUpdatesOnStart && state.settings.updateRepo) {
+    checkUpdates({ tise: true }).catch(() => {});
+  }
 }());

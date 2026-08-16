@@ -52,7 +52,14 @@
   --shadow-menu: light-dark(0 12px 32px rgba(16, 24, 40, .18), 0 12px 32px rgba(0, 0, 0, .5));
   --backdrop: light-dark(rgba(16, 24, 40, .3), rgba(0, 0, 0, .5));
 
-  --row-h: 24px;
+  /* Písmo a hustota seznamu. Rozhraní kolem se nemění velikostí písma, ale
+     přiblížením celého okna (⌘+ / ⌘−) — je to ostřejší a nic se nerozsype. */
+  --ui-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --mono-font: "SF Mono", ui-monospace, monospace;
+  --list-size: 12.5px;
+  /* Výška řádku se odvíjí od písma, jinak by se větší text ořízl. */
+  --row-h: calc(var(--list-size) * 1.92);
+
   font-size: 13px;
 }
 
@@ -65,7 +72,7 @@
 html, body {
   margin: 0; height: 100%;
   background: var(--bg); color: var(--fg);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  font-family: var(--ui-font);
   overflow: hidden;
   -webkit-user-select: none; user-select: none;
 }
@@ -139,7 +146,7 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
   padding: 6px 8px; border-bottom: 1px solid var(--line); background: var(--bg-2);
 }
 .pane-title { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-dim); }
-.path { flex: 1; min-width: 0; font-family: "SF Mono", ui-monospace, monospace; font-size: 12px; -webkit-user-select: text; user-select: text; }
+.path { flex: 1; min-width: 0; font-family: var(--mono-font); font-size: 12px; -webkit-user-select: text; user-select: text; }
 
 /* Šířky sloupců drží jedna proměnná, aby hlavička a řádky nikdy neujely
    od sebe. Vlastník a skupina se zapínají v nastavení. */
@@ -158,7 +165,7 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
   align-items: center; gap: 8px; padding: 0 10px;
 }
 .list-head {
-  height: 22px; font-size: 11px; color: var(--fg-dim);
+  height: 22px; font-size: calc(var(--list-size) - 1.5px); color: var(--fg-dim);
   border-bottom: 1px solid var(--line); background: var(--bg);
 }
 .col-size, .col-perm { text-align: right; }
@@ -184,14 +191,14 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
 
 .row {
   height: var(--row-h); line-height: var(--row-h);
-  font-size: 12.5px; white-space: nowrap; cursor: default;
+  font-size: var(--list-size); white-space: nowrap; cursor: default;
 }
 .row:nth-child(even) { background: var(--row-alt); }
 .row:hover { background: var(--row-hover); }
 .row.sel { background: var(--sel-bg); }
 .row .name { overflow: hidden; text-overflow: ellipsis; }
 .row .size, .row .perm { text-align: right; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
-.row .date { color: var(--fg-dim); font-variant-numeric: tabular-nums; font-size: 11.5px; }
+.row .date { color: var(--fg-dim); font-variant-numeric: tabular-nums; font-size: calc(var(--list-size) - 1px); }
 .row.dir .name { color: var(--dir); font-weight: 500; }
 .row.link .name { color: var(--link); font-style: italic; }
 .row.hidden-file { opacity: .55; }
@@ -203,7 +210,7 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
 /* Bez tohohle by display:flex přebilo atribut hidden a lišta by zůstala
    viditelná i prázdná. */
 .filter-bar[hidden] { display: none; }
-.filter-bar input { flex: 1; font-family: "SF Mono", ui-monospace, monospace; font-size: 12px; }
+.filter-bar input { flex: 1; font-family: var(--mono-font); font-size: 12px; }
 .filter-bar input.bad { border-color: var(--err); }
 
 .pane-foot {
@@ -265,11 +272,14 @@ dialog::backdrop { background: var(--backdrop); }
 .dlg .row input { flex: 1; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
 .grid label.check { grid-column: 1 / -1; }
-/* Lišta tlačítek zůstává vidět i u dlouhého dialogu, který se roluje. */
-menu { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 0 0; margin: 0;
-  border-top: 1px solid var(--line); position: sticky; bottom: -14px; background: var(--bg-2);
-  padding-bottom: 14px; margin-bottom: -14px; }
-code { font-family: "SF Mono", ui-monospace, monospace; background: var(--bg-3); padding: 1px 4px; border-radius: 3px; }
+/* Lišta tlačítek zůstává vidět i u dlouhého dialogu, který se roluje.
+   Přilepuje se na spodní hranu rolovací oblasti — žádné záporné odsazení:
+   to dřív vysunulo spodní polovinu tlačítek mimo dialog, takže kliknutí do ní
+   nedopadlo na nic. */
+menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0;
+  border-top: 1px solid var(--line); position: sticky; bottom: 0; background: var(--bg-2);
+  padding: 12px 0; }
+code { font-family: var(--mono-font); background: var(--bg-3); padding: 1px 4px; border-radius: 3px; }
 .warn { background: var(--soft-warn); color: var(--warn); padding: 8px 10px; border-radius: 6px; margin-bottom: 10px; font-size: 12px; }
 
 .import-table, .sync-result { max-height: 330px; overflow: auto; border: 1px solid var(--line); border-radius: 7px; margin-bottom: 10px; }
@@ -298,22 +308,22 @@ code { font-family: "SF Mono", ui-monospace, monospace; background: var(--bg-3);
 .cmp > span.newer { color: var(--ok); font-weight: 600; }
 .cmp > span.older { color: var(--warn); }
 menu.wrapmenu { flex-wrap: wrap; }
-#conflict-path { font-family: "SF Mono", ui-monospace, monospace; font-size: 12px; word-break: break-all;
+#conflict-path { font-family: var(--mono-font); font-size: 12px; word-break: break-all;
   -webkit-user-select: text; user-select: text; margin: 0 0 10px; }
 
 /* konzole a vlastní příkazy */
 .console-out {
   margin: 0 0 8px; padding: 10px 12px; height: 320px; overflow: auto;
   background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
-  font: 12px/1.5 "SF Mono", ui-monospace, monospace; white-space: pre-wrap;
+  font: 12px/1.5 var(--mono-font); white-space: pre-wrap;
   word-break: break-word; -webkit-user-select: text; user-select: text;
 }
 .console-out .cmd { color: var(--accent); }
 .console-out .err { color: var(--err); }
 .console-out .ok { color: var(--ok); }
 .console-in { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.console-in .prompt { color: var(--ok); font-family: "SF Mono", ui-monospace, monospace; }
-.console-in input { flex: 1; font-family: "SF Mono", ui-monospace, monospace; font-size: 12.5px; }
+.console-in .prompt { color: var(--ok); font-family: var(--mono-font); }
+.console-in input { flex: 1; font-family: var(--mono-font); font-size: 12.5px; }
 
 .cmd-table { border: 1px solid var(--line); border-radius: 7px; margin-bottom: 10px;
   max-height: 240px; overflow: auto; }
@@ -325,7 +335,7 @@ menu.wrapmenu { flex-wrap: wrap; }
 .cmd-row.head { background: var(--bg-3); color: var(--fg-dim); font-size: 11px;
   text-transform: uppercase; letter-spacing: .05em; cursor: default; position: sticky; top: 0; }
 .cmd-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cmd-row .c { font-family: "SF Mono", ui-monospace, monospace; color: var(--fg-dim); font-size: 11.5px; }
+.cmd-row .c { font-family: var(--mono-font); color: var(--fg-dim); font-size: 11.5px; }
 .cmd-empty { padding: 14px; color: var(--fg-dim); font-size: 13px; }
 table.ph { font-size: 12.5px; }
 table.ph td:first-child { width: 150px; }
@@ -337,7 +347,7 @@ table.ph td:first-child { width: 150px; }
 }
 .watch-state b { color: var(--ok); }
 .watch-state .last { display: block; margin-top: 5px; color: var(--fg-dim);
-  font-family: "SF Mono", ui-monospace, monospace; font-size: 11.5px; }
+  font-family: var(--mono-font); font-size: 11.5px; }
 #watch-status.on { color: var(--ok); }
 
 /* hledání souborů */
@@ -351,7 +361,7 @@ table.ph td:first-child { width: 150px; }
 .find-results .fr:last-child { border-bottom: none; }
 .find-results .fr.head { position: sticky; top: 0; background: var(--bg-3); color: var(--fg-dim); font-size: 11px; z-index: 1; }
 .find-results .fr span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.find-results .fr .p { direction: rtl; text-align: left; font-family: "SF Mono", ui-monospace, monospace; font-size: 11.5px; }
+.find-results .fr .p { direction: rtl; text-align: left; font-family: var(--mono-font); font-size: 11.5px; }
 .find-results .fr .n { text-align: right; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
 .find-results .fr.dir .p { color: var(--dir); }
 
@@ -375,6 +385,24 @@ details[open] > summary { color: var(--accent); }
 .fixed-160 { flex: 0 0 160px; }
 .gap-below { margin-bottom: 12px; }
 #props-hash { height: auto; max-height: 120px; display: none; }
+
+.about-info { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; font-size: 12.5px; margin: 0 0 12px; }
+.about-info dt { color: var(--fg-dim); }
+.about-info dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* -------------------------------------------------------- nastavení */
+/* Voleb je tolik, že v jednom svitku se nedalo nic najít. Nalevo seznam
+   oddílů, napravo jeden po druhém — jako v systémových nastaveních. */
+.set-layout { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; }
+.set-nav { display: flex; flex-direction: column; gap: 2px; }
+.set-tab {
+  text-align: left; background: none; border: none; border-radius: 6px;
+  padding: 6px 10px; font-size: 12.5px; color: var(--fg-dim); cursor: pointer;
+}
+.set-tab:hover { background: var(--row-hover); color: var(--fg); }
+.set-tab.on { background: var(--accent-2); color: var(--on-accent); }
+.set-body { min-width: 0; max-height: 62vh; overflow: auto; padding-right: 4px; }
+.set-panel > h3:first-child, .set-body h3:first-child { margin-top: 0; }
 
 /* ------------------------------------------------------ správce relací */
 .sites-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 12px; }

@@ -311,24 +311,20 @@
 
   <!-- nastavení -->
   <dialog id="dlg-settings">
-    <form method="dialog" class="dlg">
+    <form method="dialog" class="dlg wide">
       <h2>Nastavení</h2>
 
-      <h3>Editor</h3>
-      <label>Editor pro vzdálené soubory
-        <input name="editor" placeholder="např. Visual Studio Code (prázdné = výchozí aplikace)" />
-      </label>
-      <p class="muted">Název aplikace tak, jak se jmenuje ve složce Aplikace. Soubor se stáhne do dočasné složky, otevře v editoru a při každém uložení se sám nahraje zpět.</p>
-
-      <label>Podle přípony
-        <input name="editorRules" spellcheck="false"
-               placeholder="*.png; *.jpg = Preview | *.sql = TablePlus" />
-      </label>
-      <p class="muted">Pravidla oddělená svislítkem, v každém <code>maska = aplikace</code>.
-        Platí první, které sedne, takže obecné patří nakonec. Bez pravidla se použije editor
-        výše; bez něj rozhodne systém — u obrázku nebo PDF je to jediné rozumné.</p>
-
-      <h3>Přenosy</h3>
+      <div class="set-layout">
+        <nav class="set-nav">
+          <button type="button" class="set-tab on" data-tab="prenosy">Přenosy</button>
+          <button type="button" class="set-tab" data-tab="editor">Editor</button>
+          <button type="button" class="set-tab" data-tab="vzhled">Vzhled</button>
+          <button type="button" class="set-tab" data-tab="panely">Panely</button>
+          <button type="button" class="set-tab" data-tab="sit">Síť</button>
+          <button type="button" class="set-tab" data-tab="relace">Relace</button>
+        </nav>
+        <div class="set-body">
+        <section class="set-panel" data-tab="prenosy">
       <div class="grid">
         <label>Souběžných přenosů
           <input name="maxConcurrent" type="number" min="1" max="16" />
@@ -424,7 +420,84 @@
         <code>| .DS_Store; .git/; node_modules/</code> — svislítko na začátku znamená
         „ber vše kromě". Kolik souborů maska vynechala, se vždycky napíše do stavového řádku.</p>
 
-      <h3>Síť</h3>
+              </section>
+        <section class="set-panel" data-tab="editor" hidden>
+      <label>Editor pro vzdálené soubory
+        <input name="editor" placeholder="např. Visual Studio Code (prázdné = výchozí aplikace)" />
+      </label>
+      <p class="muted">Název aplikace tak, jak se jmenuje ve složce Aplikace. Soubor se stáhne do dočasné složky, otevře v editoru a při každém uložení se sám nahraje zpět.</p>
+
+      <label>Podle přípony
+        <input name="editorRules" spellcheck="false"
+               placeholder="*.png; *.jpg = Preview | *.sql = TablePlus" />
+      </label>
+      <p class="muted">Pravidla oddělená svislítkem, v každém <code>maska = aplikace</code>.
+        Platí první, které sedne, takže obecné patří nakonec. Bez pravidla se použije editor
+        výše; bez něj rozhodne systém — u obrázku nebo PDF je to jediné rozumné.</p>
+
+              </section>
+        <section class="set-panel" data-tab="vzhled" hidden>
+      <h3>Vzhled</h3>
+      <label>Motiv
+        <select name="theme">
+          <option value="system">Podle systému</option>
+          <option value="light">Světlý</option>
+          <option value="dark">Tmavý</option>
+        </select>
+      </label>
+      <p class="muted">„Podle systému" se přepne sám, když si Mac v noci přepne na tmavý
+        vzhled. Volba platí i pro systémové dialogy a rám okna.</p>
+
+      <label class="check"><input type="checkbox" name="cacheListings" /> Pamatovat si výpisy navštívených složek</label>
+      <p class="muted">Návrat do složky, kterou jste právě viděli, je pak okamžitý — na pomalé
+        lince je to nejvíc znát. Záznam platí půl minuty a jakýkoliv zápis na server ho zahodí;
+        <kbd>⌘R</kbd> se paměti neptá nikdy.</p>
+
+      
+      <h3>Písmo</h3>
+      <div class="grid">
+        <label>Písmo rozhraní
+          <input name="uiFont" list="pisma" placeholder="systémové" spellcheck="false" />
+        </label>
+        <label>Písmo pro cesty a výpisy
+          <input name="monoFont" list="pisma-mono" placeholder="SF Mono" spellcheck="false" />
+        </label>
+      </div>
+      <datalist id="pisma"></datalist>
+      <datalist id="pisma-mono"></datalist>
+      <div class="grid">
+        <label>Velikost písma v seznamu (px)
+          <input name="listFontSize" type="number" min="9" max="24" step="0.5" placeholder="12.5" />
+        </label>
+        <label>Přiblížení okna (%)
+          <input name="zoomPercent" type="number" min="60" max="200" step="10" placeholder="100" />
+        </label>
+      </div>
+      <p class="muted">Velikost písma platí pro seznamy souborů, kde na ní záleží nejvíc —
+        výška řádku se přizpůsobí sama. Zvětšit celé rozhraní jde přiblížením
+        (<kbd>⌘+</kbd>, <kbd>⌘−</kbd>, <kbd>⌘0</kbd>); to je ostřejší a nic se nerozsype.
+        V nabídce písem jsou ta, která máte v systému; pro cesty a výpisy jsou nabídnutá
+        jen neproporcionální.</p>
+
+              </section>
+        <section class="set-panel" data-tab="panely" hidden>
+      <h3>Ovládání</h3>
+      <label>Dvojklik na soubor
+        <select name="doubleClick">
+          <option value="edit">Upravit v editoru (na serveru) / otevřít (lokálně)</option>
+          <option value="transfer">Přenést do druhého panelu</option>
+          <option value="reveal">Ukázat ve Finderu / stáhnout</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" name="typeAhead" /> Hledat psaním v seznamu</label>
+
+      
+      <h3>Sloupce</h3>
+      <label class="check"><input type="checkbox" name="colOwner" /> Zobrazit vlastníka</label>
+      <label class="check"><input type="checkbox" name="colGroup" /> Zobrazit skupinu</label>
+
+              </section>
+        <section class="set-panel" data-tab="sit" hidden>
       <div class="grid">
         <label>Keepalive (s)
           <input name="keepaliveSeconds" type="number" min="0" max="600" placeholder="10" />
@@ -445,37 +518,19 @@
         řádku je vidět závěr, v záznamu celý rozhovor. Hesla se do něj nedostanou
         (<code>PASS</code> se zkracuje). Soubor je jeden na den a nad 5 MB se odloží stranou.</p>
 
-      <h3>Vzhled</h3>
-      <label>Motiv
-        <select name="theme">
-          <option value="system">Podle systému</option>
-          <option value="light">Světlý</option>
-          <option value="dark">Tmavý</option>
-        </select>
+              </section>
+        <section class="set-panel" data-tab="relace" hidden>
+      <h3>Aktualizace</h3>
+      <label>Repozitář na GitHubu
+        <input name="updateRepo" placeholder="uzivatel/charon — prázdné = nekontrolovat" spellcheck="false" />
       </label>
-      <p class="muted">„Podle systému" se přepne sám, když si Mac v noci přepne na tmavý
-        vzhled. Volba platí i pro systémové dialogy a rám okna.</p>
+      <label class="check"><input type="checkbox" name="checkUpdatesOnStart" /> Zkontrolovat při spuštění</label>
+      <p class="muted">Zjistí se jen to, že je venku novější vydání, a dostanete odkaz —
+        nic se nestahuje ani neinstaluje. Automatická instalace by potřebovala podepsanou
+        aplikaci, což je jiná liga. Dokud repozitář nezadáte, nekontroluje se nic;
+        předstírat kontrolu, když není kam se dívat, je horší než ji nemít.</p>
 
-      <label class="check"><input type="checkbox" name="cacheListings" /> Pamatovat si výpisy navštívených složek</label>
-      <p class="muted">Návrat do složky, kterou jste právě viděli, je pak okamžitý — na pomalé
-        lince je to nejvíc znát. Záznam platí půl minuty a jakýkoliv zápis na server ho zahodí;
-        <kbd>⌘R</kbd> se paměti neptá nikdy.</p>
-
-      <h3>Ovládání</h3>
-      <label>Dvojklik na soubor
-        <select name="doubleClick">
-          <option value="edit">Upravit v editoru (na serveru) / otevřít (lokálně)</option>
-          <option value="transfer">Přenést do druhého panelu</option>
-          <option value="reveal">Ukázat ve Finderu / stáhnout</option>
-        </select>
-      </label>
-      <label class="check"><input type="checkbox" name="typeAhead" /> Hledat psaním v seznamu</label>
-
-      <h3>Sloupce</h3>
-      <label class="check"><input type="checkbox" name="colOwner" /> Zobrazit vlastníka</label>
-      <label class="check"><input type="checkbox" name="colGroup" /> Zobrazit skupinu</label>
-
-      <h3>Relace</h3>
+      <h3>Import</h3>
       <div class="row">
         <button type="button" id="btn-import">Import z WinSCP…</button>
         <button type="button" id="btn-import-ssh">Import z ~/.ssh/config…</button>
@@ -484,7 +539,14 @@
         export registru) — to je cesta pro přechod z Windows. Z <code>~/.ssh/config</code>
         se vezmou servery, uživatelé, klíče i brány (<code>ProxyJump</code>); hesla tam
         nejsou, protože se přihlašuje klíčem. Import z WinSCP je i v nabídce <em>Soubor</em>.</p>
-      <menu><button value="cancel">Zrušit</button><button value="save" class="primary">Uložit</button></menu>
+        </section>
+        </div>
+      </div>
+
+      <menu>
+        <button value="cancel">Zrušit</button>
+        <button value="save" class="primary">Uložit</button>
+      </menu>
     </form>
   </dialog>
 
@@ -521,6 +583,24 @@
         <button id="bulk-cancel">Zrušit</button>
         <button id="bulk-go" class="primary" disabled>Přejmenovat</button>
       </menu>
+    </div>
+  </dialog>
+
+  <!-- o aplikaci -->
+  <dialog id="dlg-about">
+    <div class="dlg">
+      <h2>Charon</h2>
+      <p class="muted">Dvoupanelový SFTP a FTP klient pro macOS — náhrada WinSCP.
+        Jméno má po převozníkovi, který vozí duše přes Styx; tenhle vozí soubory.</p>
+
+      <dl id="about-info" class="about-info"></dl>
+
+      <div class="row">
+        <button id="about-check">Zkontrolovat aktualizace</button>
+      </div>
+      <p class="muted" id="about-update"></p>
+
+      <menu><button id="about-close">Zavřít</button></menu>
     </div>
   </dialog>
 
