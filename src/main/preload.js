@@ -71,6 +71,10 @@ contextBridge.exposeInMainWorld('api', {
     start: (sid, opts) => invoke('find:start', { sid, ...opts }),
     cancel: (sid) => invoke('find:cancel', { sid }),
   },
+  cmd: {
+    prompts: (template) => invoke('cmd:prompts', { template }),
+    run: (sid, opts) => invoke('cmd:run', { sid, ...opts }),
+  },
   watch: {
     start: (sid, opts) => invoke('watch:start', { sid, ...opts }),
     stop: (sid) => invoke('watch:stop', { sid }),
@@ -113,6 +117,7 @@ contextBridge.exposeInMainWorld('api', {
   onEdit: (cb) => on('edit', cb),
   onWatch: (cb) => on('watch', cb),
   onFind: (cb) => on('find', cb),
+  onConsole: (cb) => on('console', cb),
   onLog: (cb) => on('log', cb),
   onMenu: (cb) => on('menu', cb),
 });

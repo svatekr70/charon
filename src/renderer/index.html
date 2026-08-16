@@ -264,6 +264,78 @@
     </form>
   </dialog>
 
+  <!-- konzole -->
+  <dialog id="dlg-console">
+    <div class="dlg wide">
+      <h2>Příkazy na serveru</h2>
+      <p class="muted" id="console-where"></p>
+      <pre class="console-out" id="console-out"></pre>
+      <div class="console-in">
+        <span class="prompt">$</span>
+        <input id="console-cmd" spellcheck="false" autocomplete="off"
+               placeholder="např. ls -la nebo php -v" />
+      </div>
+      <p class="muted">Každý příkaz běží v samostatném shellu, takže <code>cd</code> mezi
+        příkazy nedrží — pracovní adresář se bere z pravého panelu. Šipkami nahoru a dolů
+        se prochází historie.</p>
+      <menu>
+        <button id="console-clear">Vyčistit</button>
+        <button id="console-close" class="primary">Zavřít</button>
+      </menu>
+    </div>
+  </dialog>
+
+  <!-- vlastní příkazy -->
+  <dialog id="dlg-cmds">
+    <div class="dlg wide">
+      <h2>Vlastní příkazy</h2>
+      <p class="muted">Pojmenované příkazy nad vybranými soubory. Objeví se v kontextové
+        nabídce panelu.</p>
+      <div class="cmd-table" id="cmd-list"></div>
+
+      <h3>Zástupné znaky</h3>
+      <div class="scroll">
+        <table class="ph">
+          <tr><td><code>!</code></td><td>cesta k vybranému souboru</td></tr>
+          <tr><td><code>!N</code></td><td>název souboru bez cesty</td></tr>
+          <tr><td><code>!&amp;</code></td><td>všechny vybrané soubory</td></tr>
+          <tr><td><code>!/</code></td><td>vzdálený adresář</td></tr>
+          <tr><td><code>!\</code></td><td>lokální adresář</td></tr>
+          <tr><td><code>!?Otázka?výchozí!</code></td><td>zeptá se před spuštěním</td></tr>
+          <tr><td><code>!!</code></td><td>samotný vykřičník</td></tr>
+        </table>
+      </div>
+      <p class="muted">Dosazené hodnoty se samy uzavřou do apostrofů, takže vlastní uvozovky
+        psát nemusíte — a název souboru se středníkem se nemůže stát částí příkazu.</p>
+
+      <menu>
+        <button id="cmd-close">Zavřít</button>
+        <button id="cmd-add" class="primary">Přidat příkaz</button>
+      </menu>
+    </div>
+  </dialog>
+
+  <!-- editor jednoho příkazu -->
+  <dialog id="dlg-cmd-edit">
+    <form method="dialog" class="dlg">
+      <h2 id="cmd-edit-title">Nový příkaz</h2>
+      <label>Název<input name="name" required placeholder="např. Rozbalit archiv" /></label>
+      <label>Příkaz<input name="command" required spellcheck="false" placeholder="unzip -o ! -d !/" /></label>
+      <label>Kde se spustí
+        <select name="target">
+          <option value="remote">Na serveru (jen SFTP)</option>
+          <option value="local">Na tomhle počítači</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" name="each" /> Spustit zvlášť pro každý vybraný soubor</label>
+      <menu>
+        <button value="cancel">Zrušit</button>
+        <button value="delete" id="cmd-edit-delete" hidden>Smazat</button>
+        <button value="save" class="primary">Uložit</button>
+      </menu>
+    </form>
+  </dialog>
+
   <!-- hlídání složky -->
   <dialog id="dlg-watch">
     <div class="dlg wide">

@@ -73,7 +73,7 @@ Object.defineProperty(state, 'connected', {
 /** Výchozí nastavení; hlavní proces posílá jen to, co je uložené. */
 const DEFAULT_SETTINGS = {
   editor: '', doubleClick: 'edit', typeAhead: true, colOwner: false, colGroup: false,
-  transferMask: '', maxConcurrent: 3, speedLimitKb: 0,
+  transferMask: '', maxConcurrent: 3, speedLimitKb: 0, commands: [],
   tempName: true, tempNameMinKb: 0,
 };
 
@@ -732,6 +732,14 @@ function showContextMenu(side, x, y) {
     items.push(null);
   }
 
+  const cmds = customCommands().filter((c) => (side === 'remote' ? true : c.target === 'local'));
+  if (cmds.length) {
+    items.push(null);
+    for (const c of cmds) {
+      items.push({ label: `▶ ${c.name}`, fn: () => runCustomCommand(c, side) });
+    }
+  }
+  items.push(null);
   items.push({ label: 'Nová složka…', key: 'F7', fn: () => mkdirIn(side) });
   items.push({ label: 'Vybrat podle masky…', key: '+', fn: () => selectByMask(side, true) });
   items.push({ label: 'Odznačit podle masky…', key: '−', fn: () => selectByMask(side, false) });
@@ -748,6 +756,7 @@ function showContextMenu(side, x, y) {
     items.push({ label: '🔍 Najít soubory…', key: '⌘F', fn: () => openFind() });
     items.push({ label: '⇅ Synchronizovat tuto složku…', fn: () => openSync() });
     items.push({ label: '⟳ Hlídat lokální složku…', key: '⌘U', fn: () => openWatch() });
+    items.push({ label: '⌨ Příkazy na serveru…', key: '⌘L', fn: () => openConsole() });
     if (state.trash.enabled) items.push({ label: 'Vysypat koš na serveru…', fn: () => emptyRemoteTrash() });
   }
 
@@ -873,6 +882,200 @@ async function editRemote(remotePath) {
   setLog('warn', `Otevírám ${remotePath}…`);
   const r = await call(window.api.edit.open(sid(), remotePath));
   if (r) setLog('ok', `${remotePath} — změny se budou nahrávat automaticky`);
+}
+
+/* ------------------------------------------------------------- konzole */
+
+const consoleDlg = $('#dlg-console');
+const consoleHistory = [];
+let historyPos = -1;
+
+function openConsole() {
+  if (!state.connected) return setLog('error', 'Nejste připojeni');
+  if (active().info.protocol === 'ftp') {
+    return setLog('error', 'Spouštění příkazů umí jen SFTP, ne FTP');
+  }
+  $('#console-where').textContent = `${active().info.name} · pracovní adresář ${state.remote.path}`;
+  consoleDlg.showModal();
+  $('#console-cmd').focus();
+  return undefined;
+}
+
+function consoleWrite(text, kind = 'out') {
+  const out = $('#console-out');
+  const span = document.createElement('span');
+  if (kind !== 'out') span.className = kind;
+  span.textContent = text;
+  out.appendChild(span);
+  out.scrollTop = out.scrollHeight;
+}
+
+$('#console-close').addEventListener('click', () => consoleDlg.close());
+$('#console-clear').addEventListener('click', () => { $('#console-out').replaceChildren(); });
+
+$('#console-cmd').addEventListener('keydown', async (ev) => {
+  const input = ev.currentTarget;
+
+  // Historie příkazů šipkami, jako v terminálu.
+  if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
+    ev.preventDefault();
+    if (!consoleHistory.length) return;
+    historyPos = ev.key === 'ArrowUp'
+      ? Math.min(consoleHistory.length - 1, historyPos + 1)
+      : Math.max(-1, historyPos - 1);
+    input.value = historyPos < 0 ? '' : consoleHistory[historyPos];
+    return;
+  }
+  if (ev.key !== 'Enter') return;
+
+  const command = input.value.trim();
+  if (!command) return;
+  consoleHistory.unshift(command);
+  historyPos = -1;
+  input.value = '';
+  input.disabled = true;
+
+  // Zadaný řádek jde na server tak, jak je — sem uživatel píše rovnou příkaz,
+  // takže tu žádné zástupné znaky nedosazujeme.
+  await call(window.api.cmd.run(sid(), {
+    template: command.split('!').join('!!'),
+    target: 'remote',
+    cwd: state.remote.path,
+    localDir: state.local.path,
+    files: [],
+  }));
+  input.disabled = false;
+  input.focus();
+});
+
+window.api.onConsole(({ sid: id, payload }) => {
+  if (id !== state.activeId) return;
+  consoleWrite(payload.text, payload.kind);
+});
+
+/* ------------------------------------------------------ vlastní příkazy */
+
+const cmdsDlg = $('#dlg-cmds');
+const cmdEditDlg = $('#dlg-cmd-edit');
+const cmdEditForm = $('form', cmdEditDlg);
+
+function customCommands() {
+  return state.settings.commands || [];
+}
+
+function openCommands() {
+  renderCommands();
+  cmdsDlg.showModal();
+}
+
+function renderCommands() {
+  const box = $('#cmd-list');
+  const list = customCommands();
+
+  if (!list.length) {
+    box.replaceChildren(Object.assign(document.createElement('p'), {
+      className: 'cmd-empty',
+      textContent: 'Zatím žádné. Přidejte první tlačítkem dole.',
+    }));
+    return;
+  }
+
+  const head = document.createElement('div');
+  head.className = 'cmd-row head';
+  head.innerHTML = '<span>Název</span><span>Příkaz</span><span>Kde</span><span>Zvlášť</span>';
+
+  const rows = list.map((c) => {
+    const row = document.createElement('div');
+    row.className = 'cmd-row';
+    row.addEventListener('click', () => openCommandEditor(c));
+
+    const name = document.createElement('span');
+    name.textContent = c.name;
+    const cmd = document.createElement('span');
+    cmd.className = 'c';
+    cmd.textContent = c.command;
+    cmd.title = c.command;
+    const where = document.createElement('span');
+    where.textContent = c.target === 'local' ? 'lokálně' : 'na serveru';
+    const each = document.createElement('span');
+    each.textContent = c.each ? 'ano' : '—';
+
+    row.append(name, cmd, where, each);
+    return row;
+  });
+
+  box.replaceChildren(head, ...rows);
+}
+
+function openCommandEditor(cmd) {
+  const f = cmdEditForm.elements;
+  cmdEditDlg.dataset.id = cmd ? cmd.id : '';
+  $('#cmd-edit-title').textContent = cmd ? `Příkaz: ${cmd.name}` : 'Nový příkaz';
+  $('#cmd-edit-delete').hidden = !cmd;
+  f.name.value = cmd ? cmd.name : '';
+  f.command.value = cmd ? cmd.command : '';
+  f.target.value = cmd ? cmd.target : 'remote';
+  f.each.checked = cmd ? Boolean(cmd.each) : false;
+  cmdEditDlg.showModal();
+}
+
+cmdEditDlg.addEventListener('close', async () => {
+  const action = cmdEditDlg.returnValue;
+  if (action !== 'save' && action !== 'delete') return;
+
+  const id = cmdEditDlg.dataset.id;
+  const f = cmdEditForm.elements;
+  let list = customCommands().filter((c) => c.id !== id);
+
+  if (action === 'save') {
+    list = [...list, {
+      id: id || `c${Date.now()}`,
+      name: f.name.value.trim(),
+      command: f.command.value.trim(),
+      target: f.target.value,
+      each: f.each.checked,
+    }];
+  }
+
+  const saved = await call(window.api.settings.set({ commands: list }));
+  if (saved) applySettings(saved);
+  renderCommands();
+});
+
+$('#cmd-add').addEventListener('click', () => openCommandEditor(null));
+$('#cmd-close').addEventListener('click', () => cmdsDlg.close());
+
+/** Spustí vlastní příkaz nad výběrem v daném panelu. */
+async function runCustomCommand(cmd, side) {
+  if (cmd.target === 'remote' && !state.connected) return setLog('error', 'Nejste připojeni');
+  if (cmd.target === 'remote' && active().info.protocol === 'ftp') {
+    return setLog('error', 'Příkazy na serveru umí jen SFTP, ne FTP');
+  }
+
+  const files = selectedEntries(side).map((e) => fullPath(side, e));
+
+  // Dotazy v šabloně vyřešíme předem, ať se hlavní proces nemusí ptát zpět.
+  const prompts = await call(window.api.cmd.prompts(cmd.command)) || [];
+  const answers = {};
+  for (const p of prompts) {
+    const v = await promptDialog(cmd.name, p.question || 'Hodnota', p.value || '');
+    if (v === null) return undefined;
+    answers[p.question] = v;
+  }
+
+  $('#console-where').textContent = `${cmd.name} — ${cmd.target === 'local' ? 'lokálně' : active().info.name}`;
+  if (!consoleDlg.open) consoleDlg.showModal();
+
+  await call(window.api.cmd.run(sid(), {
+    template: cmd.command,
+    target: cmd.target,
+    cwd: state.remote.path,
+    localDir: state.local.path,
+    files,
+    answers,
+    each: cmd.each,
+  }));
+  return undefined;
 }
 
 /* --------------------------------------------------- hlídání složky */
@@ -1219,6 +1422,9 @@ document.addEventListener('keydown', async (ev) => {
       break;
     case 'f':
       if (ev.metaKey) { ev.preventDefault(); if (side === 'remote') openFind(); else toggleFilter(side); }
+      break;
+    case 'l':
+      if (ev.metaKey) { ev.preventDefault(); openConsole(); }
       break;
     default:
       // Psaní písmen skáče na odpovídající položku. Modifikátory vynecháváme,
@@ -1952,6 +2158,8 @@ window.api.onMenu(async (cmd) => {
   else if (cmd === 'emptytrash') emptyRemoteTrash();
   else if (cmd === 'find') openFind();
   else if (cmd === 'watch') openWatch();
+  else if (cmd === 'console') openConsole();
+  else if (cmd === 'commands') openCommands();
   else if (cmd === 'refresh') $('#btn-refresh').click();
 });
 

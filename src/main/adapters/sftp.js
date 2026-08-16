@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 const SftpClient = require('ssh2-sftp-client');
 const { makeThrottle } = require('../throttle');
+const { shellQuote } = require('../commands');
 
 function expandHome(p) {
   if (!p) return p;
@@ -168,6 +169,64 @@ class SftpAdapter {
 
   async chmod(remotePath, mode) {
     await this.client.chmod(remotePath, mode);
+  }
+
+  /**
+   * Spustí příkaz na serveru přes SSH.
+   *
+   * Každé spuštění je samostatný neinteraktivní shell, takže `cd` mezi
+   * příkazy nedrží. Pracovní adresář proto vkládáme před příkaz — jinak by
+   * všechno běželo v domovském adresáři, což je proti očekávání člověka,
+   * který kouká na otevřenou složku v panelu.
+   */
+  exec(command, { cwd = '', onData, timeoutMs = 60000, maxOutput = 1024 * 1024 } = {}) {
+    const client = this.client.client; // ssh2 Client uvnitř ssh2-sftp-client
+    if (!client) throw new Error('Nejste připojeni');
+
+    const full = cwd ? `cd ${shellQuote(cwd)} && ${command}` : command;
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let output = '';
+      let truncated = false;
+      let timer = null;
+
+      const finish = (fn, arg) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn(arg);
+      };
+
+      const collect = (text, kind) => {
+        if (output.length < maxOutput) {
+          output += text;
+          if (output.length >= maxOutput) {
+            truncated = true;
+            output = output.slice(0, maxOutput);
+          }
+        }
+        if (onData) onData(text, kind);
+      };
+
+      client.exec(full, (err, stream) => {
+        if (err) { finish(reject, err); return; }
+
+        timer = setTimeout(() => {
+          try { stream.close(); } catch { /* už zavřený */ }
+          finish(reject, new Error(`Příkaz běžel déle než ${Math.round(timeoutMs / 1000)} s a byl přerušen`));
+        }, timeoutMs);
+
+        stream.on('data', (d) => collect(d.toString('utf8'), 'out'));
+        stream.stderr.on('data', (d) => collect(d.toString('utf8'), 'err'));
+        stream.on('error', (e) => finish(reject, e));
+        stream.on('close', (code, signalName) => {
+          finish(resolve, {
+            code: code ?? 0, signal: signalName || null, output, truncated, command: full,
+          });
+        });
+      });
+    });
   }
 
   /**

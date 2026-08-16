@@ -21,6 +21,7 @@ const {
 } = require('./browse');
 const FileMask = require('../common/mask');
 const { Session, SessionManager, isDir: remoteIsDir } = require('./session');
+const { expand, findPrompts, runLocal } = require('./commands');
 
 let win = null;
 let sites = null;
@@ -29,6 +30,7 @@ let settings = {
   editor: '', localDir: os.homedir(), transferMask: '',
   maxConcurrent: 3, speedLimitKb: 0,
   tempName: true, tempNameMinKb: 0,
+  commands: [],
 };
 
 // ---------------------------------------------------------------- pomocné
@@ -369,6 +371,9 @@ function buildMenu() {
         { type: 'separator' },
         { label: 'Synchronizovat adresáře…', accelerator: 'Cmd+S', click: () => send('menu', 'sync') },
         { label: 'Hlídat složku a nahrávat změny…', accelerator: 'Cmd+U', click: () => send('menu', 'watch') },
+        { type: 'separator' },
+        { label: 'Příkazy na serveru…', accelerator: 'Cmd+L', click: () => send('menu', 'console') },
+        { label: 'Vlastní příkazy…', click: () => send('menu', 'commands') },
         // Bez akcelerátoru schválně: ⌘F si obsluhuje okno samo, aby v levém
         // panelu otevřelo filtr a v pravém hledání na serveru.
         { label: 'Najít soubory na serveru…', click: () => send('menu', 'find') },
@@ -684,6 +689,46 @@ function registerIpc() {
   handle('edit:stop', async ({ sid, remotePath }) => { await sessionOf(sid).editWatcher.stop(remotePath); return true; });
   handle('edit:stopAll', async ({ sid }) => { await sessionOf(sid).editWatcher.stopAll(); return true; });
   handle('edit:list', async ({ sid }) => sessionOf(sid).editWatcher.list());
+
+  // --- příkazy na serveru a na tomhle počítači ---
+
+  /** Dotazy v šabloně vyřeší okno předem; sem už přijdou hotové odpovědi. */
+  handle('cmd:prompts', async ({ template }) => findPrompts(template));
+
+  handle('cmd:run', async ({
+    sid, template, target, cwd, localDir, files, answers, each,
+  }) => {
+    const session = sessionOf(sid);
+    const list = files && files.length ? files : [];
+
+    // „Na každý zvlášť" spustí příkaz tolikrát, kolik je vybraných položek;
+    // jinak jednou se všemi najednou.
+    const rounds = each && list.length
+      ? list.map((f) => ({ file: f, files: [f] }))
+      : [{ file: list[0] || '', files: list }];
+
+    const results = [];
+    for (const round of rounds) {
+      const command = expand(template, {
+        ...round,
+        remoteDir: cwd,
+        localDir,
+        answers: answers || {},
+      });
+
+      const onData = (text, kind) => session.emit('console', { text, kind });
+      session.emit('console', { text: `$ ${command}\n`, kind: 'cmd' });
+
+      const res = target === 'local'
+        ? await runLocal(command, { cwd: localDir, onData })
+        : await session.requireBrowse().exec(command, { cwd, onData });
+
+      if (res.truncated) session.emit('console', { text: '\n… výstup je zkrácený\n', kind: 'err' });
+      session.emit('console', { text: `\n[návratový kód ${res.code}]\n`, kind: res.code === 0 ? 'ok' : 'err' });
+      results.push({ code: res.code, output: res.output, truncated: res.truncated });
+    }
+    return { runs: results.length, results };
+  });
 
   // --- hlídání složky s automatickým nahráváním ---
   handle('watch:start', async ({ sid, ...opts }) => {

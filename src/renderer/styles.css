@@ -235,6 +235,35 @@ menu.wrapmenu { flex-wrap: wrap; }
 #conflict-path { font-family: "SF Mono", ui-monospace, monospace; font-size: 12px; word-break: break-all;
   -webkit-user-select: text; user-select: text; margin: 0 0 10px; }
 
+/* konzole a vlastní příkazy */
+.console-out {
+  margin: 0 0 8px; padding: 10px 12px; height: 320px; overflow: auto;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  font: 12px/1.5 "SF Mono", ui-monospace, monospace; white-space: pre-wrap;
+  word-break: break-word; -webkit-user-select: text; user-select: text;
+}
+.console-out .cmd { color: var(--accent); }
+.console-out .err { color: var(--err); }
+.console-out .ok { color: var(--ok); }
+.console-in { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.console-in .prompt { color: var(--ok); font-family: "SF Mono", ui-monospace, monospace; }
+.console-in input { flex: 1; font-family: "SF Mono", ui-monospace, monospace; font-size: 12.5px; }
+
+.cmd-table { border: 1px solid var(--line); border-radius: 7px; margin-bottom: 10px;
+  max-height: 240px; overflow: auto; }
+.cmd-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.6fr) 96px 60px;
+  gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line);
+  font-size: 12.5px; cursor: pointer; }
+.cmd-row:last-child { border-bottom: none; }
+.cmd-row:hover { background: var(--bg-3); }
+.cmd-row.head { background: var(--bg-3); color: var(--fg-dim); font-size: 11px;
+  text-transform: uppercase; letter-spacing: .05em; cursor: default; position: sticky; top: 0; }
+.cmd-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmd-row .c { font-family: "SF Mono", ui-monospace, monospace; color: var(--fg-dim); font-size: 11.5px; }
+.cmd-empty { padding: 14px; color: var(--fg-dim); font-size: 13px; }
+table.ph { font-size: 12.5px; }
+table.ph td:first-child { width: 150px; }
+
 /* hlídání složky */
 .watch-state {
   background: var(--bg-3); border: 1px solid var(--line); border-radius: 8px;

@@ -8,6 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 const { Server } = require('ssh2');
 const { STATUS_CODE, OPEN_MODE } = require('ssh2').utils.sftp;
 
@@ -55,6 +56,29 @@ function startTestServer({
       client.on('ready', () => {
         client.on('session', (accept) => {
           const session = accept();
+
+          // Shell pro testy vlastních příkazů a konzole. Server poslouchá jen
+          // na 127.0.0.1 s pevnými testovacími údaji a běží výhradně v testech;
+          // do ničeho jiného se používat nesmí.
+          session.on('exec', (acceptExec, rejectExec, info) => {
+            const stream = acceptExec();
+            // Klient posílá absolutní cesty ze serveru; ty jsou u nás jen
+            // uvnitř testovacího kořene. Úvodní „cd" proto přepíšeme stejně,
+            // jako to dělá real() u ostatních operací.
+            const command = info.command.replace(
+              /^cd '((?:[^']|'\\'')*)' && /,
+              (_m, dir) => `cd '${real(dir.split("'\\''").join("'"))}' && `,
+            );
+            const child = spawn('/bin/sh', ['-c', command], { cwd: root });
+            child.stdout.on('data', (d) => stream.write(d));
+            child.stderr.on('data', (d) => stream.stderr.write(d));
+            child.on('error', () => { stream.exit(127); stream.end(); });
+            child.on('close', (code) => {
+              stream.exit(code ?? 0);
+              stream.end();
+            });
+          });
+
           session.on('sftp', (acceptSftp) => {
             const sftp = acceptSftp();
 

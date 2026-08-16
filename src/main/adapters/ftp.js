@@ -181,6 +181,15 @@ class FtpAdapter {
     await this.client.rename(from, to);
   }
 
+  /**
+   * FTP nemá shell — příkazy jde spouštět jen přes SFTP. Radši to řekneme
+   * rovnou, než aby uživatel hledal, proč se nic nestalo.
+   */
+  // eslint-disable-next-line class-methods-use-this
+  exec() {
+    throw new Error('Spouštění příkazů na serveru umí jen SFTP, ne FTP');
+  }
+
   /** Přejmenování přes existující cíl; ne každý server RNTO na obsazené jméno pustí. */
   async replace(from, to) {
     try {

@@ -35,6 +35,7 @@ předlohy vozí i zpátky.
 | Přenos přes dočasný název | ✅ |
 | Hlídání složky s automatickým nahráváním | ✅ |
 | Víc připojení naráz v záložkách | ✅ |
+| Vlastní příkazy a konzole na serveru | ✅ |
 
 Nepodporuje SCP, WebDAV ani S3 — relace v těchto protokolech se při importu
 zobrazí, ale nejdou naimportovat.
@@ -257,6 +258,7 @@ v Keychain, ne v souboru.
 | `⌘R` | Obnovit oba panely |
 | `⌘S` | Synchronizace adresářů |
 | `⌘U` | Hlídat složku a nahrávat změny |
+| `⌘L` | Příkazy na serveru |
 | `⌘O` | Připojit v nové záložce |
 | `⌘W` | Zavřít záložku |
 
@@ -374,6 +376,50 @@ rovnou stahovat, otevřít soubor v editoru nebo skočit na jeho místo v panelu
 Hledání se zastaví na 5000 nálezech a hloubce 40 úrovní — obojí je pojistka
 proti překlepu v masce, ne technický limit.
 
+## Příkazy na serveru
+
+`⌘L` otevře konzoli: napíšeš příkaz, uvidíš výstup i návratový kód. Šipkami
+nahoru a dolů se prochází historie. Funguje **jen přes SFTP** — FTP shell nemá
+a Charon to rovnou řekne, místo aby se tvářil, že se nic nestalo.
+
+Každý příkaz běží v samostatném neinteraktivním shellu, takže `cd` mezi příkazy
+nedrží. Pracovní adresář se proto vkládá před příkaz a bere se z pravého panelu
+— jinak by všechno běželo v domovském adresáři, což je proti očekávání člověka,
+který kouká na otevřenou složku.
+
+## Vlastní příkazy
+
+*Soubor → Vlastní příkazy…* Pojmenované příkazy nad vybranými soubory, které se
+pak objeví v kontextové nabídce panelu. Běží buď na serveru, nebo na tomhle
+počítači.
+
+| Zápis | Význam |
+| --- | --- |
+| `!` | cesta k vybranému souboru |
+| `!N` | název souboru bez cesty |
+| `!&` | všechny vybrané soubory |
+| `!/` | vzdálený adresář |
+| `!\` | lokální adresář |
+| `!?Otázka?výchozí!` | zeptá se před spuštěním |
+| `!!` | samotný vykřičník |
+
+Volba *Spustit zvlášť pro každý vybraný soubor* spustí příkaz tolikrát, kolik
+je vybraných položek; jinak proběhne jednou se všemi.
+
+**Dosazené hodnoty se samy uzavírají do apostrofů**, takže vlastní uvozovky
+psát nemusíte. Je to hlavně pojistka: název souboru si nevybírá ten, kdo příkaz
+psal, a soubor pojmenovaný `a; rm -rf ~` se nesmí stát částí příkazu. Na to je
+zvláštní test proti skutečnému shellu.
+
+Příklady:
+
+```
+grep -n !?Co hledat?TODO! !N        # najde v souboru, zeptá se na co
+tar czf zaloha.tgz !&               # zabalí všechny vybrané
+php -l !                            # zkontroluje syntaxi
+open !\                             # otevře lokální složku ve Finderu
+```
+
 ## Hlídání složky
 
 `⌘U` nebo *Soubor → Hlídat složku a nahrávat změny*. Charon sleduje lokální
@@ -425,6 +471,9 @@ npm test
 - `test/winscp-import.test.js` — dekódování hesel WinSCP, parsování `.ini` i `.reg`
 - `test/mask.test.js` — zápis masek souborů
 - `test/session.test.js` — správce záložek: pořadí, přepínání a úklid
+- `test/commands.test.js` — doplňování šablon a spouštění příkazů. Uzavírání do
+  apostrofů se ověřuje i doopravdy: soubor pojmenovaný `a; touch HACKED` se
+  přečte jako soubor a nic navíc nevznikne
 - `test/safety.test.js` — otisky klíčů a `known_hosts`, odmítnutí neověřeného
   serveru, všechny volby při konfliktu, přesun a chování koše
 - `test/browse.test.js` — dopočítání velikosti složek a hledání souborů
