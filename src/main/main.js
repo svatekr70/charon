@@ -20,6 +20,7 @@ const {
   localDirSize, remoteDirSize, expandLocal, expandRemote, remoteChmod,
 } = require('./browse');
 const FileMask = require('../common/mask');
+const perms = require('./perms');
 const { Session, SessionManager, isDir: remoteIsDir } = require('./session');
 const { QueueStore } = require('./queue-store');
 const { expand, findPrompts, runLocal } = require('./commands');
@@ -34,6 +35,8 @@ let settings = {
   tempName: true, tempNameMinKb: 0,
   commands: [], workspaces: [],
   theme: 'system',
+  // Práva nahraných souborů: 'keep' | 'fixed' | 'preserve'.
+  uploadPerms: 'keep', uploadFileMode: '644', uploadDirMode: '755',
 };
 
 // ---------------------------------------------------------------- pomocné
@@ -351,6 +354,7 @@ async function enqueueUpload(session, items, remoteDir, extra = {}, maskText = '
   try {
     for (const j of jobs.filter((x) => x.direction === 'mkdirRemote')) {
       await a.mkdir(j.remotePath, true).catch(() => {});
+      await perms.apply(a, j.remotePath, perms.dirMode(settings));
     }
   } finally {
     session.transferPool().release(a);
@@ -821,7 +825,10 @@ function registerIpc() {
     const jobs = [];
     for (const act of actions) {
       switch (act.action) {
-        case 'mkdirRemote': await a.mkdir(act.remotePath, true).catch(() => {}); break;
+        case 'mkdirRemote':
+          await a.mkdir(act.remotePath, true).catch(() => {});
+          await perms.apply(a, act.remotePath, perms.dirMode(settings));
+          break;
         case 'mkdirLocal': await fsp.mkdir(act.localPath, { recursive: true }); break;
         // conflictResolved: v náhledu synchronizace uživatel o přepisu
         // rozhodl, druhý dotaz na každý soubor by byl jen otrava.

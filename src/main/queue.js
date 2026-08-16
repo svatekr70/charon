@@ -7,11 +7,15 @@ const crypto = require('crypto');
 const { EventEmitter } = require('events');
 
 const { RateLimiter } = require('./throttle');
+const perms = require('./perms');
 
 /**
  * Přípona rozepsaného souboru. Stejnou používá WinSCP, takže když se přenos
  * nedokončí, je i z jiného klienta na první pohled vidět, co se stalo.
  */
+/** Okno, ze kterého se počítá celková rychlost a odhad času. */
+const SPEED_WINDOW_MS = 8000;
+
 const TEMP_SUFFIX = '.filepart';
 
 /** Jednoduchý přerušovací token — adaptéry na něj čekají přes .once('abort'). */
@@ -68,6 +72,11 @@ class TransferQueue extends EventEmitter {
     this.onMoveSource = onMoveSource || null;
     this.concurrency = Math.max(1, concurrency);
     this.paused = false;
+    // Kolik bajtů fronta opravdu přenesla, a vzorky pro výpočet rychlosti.
+    this.moved = 0;
+    this.samples = [];
+    // Práva nahraných souborů; výchozí je nechat je na serveru.
+    this.perms = {};
     this.workers = 0;
     /** id položky → přerušovací token právě běžícího přenosu */
     this.active = new Map();
@@ -86,6 +95,11 @@ class TransferQueue extends EventEmitter {
     this.useTempName = true;
     /** Od jaké velikosti dočasný název používat; 0 = vždy. */
     this.tempNameMinBytes = 0;
+  }
+
+  /** Práva nahraných souborů (Nastavení → Přenosy). */
+  setPermissions(settings) {
+    this.perms = settings || {};
   }
 
   setTempName(enabled, minBytes = 0) {
@@ -217,6 +231,35 @@ class TransferQueue extends EventEmitter {
     this._emitUpdate(true);
   }
 
+  /**
+   * Zaznamená přenesené bajty pro výpočet celkové rychlosti.
+   *
+   * Rychlost jednotlivé položky je průměr od jejího začátku — na odhad času
+   * se nehodí, protože po dokončení položky ze součtu zmizí a odhad poskočí.
+   * Proto se měří průtok celé fronty v posuvném okně.
+   */
+  _sample(delta) {
+    if (delta > 0) this.moved += delta;
+    const now = Date.now();
+    const last = this.samples[this.samples.length - 1];
+    // Vzorkujeme nejvýš pětkrát za vteřinu; častěji by to jen zabíralo paměť.
+    if (last && now - last.t < 200) { last.t = now; last.moved = this.moved; return; }
+    this.samples.push({ t: now, moved: this.moved });
+    while (this.samples.length > 2 && now - this.samples[0].t > SPEED_WINDOW_MS) this.samples.shift();
+  }
+
+  /** Průměrná rychlost za posledních pár vteřin, v bajtech za vteřinu. */
+  _windowSpeed() {
+    if (this.samples.length < 2) return 0;
+    const first = this.samples[0];
+    const last = this.samples[this.samples.length - 1];
+    const dt = (last.t - first.t) / 1000;
+    if (dt < 0.5) return 0;
+    // Když se poslední vzorek nehýbe, přenos stojí — okno by pak lhalo.
+    if (Date.now() - last.t > 2000) return 0;
+    return Math.round((last.moved - first.moved) / dt);
+  }
+
   snapshot() {
     const open = this.items.filter((i) => ['pending', 'active', 'paused'].includes(i.status));
     const totalBytes = open.reduce((a, i) => a + (i.size || 0), 0);
@@ -224,9 +267,21 @@ class TransferQueue extends EventEmitter {
     const speed = this.items
       .filter((i) => i.status === 'active')
       .reduce((a, i) => a + (i.speed || 0), 0);
+    // Položka bez známé velikosti se do součtu započítat nedá; radši to
+    // přiznáme, než abychom ukazovali odhad, který nemůže vyjít.
+    const unknown = open.filter((i) => !i.size).length;
+    const speedAvg = this.paused ? 0 : this._windowSpeed();
+    const remaining = Math.max(0, totalBytes - doneBytes);
+    const eta = speedAvg > 0 && remaining > 0 && !unknown
+      ? Math.round(remaining / speedAvg)
+      : null;
+
     return {
       items: this.items,
       paused: this.paused,
+      speedAvg,
+      eta,
+      unknownSizes: unknown,
       running: this.workers > 0,
       active: this.active.size,
       concurrency: this.concurrency,
@@ -325,6 +380,9 @@ class TransferQueue extends EventEmitter {
   async _transfer(item, adapter, token) {
     const limiters = [this.limiter, item.limiter];
     const onProgress = (bytes) => {
+      // Do celkové rychlosti počítáme jen přírůstek. Po navázání začíná
+      // `bytes` na velikosti rozepsaného souboru a ta se přenášet nemusela.
+      this._sample(Math.max(0, bytes - (item.transferred || 0)));
       item.transferred = bytes;
       const elapsed = (Date.now() - item.startedAt) / 1000;
       if (elapsed > 0.3) item.speed = Math.round(bytes / elapsed);
@@ -373,6 +431,12 @@ class TransferQueue extends EventEmitter {
         }
         item.tempPath = null;
       }
+
+      // Práva až na konečné cestě: kdybychom je nastavili na `.filepart`,
+      // přejmenování by je sice zachovalo, ale při vypnutém dočasném názvu
+      // by se to chovalo jinak. Takhle je to stejné v obou případech.
+      const chyba = await perms.apply(adapter, item.remotePath, perms.fileMode(this.perms, local.mode));
+      if (chyba) item.note = `práva se nenastavila — ${chyba}`;
     } else {
       const remote = await adapter.stat(item.remotePath);
       item.size = remote.size;

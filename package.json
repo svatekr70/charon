@@ -7,7 +7,7 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "dist": "electron-builder --mac",
-    "test": "node test/mask.test.js && node test/theme.test.js && node test/filekind.test.js && node test/session.test.js && node test/commands.test.js && node test/editconflict.test.js && node test/properties.test.js && node test/queue-store.test.js && node test/netpath.test.js && node test/reconnect.test.js && node test/winscp-import.test.js && node test/safety.test.js && node test/browse.test.js && node test/transfer-mask.test.js && node test/parallel.test.js && node test/tempname.test.js && node test/watcher.test.js && node test/e2e.test.js && node test/ftp.test.js && node test/ftps.test.js",
+    "test": "node test/mask.test.js && node test/theme.test.js && node test/filekind.test.js && node test/session.test.js && node test/commands.test.js && node test/editconflict.test.js && node test/properties.test.js && node test/queue-store.test.js && node test/netpath.test.js && node test/reconnect.test.js && node test/winscp-import.test.js && node test/safety.test.js && node test/browse.test.js && node test/transfer-mask.test.js && node test/parallel.test.js && node test/eta.test.js && node test/uploadperms.test.js && node test/tempname.test.js && node test/watcher.test.js && node test/e2e.test.js && node test/ftp.test.js && node test/ftps.test.js",
     "install-app": "npm run dist && rm -rf /Applications/Charon.app && cp -R dist/mac-arm64/Charon.app /Applications/ && echo \"Charon je aktualizovaný v /Applications\"",
     "servers": "node tools/test-servers.js"
   },

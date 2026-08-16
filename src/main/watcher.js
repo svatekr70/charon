@@ -9,6 +9,7 @@ const chokidar = require('chokidar');
 
 const FileMask = require('../common/mask');
 const { TEMP_SUFFIX } = require('./queue');
+const perms = require('./perms');
 
 /**
  * Hlídání složky s automatickým nahráváním.
@@ -140,6 +141,8 @@ class FolderWatcher extends EventEmitter {
 
     for (const a of res.actions.filter((x) => x.action === 'mkdirRemote')) {
       await adapter.mkdir(a.remotePath, true).catch(() => {});
+      // Práva bere hlídání ze stejného nastavení jako fronta.
+      await perms.apply(adapter, a.remotePath, perms.dirMode(this.queue.perms));
     }
     const uploads = res.actions.filter((a) => a.action === 'upload');
     if (uploads.length) {
@@ -184,6 +187,7 @@ class FolderWatcher extends EventEmitter {
       if (action === 'mkdir') {
         const adapter = await this.getAdapter();
         await adapter.mkdir(remotePath, true).catch(() => {});
+        await perms.apply(adapter, remotePath, perms.dirMode(this.queue.perms));
         this._emit(`+ ${path.basename(localPath)}/`);
         return;
       }

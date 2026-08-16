@@ -271,6 +271,28 @@
         přejmenování navíc na soubor — u tisíců drobných souborů přes pomalou linku se vyplatí
         nastavit spodní hranici.</p>
 
+      <label>Práva nahraných souborů
+        <select name="uploadPerms">
+          <option value="keep">Nechat na serveru</option>
+          <option value="fixed">Nastavit pevně</option>
+          <option value="preserve">Zachovat lokální (u složek pevně)</option>
+        </select>
+      </label>
+      <div class="grid">
+        <label>Soubory (osmičkově)
+          <input name="uploadFileMode" placeholder="644" spellcheck="false" />
+        </label>
+        <label>Složky (osmičkově)
+          <input name="uploadDirMode" placeholder="755" spellcheck="false" />
+        </label>
+      </div>
+      <p class="muted">Na sdíleném hostingu rozhoduje, s jakými právy soubor na serveru
+        skončí — nahraný soubor s právy 600 web neukáže. Výchozí je nesahat na to,
+        co server nastaví sám. „Zachovat lokální" přenese práva ze souboru na disku;
+        u složek zachovávat není co, ty vznikají až na serveru, takže se řídí polem
+        vedle. Když server práva nastavit neumí (starší FTP bez <code>SITE CHMOD</code>),
+        přenos kvůli tomu neselže a jen se to napíše k položce.</p>
+
       <label>Výchozí maska pro přenosy
         <input name="transferMask" placeholder="prázdné = přenášet vše" spellcheck="false" />
       </label>

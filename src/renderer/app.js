@@ -75,6 +75,7 @@ const DEFAULT_SETTINGS = {
   editor: '', doubleClick: 'edit', typeAhead: true, colOwner: false, colGroup: false,
   transferMask: '', maxConcurrent: 3, speedLimitKb: 0, commands: [], workspaces: [],
   theme: 'system',
+  uploadPerms: 'keep', uploadFileMode: '644', uploadDirMode: '755',
   tempName: true, tempNameMinKb: 0,
 };
 
@@ -123,6 +124,27 @@ function fmtPerm(mode) {
 
 function fmtSpeed(bps) {
   return bps > 0 ? `${fmtSize(bps)}/s` : '';
+}
+
+/**
+ * Zbývající čas.
+ *
+ * Zaokrouhluje se hrubě a čím delší čas, tím hruběji — u půlhodinového přenosu
+ * nikoho nezajímají vteřiny a přesná čísla by jen poskakovala.
+ */
+function fmtEta(sec) {
+  if (sec === null || sec === undefined || !Number.isFinite(sec)) return '';
+  if (sec < 10) return 'pár vteřin';
+  if (sec < 60) return `${Math.round(sec / 5) * 5} s`;
+  if (sec < 600) {
+    const m = Math.floor(sec / 60);
+    const r = Math.round((sec % 60) / 10) * 10;
+    return r && r < 60 ? `${m} min ${r} s` : `${m + (r >= 60 ? 1 : 0)} min`;
+  }
+  if (sec < 3600) return `${Math.round(sec / 60)} min`;
+  const h = Math.floor(sec / 3600);
+  const m = Math.round((sec % 3600) / 60);
+  return m ? `${h} h ${m} min` : `${h} h`;
 }
 
 /** České skloňování podle počtu: 1 soubor, 2–4 soubory, 0 a 5+ souborů. */
@@ -2329,9 +2351,15 @@ function renderQueue(snap) {
 
   const pct = snap.totalBytes ? Math.round((snap.doneBytes / snap.totalBytes) * 100) : 0;
   const running = snap.active > 1 ? ` · ${snap.active} naráz` : '';
+  // Odhad ukazujeme, jen když je z čeho počítat. Když u některé položky neznáme
+  // velikost, řekneme to — je to poctivější než odhad, který nemůže vyjít.
+  const eta = snap.eta ? ` · zbývá ~${fmtEta(snap.eta)}` : '';
+  const nejasne = snap.unknownSizes
+    ? ` · ${snap.unknownSizes} ${plural(snap.unknownSizes, 'položka neznámé velikosti', 'položky neznámé velikosti', 'položek neznámé velikosti')}`
+    : '';
   $('#queue-summary').textContent = snap.pending
     ? `${snap.pending} ve frontě · ${fmtSize(snap.doneBytes)} / ${fmtSize(snap.totalBytes)} (${pct} %)`
-      + `${running}${snap.paused ? ' · pozastaveno' : ''}`
+      + `${eta}${running}${nejasne}${snap.paused ? ' · pozastaveno' : ''}`
     : (snap.items.length ? 'hotovo' : 'prázdná');
 
   const limit = snap.speedLimit ? ` (strop ${fmtSize(snap.speedLimit)}/s)` : '';
@@ -2383,6 +2411,9 @@ $('#btn-settings').addEventListener('click', () => {
   f.tempNameMinKb.value = cur.tempNameMinKb || 0;
   f.doubleClick.value = cur.doubleClick;
   f.theme.value = cur.theme || 'system';
+  f.uploadPerms.value = cur.uploadPerms || 'keep';
+  f.uploadFileMode.value = cur.uploadFileMode || '';
+  f.uploadDirMode.value = cur.uploadDirMode || '';
   f.typeAhead.checked = cur.typeAhead !== false;
   f.colOwner.checked = Boolean(cur.colOwner);
   f.colGroup.checked = Boolean(cur.colGroup);
@@ -2401,6 +2432,9 @@ setDlg.addEventListener('close', async () => {
     tempNameMinKb: Math.max(0, Number(f.tempNameMinKb.value) || 0),
     doubleClick: f.doubleClick.value,
     theme: f.theme.value,
+    uploadPerms: f.uploadPerms.value,
+    uploadFileMode: f.uploadFileMode.value.trim(),
+    uploadDirMode: f.uploadDirMode.value.trim(),
     typeAhead: f.typeAhead.checked,
     colOwner: f.colOwner.checked,
     colGroup: f.colGroup.checked,

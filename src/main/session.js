@@ -62,6 +62,7 @@ class Session {
     });
     this.queue.setSpeedLimit((settings.speedLimitKb || 0) * 1024);
     this.queue.setTempName(settings.tempName !== false, (settings.tempNameMinKb || 0) * 1024);
+    this.queue.setPermissions(settings);
     this.queue.on('update', (snap) => {
       this.emit('queue', snap);
       // Nedokončené přenosy si pamatujeme, aby přežily zavření aplikace.
@@ -227,6 +228,7 @@ class Session {
     this.queue.setConcurrency(settings.maxConcurrent || 1);
     this.queue.setSpeedLimit((settings.speedLimitKb || 0) * 1024);
     this.queue.setTempName(settings.tempName !== false, (settings.tempNameMinKb || 0) * 1024);
+    this.queue.setPermissions(settings);
     if (this.pool && !this.pool.closed) this.pool.setMax(settings.maxConcurrent || 1);
   }
 
