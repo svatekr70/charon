@@ -243,6 +243,9 @@ function renderPane(side) {
     const row = document.createElement('div');
     row.className = `row ${e.type === 'd' ? 'dir' : e.type === 'l' ? 'link' : ''}${isHidden(e) ? ' hidden-file' : ''}`;
     row.dataset.index = String(i);
+    // Ikonu vybírá styl podle škatulky; tu určuje sdílený modul, aby se
+    // panel a dialog vlastností nikdy nerozcházely v tom, co je co.
+    row.dataset.kind = window.FileKind.of(e.name, e.type).kind;
     row.draggable = true;
     if (st.sel.has(e.name)) row.classList.add('sel');
 
@@ -1031,10 +1034,15 @@ async function openProperties(side) {
     : `${propsPaths.length} ${plural(propsPaths.length, 'položka', 'položky', 'položek')}`;
 
   const rows = [
-    '<tr><th>Položka</th><th>Velikost</th><th>Změněno</th><th>Práva</th><th>Vlastník</th><th>Skupina</th></tr>',
+    '<tr><th>Položka</th><th>Typ</th><th>Velikost</th><th>Změněno</th><th>Práva</th><th>Vlastník</th><th>Skupina</th></tr>',
     ...data.items.map((it) => {
-      const name = it.path.slice(it.path.lastIndexOf('/') + 1) + (it.isDir ? '/' : '');
-      return `<tr><td>${escapeHtml(name)}</td><td>${it.isDir ? '—' : fmtSize(it.size)}</td>`
+      const bare = it.path.slice(it.path.lastIndexOf('/') + 1);
+      const name = bare + (it.isDir ? '/' : '');
+      // Typ určujeme z názvu — obsah bychom si kvůli tomu museli stáhnout.
+      const kind = window.FileKind.of(bare, it.isDir ? 'd' : 'f');
+      const typ = it.isDir ? kind.label : `${kind.label} · ${kind.mime}`;
+      return `<tr><td>${escapeHtml(name)}</td><td>${escapeHtml(typ)}</td>`
+        + `<td>${it.isDir ? '—' : fmtSize(it.size)}</td>`
         + `<td>${fmtDate(it.mtime) || '—'}</td><td>${fmtPerm(it.mode) || '—'}</td>`
         + `<td>${it.owner ?? '—'}</td><td>${it.group ?? '—'}</td></tr>`;
     }),

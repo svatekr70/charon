@@ -39,6 +39,13 @@ const pravidla = css.slice(konecPalety);
 const barvyVPravidlech = pravidla.match(/#[0-9a-fA-F]{3,8}\b|\brgba?\(/g) || [];
 check('mimo paletu není žádná barva', barvyVPravidlech, []);
 
+// Ikony jsou masky — barva uvnitř SVG je nepodstatná, ale barva, kterou se
+// obarvují, musí i tady pocházet z palety.
+const ikony = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'icons.css'), 'utf8');
+const barvyVIkonach = (ikony.match(/#[0-9a-fA-F]{3,8}\b|\brgba?\(/g) || []);
+check('ani ve stylu ikon', barvyVIkonach, []);
+truthy('ikony se barví proměnnou', /background: var\(--icon-color/.test(ikony));
+
 const tokeny = [...paleta.matchAll(/^\s*(--[a-z0-9-]+):/gm)].map((m) => m[1]);
 truthy('paleta má tokeny', tokeny.length > 20, `${tokeny.length}`);
 

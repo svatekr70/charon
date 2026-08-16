@@ -1,0 +1,84 @@
+/**
+ * Ikony souborů a složek.
+ *
+ * Kreslí se jako maska, ne jako obrázek: tvar vezme jen průhlednost SVG
+ * a barvu určí `--icon-color`. Díky tomu ikony samy zesvětlají v tmavém
+ * motivu, zbělají na vybraném řádku a nemusí existovat dvakrát. Barva uvnitř
+ * SVG je proto nepodstatná.
+ *
+ * Vloženo přímo do stylu jako data: URI — jsou to drobné tvary, další soubory
+ * na disku by u nich byly víc práce než užitku. Škatulky určuje
+ * `src/common/filekind.js`.
+ */
+
+:root {
+  --i-folder: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Cpath d='M1.7 4.3c0-.6.5-1 1-1h3.4l1.5 1.7h6.7c.6 0 1 .4 1 1v6.4c0 .6-.4 1-1 1H2.7c-.5 0-1-.4-1-1z'/%3E%3C/svg%3E");
+  --i-up: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M1.7 4.3c0-.6.5-1 1-1h3.4l1.5 1.7h6.7c.6 0 1 .4 1 1v6.4c0 .6-.4 1-1 1H2.7c-.5 0-1-.4-1-1z'/%3E%3Cpath d='M8 12V7.4M6.2 9.2L8 7.3l1.8 1.9'/%3E%3C/svg%3E");
+  --i-link: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round'%3E%3Cpath d='M6.4 9.6l3.2-3.2'/%3E%3Cpath d='M5.2 7.6L3.6 9.2a2.3 2.3 0 003.2 3.2l1.6-1.6'/%3E%3Cpath d='M10.8 8.4l1.6-1.6a2.3 2.3 0 00-3.2-3.2L7.6 5.2'/%3E%3C/svg%3E");
+  --i-file: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Cpath d='M3.7 1.9h5.1l3.5 3.5v8.7H3.7z'/%3E%3Cpath d='M8.8 1.9v3.5h3.5'/%3E%3C/svg%3E");
+  --i-text: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M3.7 1.9h5.1l3.5 3.5v8.7H3.7z'/%3E%3Cpath d='M8.8 1.9v3.5h3.5'/%3E%3Cpath d='M5.8 8.4h4.4M5.8 11h4.4'/%3E%3C/svg%3E");
+  --i-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Crect x='1.8' y='2.9' width='12.4' height='10.2' rx='1.2'/%3E%3Ccircle cx='5.6' cy='6.4' r='1.1'/%3E%3Cpath d='M2.2 11.6l3.3-3 2.3 2 2.4-2.6 3.6 3.9'/%3E%3C/svg%3E");
+  --i-video: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Crect x='1.6' y='3.4' width='9.2' height='9.2' rx='1.2'/%3E%3Cpath d='M10.8 8l3.6-2.4v4.8z'/%3E%3C/svg%3E");
+  --i-audio: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Cpath d='M6.1 11.6V3.9l7-1.4v7.7'/%3E%3Ccircle cx='4.4' cy='11.7' r='1.8'/%3E%3Ccircle cx='11.4' cy='10.3' r='1.8'/%3E%3C/svg%3E");
+  --i-archive: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.3 5.8h11.4v6.9c0 .6-.4 1-1 1H3.3c-.6 0-1-.4-1-1z'/%3E%3Crect x='1.7' y='2.4' width='12.6' height='3.4' rx='.8'/%3E%3Cpath d='M6.7 9.1h2.6'/%3E%3C/svg%3E");
+  --i-disk: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4'%3E%3Ccircle cx='8' cy='8' r='6.1'/%3E%3Ccircle cx='8' cy='8' r='1.7'/%3E%3C/svg%3E");
+  --i-code: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M5.6 4.3L1.9 8l3.7 3.7M10.4 4.3L14.1 8l-3.7 3.7'/%3E%3C/svg%3E");
+  --i-markup: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M6.2 3.6L3.6 8l2.6 4.4M9.8 3.6L12.4 8l-2.6 4.4'/%3E%3Cpath d='M8.9 2.9l-1.8 10.2'/%3E%3C/svg%3E");
+  --i-style: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Cpath d='M8 1.9s4.5 4.9 4.5 7.6a4.5 4.5 0 01-9 0C3.5 6.8 8 1.9 8 1.9z'/%3E%3C/svg%3E");
+  --i-data: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Cellipse cx='8' cy='4' rx='5.1' ry='2.1'/%3E%3Cpath d='M2.9 4v8c0 1.2 2.3 2.1 5.1 2.1s5.1-.9 5.1-2.1V4'/%3E%3Cpath d='M13.1 8c0 1.2-2.3 2.1-5.1 2.1S2.9 9.2 2.9 8'/%3E%3C/svg%3E");
+  --i-config: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='2.3'/%3E%3Cpath d='M8 1.6v1.9M8 12.5v1.9M14.4 8h-1.9M3.5 8H1.6M12.5 3.5l-1.3 1.3M4.8 11.2l-1.3 1.3M12.5 12.5l-1.3-1.3M4.8 4.8L3.5 3.5'/%3E%3C/svg%3E");
+  --i-pdf: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M3.7 1.9h5.1l3.5 3.5v8.7H3.7z'/%3E%3Cpath d='M8.8 1.9v3.5h3.5'/%3E%3Cpath d='M5.9 11.6c2.2-1 3.3-3 3.4-4.6.1-1-.9-1.2-1.2-.4-.4 1.1 1 4.4 2.6 5'/%3E%3C/svg%3E");
+  --i-doc: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M3.7 1.9h5.1l3.5 3.5v8.7H3.7z'/%3E%3Cpath d='M8.8 1.9v3.5h3.5'/%3E%3Cpath d='M5.8 7.3h2.4M5.8 9.6h4.4M5.8 11.9h4.4'/%3E%3C/svg%3E");
+  --i-sheet: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Crect x='1.9' y='2.6' width='12.2' height='10.8' rx='1'/%3E%3Cpath d='M1.9 6.2h12.2M1.9 9.8h12.2M6.4 2.6v10.8'/%3E%3C/svg%3E");
+  --i-slides: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='1.7' y='2.4' width='12.6' height='8.6' rx='1'/%3E%3Cpath d='M8 11v2.4M5.6 13.6h4.8'/%3E%3C/svg%3E");
+  --i-font: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M3.4 13.2L8 2.8l4.6 10.4'/%3E%3Cpath d='M5.2 9.6h5.6'/%3E%3C/svg%3E");
+  --i-exe: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='1.7' y='2.6' width='12.6' height='10.8' rx='1.2'/%3E%3Cpath d='M4.4 6.3l2.2 2.1-2.2 2.1M8.4 10.9h3.2'/%3E%3C/svg%3E");
+  --i-key: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Ccircle cx='5.2' cy='8' r='2.9'/%3E%3Cpath d='M8.1 8h6.2M12.6 8v2.4M10.4 8v2'/%3E%3C/svg%3E");
+}
+
+/* Ikona je pozadí prázdného pseudoprvku; vlastní tvar dělá maska, takže
+   `--icon-color` obarví cokoliv. */
+.row .name::before {
+  content: '';
+  display: inline-block;
+  width: 14px; height: 14px;
+  margin-right: 6px;
+  vertical-align: -2.5px;
+  background: var(--icon-color, var(--fg-dim));
+  mask: var(--icon, var(--i-file)) center / 14px 14px no-repeat;
+}
+
+/* Hlavička sloupce se posune o stejný kus, ať názvy začínají pod ní. */
+.list-head .col-name { padding-left: 20px; }
+
+/* Nadřazená složka je pořád složka, jen se jde nahoru. */
+.row[data-up] .name::before { --icon: var(--i-up); --icon-color: var(--dir); }
+
+.row[data-kind="folder"] .name::before { --icon: var(--i-folder); --icon-color: var(--dir); }
+.row[data-kind="link"] .name::before { --icon: var(--i-link); --icon-color: var(--link); }
+
+.row[data-kind="image"] .name::before { --icon: var(--i-image); --icon-color: var(--violet); }
+.row[data-kind="video"] .name::before { --icon: var(--i-video); --icon-color: var(--violet); }
+.row[data-kind="audio"] .name::before { --icon: var(--i-audio); --icon-color: var(--violet); }
+.row[data-kind="font"] .name::before { --icon: var(--i-font); --icon-color: var(--violet); }
+
+.row[data-kind="code"] .name::before { --icon: var(--i-code); --icon-color: var(--accent); }
+.row[data-kind="markup"] .name::before { --icon: var(--i-markup); --icon-color: var(--accent); }
+.row[data-kind="style"] .name::before { --icon: var(--i-style); --icon-color: var(--accent); }
+.row[data-kind="data"] .name::before { --icon: var(--i-data); --icon-color: var(--accent); }
+
+.row[data-kind="archive"] .name::before { --icon: var(--i-archive); --icon-color: var(--warn); }
+.row[data-kind="disk"] .name::before { --icon: var(--i-disk); --icon-color: var(--warn); }
+.row[data-kind="exe"] .name::before { --icon: var(--i-exe); --icon-color: var(--warn); }
+.row[data-kind="key"] .name::before { --icon: var(--i-key); --icon-color: var(--warn); }
+.row[data-kind="config"] .name::before { --icon: var(--i-config); --icon-color: var(--warn); }
+
+.row[data-kind="pdf"] .name::before { --icon: var(--i-pdf); }
+.row[data-kind="doc"] .name::before { --icon: var(--i-doc); }
+.row[data-kind="sheet"] .name::before { --icon: var(--i-sheet); --icon-color: var(--ok); }
+.row[data-kind="slides"] .name::before { --icon: var(--i-slides); }
+.row[data-kind="text"] .name::before { --icon: var(--i-text); }
+.row[data-kind="binary"] .name::before { --icon: var(--i-file); }
+
+/* Na zaostřeném výběru zbělá i ikona — jinak by na plné barvě zanikla. */
+.list:focus-within .row.sel .name::before { --icon-color: var(--on-accent); }

@@ -358,6 +358,14 @@ details[open] > summary { color: var(--accent); }
 .sync-paths label { flex: 1; }
 .sync-opts label:not(.check) { flex: 0 0 190px; }
 
+/* Drobnosti, které dřív visely v atributu style. Ten ale Content Security
+   Policy zahazuje, takže se nikdy neuplatnily — třeba výpis kontrolního
+   součtu si bral výšku konzole a v dialogu zel prázdnotou. */
+.grow { flex: 1; }
+.fixed-160 { flex: 0 0 160px; }
+.gap-below { margin-bottom: 12px; }
+#props-hash { height: auto; max-height: 120px; display: none; }
+
 /* --------------------------------------------------- kontextové menu */
 .ctxmenu {
   position: fixed; z-index: 100; min-width: 190px; padding: 4px;

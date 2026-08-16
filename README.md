@@ -43,6 +43,7 @@ předlohy vozí i zpátky.
 | SSH brána (jump host) a proxy SOCKS5 / HTTP | ✅ |
 | Pracovní plochy — uložená sada otevřených záložek | ✅ |
 | Světlý, tmavý a systémový motiv | ✅ |
+| Ikony souborů a složek podle typu | ✅ |
 
 Nepodporuje SCP, WebDAV ani S3 — relace v těchto protokolech se při importu
 zobrazí, ale nejdou naimportovat.
@@ -312,6 +313,34 @@ funkcí `light-dark()`. Přepnutí motivu je pak jediná vlastnost na `<html>`:
 bez ní rozhoduje systém, s `data-theme` uživatel. Že se barva nezačne psát
 natvrdo někde v pravidlech, hlídá `test/theme.test.js` — v tom druhém motivu
 by se to projevilo jako nečitelné místo a všiml by si toho až uživatel.
+
+## Ikony a typy souborů
+
+Každá položka v panelu má ikonu podle toho, co to je — složka, obrázek, video,
+archiv, zdrojový kód, klíč, nastavení. Typ se určuje z názvu: obsah bychom si
+kvůli tomu museli z serveru stáhnout, a to u složky s tisíci soubory nepřipadá
+v úvahu.
+
+Rozhoduje `src/common/filekind.js`. Kromě přípony zná i soubory, které žádnou
+nemají (`.htaccess`, `.env`, `Dockerfile`, `Makefile`), a případy, kde přípona
+mate:
+
+| Soubor | Škatulka | Proč |
+| --- | --- | --- |
+| `logo.svg` | obrázek | technicky je to značkovací jazyk, ale člověk čeká obrázek |
+| `navrh.key` | prezentace | `.key` je Keynote; klíče bývají `.pem` nebo `.pub` |
+| `index.php` | zdrojový kód | MIME má sice `application/…`, kód to je pořád |
+| `vykaz.csv` | tabulka | otevírá se v tabulkovém procesoru, ne v editoru |
+| `.env.local` | nastavení | odvozeniny `.local`, `.example` a spol. se poznají taky |
+
+Stejný modul plní sloupec **Typ** v dialogu vlastností, kde je vidět i celý
+MIME. Panel a vlastnosti se tak nemůžou rozejít v tom, co je co.
+
+Ikony se kreslí jako maska, ne jako obrázek: tvar vezme z SVG a barvu dostane
+z palety. Proto samy zesvětlají v tmavém motivu a zbělají na vybraném řádku,
+aniž by musely existovat dvakrát. Na 924 položkách je vykreslení stejně rychlé
+jako bez nich (16,5 vs. 16,6 ms) — dvacet různých tvarů si prohlížeč
+dekóduje jednou.
 
 ## Klávesové zkratky
 
@@ -595,6 +624,9 @@ npm test
 - `test/mask.test.js` — zápis masek souborů
 - `test/theme.test.js` — světlý a tmavý motiv: že se barvy píšou jen v paletě,
   že má každá obě podoby a že volba přebije systém v obou směrech
+- `test/filekind.test.js` — rozpoznání typu souboru. Hlídá hlavně případy, kde
+  přípona mate, a to, že každá škatulka má nakreslenou ikonu — bez pravidla ve
+  stylu by položka dostala výchozí ikonu a nikdo by si toho nevšiml
 - `test/session.test.js` — správce záložek: pořadí, přepínání a úklid
 - `test/editconflict.test.js` — detekce cizí změny při ukládání z editoru
 - `test/properties.test.js` — rekurzivní práva a kontrolní součty proti

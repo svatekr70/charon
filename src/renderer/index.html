@@ -2,9 +2,13 @@
 <html lang="cs">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'" />
+  <!-- Ikony jsou data: obrázky ve stylu, jinak zůstává vše přísně z vlastního
+       balíku: žádné vzdálené zdroje, žádné vkládané styly ani skripty. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:" />
   <title>Charon</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="icons.css" />
 </head>
 <body>
   <div id="app">
@@ -221,7 +225,7 @@
         <button id="sync-compare" class="primary">Porovnat</button>
       </div>
       <div class="sync-opts">
-        <label style="flex:1">Maska souborů
+        <label class="grow">Maska souborů
           <input id="sync-mask" placeholder="prázdné = vše; např. *.php; *.css | .git/; node_modules/" spellcheck="false" />
         </label>
       </div>
@@ -318,7 +322,7 @@
       <div class="cmd-table" id="ws-list"></div>
 
       <div class="find-opts">
-        <label style="flex:1">Název nové plochy
+        <label class="grow">Název nové plochy
           <input id="ws-name" placeholder="např. Klient Novák" />
         </label>
         <button id="ws-save" class="primary">Uložit současné záložky</button>
@@ -336,7 +340,7 @@
       <h2>Vlastnosti</h2>
       <p class="muted" id="props-what"></p>
 
-      <div class="scroll" style="margin-bottom:12px">
+      <div class="scroll gap-below">
         <table id="props-table"></table>
       </div>
 
@@ -356,7 +360,7 @@
 
       <h3>Kontrolní součet</h3>
       <div class="find-opts">
-        <label style="flex:0 0 160px">Algoritmus
+        <label class="fixed-160">Algoritmus
           <select id="props-algo">
             <option value="sha256">SHA-256</option>
             <option value="sha1">SHA-1</option>
@@ -365,7 +369,7 @@
         </label>
         <button id="props-checksum">Spočítat</button>
       </div>
-      <pre class="console-out" id="props-hash" style="height:auto;max-height:120px;display:none"></pre>
+      <pre class="console-out" id="props-hash"></pre>
 
       <menu>
         <button id="props-close">Zavřít</button>
@@ -562,6 +566,7 @@
 
   <div id="ctxmenu" class="ctxmenu" hidden></div>
   <script src="../common/mask.js"></script>
+  <script src="../common/filekind.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
