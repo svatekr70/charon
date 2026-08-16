@@ -205,10 +205,50 @@ async function main() {
   await q.addAndWait({ direction: 'up', localPath: src, remotePath: '/www/uplne-novy.txt' });
   check('nový soubor konflikt nevyvolá', asked, 0);
 
-  // ======================================================== 4. vzdálený koš
+  // ============================================= 4. přesun (přenos + smazání)
+
+  const movedSources = [];
+  const qm = new TransferQueue({
+    getAdapter: async () => accepted,
+    onMoveSource: async (item) => { movedSources.push(item.localPath || item.remotePath); },
+  });
+
+  const movable = path.join(localRoot, 'presun.txt');
+  await fsp.writeFile(movable, 'obsah k presunu');
+  await qm.addAndWait({ direction: 'up', localPath: movable, remotePath: '/www/presun.txt', moveFrom: 'local' });
+  check('přesun — soubor dorazil', fs.readFileSync(path.join(serverRoot, 'www', 'presun.txt'), 'utf8'), 'obsah k presunu');
+  check('přesun — zdroj se smazal', movedSources, [movable]);
+  check('přesun — položka je označená', qm.items.at(-1).note, 'přesunuto');
+
+  // Nejdůležitější vlastnost: když přenos selže, zdroj musí zůstat.
+  movedSources.length = 0;
+  await qm.addAndWait({
+    direction: 'up', localPath: path.join(localRoot, 'neexistuje.txt'),
+    remotePath: '/www/nikdy.txt', moveFrom: 'local',
+  }).catch(() => {});
+  check('přesun — po chybě zůstává zdroj', movedSources, []);
+  check('přesun — položka je v chybě', qm.items.at(-1).status, 'error');
+
+  // A když se nepodaří smazat zdroj, přenos zůstává úspěšný — soubor je
+  // přenesený, jen se to uživateli řekne.
+  const qm2 = new TransferQueue({
+    getAdapter: async () => accepted,
+    onMoveSource: async () => { throw new Error('nemám práva'); },
+  });
+  await qm2.addAndWait({ direction: 'up', localPath: movable, remotePath: '/www/presun2.txt', moveFrom: 'local' });
+  check('neúspěšné smazání nezruší přenos', qm2.items.at(-1).status, 'done');
+  truthy('a je vidět proč', /nemám práva/.test(qm2.items.at(-1).note || ''));
+
+  // Běžný přenos bez příznaku zdroj nikdy nemaže.
+  movedSources.length = 0;
+  await qm.addAndWait({ direction: 'up', localPath: movable, remotePath: '/www/kopie.txt' });
+  check('bez příznaku se nemaže nic', movedSources, []);
+  truthy('a soubor zůstal', fs.existsSync(movable));
+
+  // ======================================================== 5. vzdálený koš
 
   const trash = new RemoteTrash(accepted, '/kos');
-  check('výchozí cesta koše', RemoteTrash.defaultPath('/home/deploy'), '/home/deploy/.ftpcli-trash');
+  check('výchozí cesta koše', RemoteTrash.defaultPath('/home/deploy'), '/home/deploy/.charon-trash');
 
   const now = new Date(2026, 7, 16, 12, 0, 0);
   const day = dayFolder(now);

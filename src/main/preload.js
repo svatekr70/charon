@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('api', {
     rename: (from, to) => invoke('remote:rename', { from, to }),
     chmod: (remotePath, mode) => invoke('remote:chmod', { remotePath, mode }),
     remove: (paths, permanent) => invoke('remote:delete', { paths, permanent: Boolean(permanent) }),
+    dirSize: (p) => invoke('remote:dirSize', p),
   },
   local: {
     home: () => invoke('local:home'),
@@ -51,6 +52,7 @@ contextBridge.exposeInMainWorld('api', {
     reveal: (p) => invoke('local:reveal', p),
     pickDir: () => invoke('local:pickDir'),
     pickFile: (opts) => invoke('local:pickFile', opts),
+    dirSize: (p) => invoke('local:dirSize', p),
   },
   trash: {
     info: () => invoke('trash:info'),
@@ -59,6 +61,11 @@ contextBridge.exposeInMainWorld('api', {
   transfer: {
     upload: (items, remoteDir) => invoke('transfer:upload', { items, remoteDir }),
     download: (items, localDir) => invoke('transfer:download', { items, localDir }),
+    move: (items, targetDir, from) => invoke('transfer:move', { items, targetDir, from }),
+  },
+  find: {
+    start: (opts) => invoke('find:start', opts),
+    cancel: () => invoke('find:cancel'),
   },
   queue: {
     snapshot: () => invoke('queue:snapshot'),
@@ -88,6 +95,7 @@ contextBridge.exposeInMainWorld('api', {
   // zpátky pod stejným id, jinak by fronta čekala donekonečna.
   onAsk: (cb) => on('conflict', cb),
   answer: (id, answer) => invoke('prompt:answer', { id, answer }),
+  onFind: (cb) => on('find', cb),
   onQueue: (cb) => on('queue', cb),
   onConn: (cb) => on('conn', cb),
   onEdit: (cb) => on('edit', cb),

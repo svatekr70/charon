@@ -1,8 +1,11 @@
-# FTP Cli
+# Charon
 
 Dvoupanelový SFTP/FTP klient pro macOS — náhrada WinSCP. Samostatná desktopová
 aplikace (Electron), ne webová stránka: vlastní okno, vlastní ikona v Docku,
 plný přístup k souborům na disku.
+
+Dva panely jsou dva břehy a Charon je ten, kdo mezi nimi převáží. Na rozdíl od
+předlohy vozí i zpátky.
 
 ## Co umí
 
@@ -20,6 +23,13 @@ plný přístup k souborům na disku.
 | Dotaz při přepisu existujícího souboru | ✅ |
 | Koš na serveru místo nevratného mazání | ✅ |
 | Práva souborů (chmod), přejmenování, mazání, nové složky | ✅ |
+| Přesun mezi panely (F6), ne jen kopírování | ✅ |
+| Řazení kliknutím na hlavičku sloupce | ✅ |
+| Historie cest (zpět/vpřed) a záložky | ✅ |
+| Filtr a výběr podle masky souborů | ✅ |
+| Hledání souborů na serveru | ✅ |
+| Dopočítání velikosti složek | ✅ |
+| Sloupce vlastníka a skupiny, nastavitelný dvojklik | ✅ |
 
 Nepodporuje SCP, WebDAV ani S3 — relace v těchto protokolech se při importu
 zobrazí, ale nejdou naimportovat.
@@ -133,7 +143,7 @@ serveru maže přesunem — položka se přejmenuje pod složku koše a **zachov
 původní cestu**:
 
 ```
-/var/www/html/index.php  →  ~/.ftpcli-trash/2026-08-16/var/www/html/index.php
+/var/www/html/index.php  →  ~/.charon-trash/2026-08-16/var/www/html/index.php
 ```
 
 Přesun je jen přejmenování, takže nestojí žádný přenos dat. Když ho server
@@ -148,10 +158,10 @@ panelu. Mazání s klávesou **Shift** koš obejde a smaže rovnou.
 
 | Co | Kde |
 | --- | --- |
-| Relace | `~/Library/Application Support/ftp-cli/sites.json` |
-| Nastavení | `~/Library/Application Support/ftp-cli/settings.json` |
-| Šifrovací klíč k heslům | macOS Keychain, položka `FTP Cli` |
-| Dočasné soubory otevřené v editoru | `$TMPDIR/ftp-cli-edit/` |
+| Relace | `~/Library/Application Support/charon/sites.json` |
+| Nastavení | `~/Library/Application Support/charon/settings.json` |
+| Šifrovací klíč k heslům | macOS Keychain, položka `Charon` |
+| Dočasné soubory otevřené v editoru | `$TMPDIR/charon-edit/` |
 
 Hesla se do `sites.json` zapisují zašifrovaná (AES-256-GCM); klíč leží
 v Keychain, ne v souboru.
@@ -160,7 +170,8 @@ v Keychain, ne v souboru.
 
 | Klávesa | Akce |
 | --- | --- |
-| `F5` | Přenést vybrané do druhého panelu |
+| `F5` | Zkopírovat vybrané do druhého panelu |
+| `F6` | Přesunout vybrané do druhého panelu |
 | `F4` | Upravit vzdálený soubor v editoru |
 | `F2` | Přejmenovat |
 | `F7` | Nová složka |
@@ -169,6 +180,10 @@ v Keychain, ne v souboru.
 | `Tab` | Přepnout panel |
 | `Enter` | Otevřít složku / soubor |
 | `⌘A` | Vybrat vše |
+| `+` / `−` | Vybrat / odznačit podle masky |
+| `⌘[` / `⌘]` | Zpět / vpřed v historii cest |
+| `⌘F` | Filtr (vlevo) nebo hledání na serveru (vpravo) |
+| psaní | Skok na položku podle názvu |
 | `⌘R` | Obnovit oba panely |
 | `⌘S` | Synchronizace adresářů |
 | `⌘O` / `⌘D` | Připojit / odpojit |
@@ -179,6 +194,36 @@ Dvojklik na vzdálený soubor (nebo `F4`) ho stáhne do dočasné složky, otev�
 v editoru a hlídá. Při každém uložení se sám nahraje zpět na server — bez
 dalšího kliknutí. V **Nastavení** si můžete zvolit editor (např.
 `Visual Studio Code`); prázdné pole znamená výchozí aplikaci podle přípony.
+
+## Masky souborů
+
+Stejný zápis se používá na filtr v panelu, na výběr klávesami `+` a `−`
+i na hledání:
+
+| Zápis | Význam |
+| --- | --- |
+| `*` | libovolný počet znaků |
+| `?` | právě jeden znak |
+| `[abc]`, `[a-z]` | jeden znak z výčtu nebo rozsahu |
+| `[*]` | hvězdička jako obyčejný znak |
+| `a; b` nebo `a, b` | víc masek najednou |
+| `vzor \| výluka` | za svislítkem je výluka, ta má přednost |
+| `slozka/` | platí jen pro složky |
+
+Nezáleží na velikosti písmen. Příklad: `*.php; *.css | .git/; node_modules/`
+vybere PHP a CSS, ale vynechá dvě složky.
+
+Filtr nikdy neschovává složky — jinak by se nedalo doklikat níž.
+
+## Hledání souborů na serveru
+
+`⌘F` v pravém panelu (nebo *Soubor → Najít soubory na serveru*) projde strom od
+zadané cesty a hledá podle masky. Nálezy přibývají průběžně, takže se dá začít
+pracovat dřív, než hledání doběhne, a kdykoliv ho jde zastavit. Z výsledků se dá
+rovnou stahovat, otevřít soubor v editoru nebo skočit na jeho místo v panelu.
+
+Hledání se zastaví na 5000 nálezech a hloubce 40 úrovní — obojí je pojistka
+proti překlepu v masce, ne technický limit.
 
 ## Synchronizace
 
@@ -208,8 +253,10 @@ npm test
 ```
 
 - `test/winscp-import.test.js` — dekódování hesel WinSCP, parsování `.ini` i `.reg`
+- `test/mask.test.js` — zápis masek souborů
 - `test/safety.test.js` — otisky klíčů a `known_hosts`, odmítnutí neověřeného
-  serveru, všechny volby při konfliktu a chování koše
+  serveru, všechny volby při konfliktu, přesun a chování koše
+- `test/browse.test.js` — dopočítání velikosti složek a hledání souborů
 - `test/e2e.test.js` — SFTP: přenosy, pauza, navázání, chmod a synchronizace proti
   dočasnému SFTP serveru z `test/sftp-server.js`
 - `test/ftp.test.js` — FTP: totéž proti dočasnému FTP serveru, včetně navázání

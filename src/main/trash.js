@@ -16,7 +16,7 @@ const posix = require('path').posix;
  * natvrdo jako „záchranu".
  */
 
-const DEFAULT_DIR_NAME = '.ftpcli-trash';
+const DEFAULT_DIR_NAME = '.charon-trash';
 
 /** Název složky pro dnešek. Datum bereme z parametru, ať jde test určit. */
 function dayFolder(now = new Date()) {

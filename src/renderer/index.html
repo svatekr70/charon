@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'" />
-  <title>FTP Cli</title>
+  <title>Charon</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -29,13 +29,25 @@
       <section class="pane" id="pane-local" data-side="local">
         <div class="pane-head">
           <span class="pane-title">Lokální</span>
+          <button class="icon" data-act="back" title="Zpět (⌘[)" disabled>‹</button>
+          <button class="icon" data-act="fwd" title="Vpřed (⌘])" disabled>›</button>
           <button class="icon" data-act="up" title="O úroveň výš">↑</button>
           <input class="path" data-role="path" spellcheck="false" />
+          <button class="icon" data-act="bookmark" title="Záložky cest">★</button>
+          <button class="icon" data-act="filter" title="Filtr podle masky">⌕</button>
           <button class="icon" data-act="browse" title="Vybrat složku">…</button>
         </div>
-        <div class="list-head">
-          <span class="col-name">Název</span><span class="col-size">Velikost</span>
-          <span class="col-date">Změněno</span><span class="col-perm">Práva</span>
+        <div class="filter-bar" data-role="filterbar" hidden>
+          <input data-role="filter" placeholder="Maska, např. *.php; *.css | .git/" spellcheck="false" />
+          <button data-act="filter-clear" title="Zrušit filtr">✕</button>
+        </div>
+        <div class="list-head" data-role="head">
+          <span class="col-name" data-sort="name">Název</span>
+          <span class="col-size" data-sort="size">Velikost</span>
+          <span class="col-date" data-sort="date">Změněno</span>
+          <span class="col-perm" data-sort="perm">Práva</span>
+          <span class="col-owner" data-sort="owner">Vlastník</span>
+          <span class="col-group" data-sort="group">Skupina</span>
         </div>
         <div class="list" data-role="list" tabindex="0"></div>
         <div class="pane-foot" data-role="foot"></div>
@@ -46,13 +58,25 @@
       <section class="pane" id="pane-remote" data-side="remote">
         <div class="pane-head">
           <span class="pane-title">Server</span>
+          <button class="icon" data-act="back" title="Zpět (⌘[)" disabled>‹</button>
+          <button class="icon" data-act="fwd" title="Vpřed (⌘])" disabled>›</button>
           <button class="icon" data-act="up" title="O úroveň výš">↑</button>
           <input class="path" data-role="path" spellcheck="false" />
+          <button class="icon" data-act="bookmark" title="Záložky cest">★</button>
+          <button class="icon" data-act="filter" title="Filtr podle masky">⌕</button>
           <button class="icon" data-act="home" title="Domovský adresář">⌂</button>
         </div>
-        <div class="list-head">
-          <span class="col-name">Název</span><span class="col-size">Velikost</span>
-          <span class="col-date">Změněno</span><span class="col-perm">Práva</span>
+        <div class="filter-bar" data-role="filterbar" hidden>
+          <input data-role="filter" placeholder="Maska, např. *.php; *.css | .git/" spellcheck="false" />
+          <button data-act="filter-clear" title="Zrušit filtr">✕</button>
+        </div>
+        <div class="list-head" data-role="head">
+          <span class="col-name" data-sort="name">Název</span>
+          <span class="col-size" data-sort="size">Velikost</span>
+          <span class="col-date" data-sort="date">Změněno</span>
+          <span class="col-perm" data-sort="perm">Práva</span>
+          <span class="col-owner" data-sort="owner">Vlastník</span>
+          <span class="col-group" data-sort="group">Skupina</span>
         </div>
         <div class="list" data-role="list" tabindex="0"></div>
         <div class="pane-foot" data-role="foot"></div>
@@ -106,7 +130,7 @@
         <label>Lokální adresář
           <span class="row"><input name="localDir" /><button type="button" id="pick-local">…</button></span>
         </label>
-        <label>Složka koše na serveru<input name="recycleBinPath" placeholder="výchozí: ~/.ftpcli-trash" /></label>
+        <label>Složka koše na serveru<input name="recycleBinPath" placeholder="výchozí: ~/.charon-trash" /></label>
         <label>Vysypat koš po (dnech)<input name="recycleBinDays" type="number" min="0" placeholder="0 = nikdy" /></label>
         <label class="check"><input type="checkbox" name="useRecycleBin" checked /> Mazat na serveru do koše místo nevratného smazání</label>
         <label class="check" data-when="sftp"><input type="checkbox" name="useAgent" /> Použít ssh-agent</label>
@@ -178,12 +202,50 @@
   <dialog id="dlg-settings">
     <form method="dialog" class="dlg">
       <h2>Nastavení</h2>
+
+      <h3>Editor</h3>
       <label>Editor pro vzdálené soubory
         <input name="editor" placeholder="např. Visual Studio Code (prázdné = výchozí aplikace)" />
       </label>
       <p class="muted">Název aplikace tak, jak se jmenuje ve složce Aplikace. Soubor se stáhne do dočasné složky, otevře v editoru a při každém uložení se sám nahraje zpět.</p>
+
+      <h3>Ovládání</h3>
+      <label>Dvojklik na soubor
+        <select name="doubleClick">
+          <option value="edit">Upravit v editoru (na serveru) / otevřít (lokálně)</option>
+          <option value="transfer">Přenést do druhého panelu</option>
+          <option value="reveal">Ukázat ve Finderu / stáhnout</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" name="typeAhead" /> Hledat psaním v seznamu</label>
+
+      <h3>Sloupce</h3>
+      <label class="check"><input type="checkbox" name="colOwner" /> Zobrazit vlastníka</label>
+      <label class="check"><input type="checkbox" name="colGroup" /> Zobrazit skupinu</label>
       <menu><button value="cancel">Zrušit</button><button value="save" class="primary">Uložit</button></menu>
     </form>
+  </dialog>
+
+  <!-- hledání souborů na serveru -->
+  <dialog id="dlg-find">
+    <div class="dlg wide">
+      <h2>Najít soubory na serveru</h2>
+      <div class="find-opts">
+        <label>Hledat v<input id="find-root" spellcheck="false" /></label>
+        <label>Maska<input id="find-mask" placeholder="*.log; *.bak" spellcheck="false" /></label>
+        <label class="check"><input type="checkbox" id="find-dirs" /> Hledat i složky</label>
+        <button id="find-go" class="primary">Hledat</button>
+        <button id="find-stop" hidden>Zastavit</button>
+      </div>
+      <p class="muted" id="find-status">Zadejte masku a spusťte hledání.</p>
+      <div class="find-results" id="find-results"></div>
+      <menu>
+        <button id="find-close">Zavřít</button>
+        <button id="find-reveal">Ukázat v panelu</button>
+        <button id="find-edit">Upravit</button>
+        <button id="find-download" class="primary">Stáhnout vybrané</button>
+      </menu>
+    </div>
   </dialog>
 
   <!-- konflikt při přepisu existujícího souboru -->
@@ -214,6 +276,7 @@
   </dialog>
 
   <div id="ctxmenu" class="ctxmenu" hidden></div>
+  <script src="../common/mask.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

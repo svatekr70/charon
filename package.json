@@ -1,13 +1,13 @@
 {
-  "name": "ftp-cli",
+  "name": "charon",
   "version": "1.0.0",
-  "description": "Dvoupanelový SFTP/FTP klient pro macOS — náhrada WinSCP",
+  "description": "Charon — dvoupanelový SFTP/FTP klient pro macOS, náhrada WinSCP",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
     "dist": "electron-builder --mac",
-    "test": "node test/winscp-import.test.js && node test/safety.test.js && node test/e2e.test.js && node test/ftp.test.js && node test/ftps.test.js"
+    "test": "node test/mask.test.js && node test/winscp-import.test.js && node test/safety.test.js && node test/browse.test.js && node test/e2e.test.js && node test/ftp.test.js && node test/ftps.test.js"
   },
   "author": "",
   "license": "MIT",
@@ -22,8 +22,8 @@
     "ftp-srv": "^4.6.3"
   },
   "build": {
-    "appId": "cz.svatek.ftpcli",
-    "productName": "FTP Cli",
+    "appId": "cz.svatek.charon",
+    "productName": "Charon",
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [

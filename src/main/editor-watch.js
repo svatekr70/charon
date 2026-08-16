@@ -21,7 +21,7 @@ class EditWatcher extends EventEmitter {
     this.queue = queue;
     this.connectionKey = connectionKey;
     this.watched = new Map(); // remotePath -> {localPath, watcher, uploads, lastUpload, status}
-    this.root = path.join(os.tmpdir(), 'ftp-cli-edit');
+    this.root = path.join(os.tmpdir(), 'charon-edit');
   }
 
   _localFor(remotePath) {

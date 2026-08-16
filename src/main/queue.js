@@ -33,13 +33,16 @@ class TransferQueue extends EventEmitter {
    * @param {Function} [opts.onConflict] zeptá se uživatele, co s existujícím
    *   cílovým souborem. Bez něj se cíl přepíše — což je v pořádku jen tam,
    *   kde o tom uživatel už rozhodl (synchronizace, uložení z editoru).
+   * @param {Function} [opts.onMoveSource] smaže zdroj po úspěšném přenosu
+   *   (přesun místo kopie). Fronta neví, kam se maže — to řeší volající.
    */
-  constructor({ getAdapter, remoteJoin, onConflict }) {
+  constructor({ getAdapter, remoteJoin, onConflict, onMoveSource }) {
     super();
     this.items = [];
     this.getAdapter = getAdapter;
     this.remoteJoin = remoteJoin;
     this.onConflict = onConflict || null;
+    this.onMoveSource = onMoveSource || null;
     this.running = false;
     this.paused = false;
     this.current = null;
@@ -63,6 +66,8 @@ class TransferQueue extends EventEmitter {
       startedAt: null,
       // Přenosy, u kterých uživatel o přepisu už rozhodl jinde.
       conflictResolved: Boolean(j.conflictResolved),
+      // Nastaví se u přesunu: 'local' nebo 'remote' podle toho, odkud se bere.
+      moveFrom: j.moveFrom || null,
       note: null,
     }));
     this.items.push(...created);
@@ -200,6 +205,16 @@ class TransferQueue extends EventEmitter {
           } else {
             item.status = 'done';
             item.transferred = item.size ?? item.transferred;
+            // Zdroj mažeme až teď a jen při úspěchu. Kdyby se mazalo dřív
+            // nebo bez ohledu na výsledek, jedna chyba by soubor ztratila.
+            if (item.moveFrom && this.onMoveSource) {
+              try {
+                await this.onMoveSource(item);
+                item.note = 'přesunuto';
+              } catch (delErr) {
+                item.note = `zdroj se nepodařilo smazat: ${delErr.message}`;
+              }
+            }
           }
         }
       } catch (err) {

@@ -65,9 +65,20 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
 .pane-title { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-dim); }
 .path { flex: 1; min-width: 0; font-family: "SF Mono", ui-monospace, monospace; font-size: 12px; -webkit-user-select: text; user-select: text; }
 
+/* Šířky sloupců drží jedna proměnná, aby hlavička a řádky nikdy neujely
+   od sebe. Vlastník a skupina se zapínají v nastavení. */
+#app { --cols: minmax(0, 1fr) 90px 130px 66px; }
+#app.c-owner { --cols: minmax(0, 1fr) 90px 130px 66px 92px; }
+#app.c-group { --cols: minmax(0, 1fr) 90px 130px 66px 92px; }
+#app.c-owner.c-group { --cols: minmax(0, 1fr) 90px 130px 66px 92px 92px; }
+
+.col-owner, .col-group, .row .owner, .row .group { display: none; }
+#app.c-owner .col-owner, #app.c-owner .row .owner,
+#app.c-group .col-group, #app.c-group .row .group { display: block; }
+
 .list-head, .row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 90px 130px 66px;
+  grid-template-columns: var(--cols);
   align-items: center; gap: 8px; padding: 0 10px;
 }
 .list-head {
@@ -75,6 +86,13 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
   border-bottom: 1px solid var(--line); background: var(--bg);
 }
 .col-size, .col-perm { text-align: right; }
+.list-head [data-sort] { cursor: pointer; user-select: none; }
+.list-head [data-sort]:hover { color: var(--fg); }
+.list-head [data-sort].sorted { color: var(--accent); }
+.list-head [data-sort].sorted::after { content: ' ▲'; font-size: 8px; }
+.list-head [data-sort].sorted.desc::after { content: ' ▼'; }
+.row .owner, .row .group { color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; }
+.row .size.computed { color: var(--accent); }
 
 .list { flex: 1; overflow: auto; outline: none; }
 .list:focus-within .row.sel { background: var(--accent-2); }
@@ -95,6 +113,14 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
 .row.drop-target { box-shadow: inset 0 0 0 2px var(--accent); }
 
 .pane.drag-over { box-shadow: inset 0 0 0 2px var(--accent); }
+/* lišta filtru pod cestou */
+.filter-bar { display: flex; gap: 6px; padding: 5px 8px; background: var(--bg-2); border-bottom: 1px solid var(--line); }
+/* Bez tohohle by display:flex přebilo atribut hidden a lišta by zůstala
+   viditelná i prázdná. */
+.filter-bar[hidden] { display: none; }
+.filter-bar input { flex: 1; font-family: "SF Mono", ui-monospace, monospace; font-size: 12px; }
+.filter-bar input.bad { border-color: var(--err); }
+
 .pane-foot {
   height: 22px; line-height: 22px; padding: 0 10px;
   font-size: 11px; color: var(--fg-dim);
@@ -178,6 +204,24 @@ code { font-family: "SF Mono", ui-monospace, monospace; background: var(--bg); p
 menu.wrapmenu { flex-wrap: wrap; }
 #conflict-path { font-family: "SF Mono", ui-monospace, monospace; font-size: 12px; word-break: break-all;
   -webkit-user-select: text; user-select: text; margin: 0 0 10px; }
+
+/* hledání souborů */
+.find-opts { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 8px; }
+.find-opts label:not(.check) { flex: 1; }
+.find-results { max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: 7px; margin-bottom: 10px; min-height: 90px; }
+.find-results .fr {
+  display: grid; grid-template-columns: 22px minmax(0, 2fr) 80px 120px;
+  gap: 8px; align-items: center; padding: 4px 9px; font-size: 12px; border-bottom: 1px solid var(--line);
+}
+.find-results .fr:last-child { border-bottom: none; }
+.find-results .fr.head { position: sticky; top: 0; background: var(--bg-3); color: var(--fg-dim); font-size: 11px; z-index: 1; }
+.find-results .fr span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.find-results .fr .p { direction: rtl; text-align: left; font-family: "SF Mono", ui-monospace, monospace; font-size: 11.5px; }
+.find-results .fr .n { text-align: right; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+.find-results .fr.dir .p { color: #8fb8ff; }
+
+.dlg h3 { margin: 16px 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-dim); }
+.dlg h3:first-of-type { margin-top: 4px; }
 
 .sync-paths, .sync-opts { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 10px; }
 .sync-paths label { flex: 1; }

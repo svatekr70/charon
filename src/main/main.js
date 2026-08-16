@@ -17,11 +17,13 @@ const { parseWinscpFile } = require('./winscp-import');
 const hostkeys = require('./hostkeys');
 const { RemoteTrash } = require('./trash');
 const prompts = require('./prompts');
+const { localDirSize, remoteDirSize, Finder } = require('./browse');
 
 let win = null;
 let sites = null;
 let queue = null;
 let editWatcher = null;
+let finder = null;
 let settings = { editor: '', localDir: os.homedir() };
 
 const conn = {
@@ -313,6 +315,38 @@ async function expandRemote(adapter, remotePath, localBase, out = []) {
   return out;
 }
 
+/** Nahrání vybraných lokálních položek (soubory i adresáře) do vzdálené složky. */
+async function enqueueUpload(items, remoteDir, extra = {}) {
+  const jobs = [];
+  for (const localPath of items) {
+    await expandLocal(localPath, posix.join(remoteDir, path.basename(localPath)), jobs);
+  }
+  const a = await getTransferAdapter();
+  for (const j of jobs.filter((x) => x.direction === 'mkdirRemote')) {
+    await a.mkdir(j.remotePath, true).catch(() => {});
+  }
+  // Příznaky (třeba moveFrom) musí být na položce hned při zařazení. Fronta
+  // se rozeběhne okamžitě, takže dodatečné označení už nemusí stihnout.
+  const files = jobs.filter((x) => x.direction === 'up').map((j) => ({ ...j, ...extra }));
+  return { count: files.length, ids: queue.add(files) };
+}
+
+/** Stažení vybraných vzdálených položek do lokální složky. */
+async function enqueueDownload(items, localDir, extra = {}) {
+  const a = requireBrowse();
+  const jobs = [];
+  for (const remotePath of items) {
+    const localTarget = path.join(localDir, posix.basename(remotePath));
+    if (await remoteIsDir(a, remotePath)) await expandRemote(a, remotePath, localTarget, jobs);
+    else {
+      const st = await a.stat(remotePath).catch(() => ({ size: null }));
+      jobs.push({ direction: 'down', remotePath, localPath: localTarget, size: st.size });
+    }
+  }
+  const files = jobs.map((j) => ({ ...j, ...extra }));
+  return { count: files.length, ids: queue.add(files) };
+}
+
 /** Rozhodne, jestli je vzdálená cesta soubor nebo adresář. */
 async function remoteIsDir(adapter, remotePath) {
   try {
@@ -360,6 +394,9 @@ function buildMenu() {
         { label: 'Import z WinSCP…', click: () => send('menu', 'import') },
         { type: 'separator' },
         { label: 'Synchronizovat adresáře…', accelerator: 'Cmd+S', click: () => send('menu', 'sync') },
+        // Bez akcelerátoru schválně: ⌘F si obsluhuje okno samo, aby v levém
+        // panelu otevřelo filtr a v pravém hledání na serveru.
+        { label: 'Najít soubory na serveru…', click: () => send('menu', 'find') },
         { label: 'Obnovit', accelerator: 'Cmd+R', click: () => send('menu', 'refresh') },
         { type: 'separator' },
         { label: 'Vysypat koš na serveru…', click: () => send('menu', 'emptytrash') },
@@ -594,37 +631,46 @@ function registerIpc() {
   handle('queue:retry', async (id) => { queue.retry(id); return true; });
   handle('queue:clear', async () => { queue.clearFinished(); return true; });
 
-  /** Nahrání vybraných lokálních položek (soubory i adresáře) do vzdálené složky. */
   handle('transfer:upload', async ({ items, remoteDir }) => {
-    const jobs = [];
-    for (const localPath of items) {
-      const base = path.basename(localPath);
-      await expandLocal(localPath, posix.join(remoteDir, base), jobs);
-    }
-    const a = await getTransferAdapter();
-    for (const j of jobs.filter((x) => x.direction === 'mkdirRemote')) {
-      await a.mkdir(j.remotePath, true).catch(() => {});
-    }
-    const files = jobs.filter((x) => x.direction === 'up');
-    queue.add(files);
-    return { count: files.length };
+    const { count } = await enqueueUpload(items, remoteDir);
+    return { count };
   });
 
-  /** Stažení vybraných vzdálených položek do lokální složky. */
   handle('transfer:download', async ({ items, localDir }) => {
+    const { count } = await enqueueDownload(items, localDir);
+    return { count };
+  });
+
+  // --- velikost složek ---
+  handle('remote:dirSize', async (remotePath) => remoteDirSize(requireBrowse(), remotePath));
+  handle('local:dirSize', async (localPath) => localDirSize(localPath));
+
+  // --- hledání souborů na serveru ---
+  handle('find:start', async ({ root, mask, includeDirs }) => {
     const a = requireBrowse();
-    const jobs = [];
-    for (const remotePath of items) {
-      const base = posix.basename(remotePath);
-      const localTarget = path.join(localDir, base);
-      if (await remoteIsDir(a, remotePath)) await expandRemote(a, remotePath, localTarget, jobs);
-      else {
-        const st = await a.stat(remotePath).catch(() => ({ size: null }));
-        jobs.push({ direction: 'down', remotePath, localPath: localTarget, size: st.size });
-      }
-    }
-    queue.add(jobs);
-    return { count: jobs.length };
+    finder = new Finder();
+    const res = await finder.run(a, root || '/', mask, {
+      includeDirs: Boolean(includeDirs),
+      // Nálezy posíláme do okna průběžně; samotný seznam si drží okno.
+      onProgress: (msg) => send('find', { ...msg, done: false }),
+    });
+    send('find', {
+      done: true, scanned: res.scanned, total: res.total, canceled: res.canceled, truncated: res.truncated,
+    });
+    return { total: res.total, scanned: res.scanned, canceled: res.canceled, truncated: res.truncated };
+  });
+  handle('find:cancel', async () => { if (finder) finder.cancel(); return true; });
+
+  /**
+   * Přesun mezi panely: nejdřív se přenese, a teprve po úspěchu zmizí zdroj.
+   * Kdyby se mazalo dopředu nebo bez ohledu na výsledek, stačila by jedna
+   * chyba v půlce a soubor by nebyl nikde.
+   */
+  handle('transfer:move', async ({ items, targetDir, from }) => {
+    const result = from === 'local'
+      ? await enqueueUpload(items, targetDir, { moveFrom: 'local' })
+      : await enqueueDownload(items, targetDir, { moveFrom: 'remote' });
+    return { count: result.count };
   });
 
   // --- synchronizace ---
@@ -695,6 +741,15 @@ app.whenReady().then(async () => {
     // Když okno zmizí dřív, než uživatel odpoví, přenos raději přeskočíme —
     // mlčky přepsat cizí soubor je horší než ho nechat být.
     onConflict: (info) => prompts.ask(win, 'conflict', info, { action: 'skip' }),
+    onMoveSource: async (item) => {
+      if (item.moveFrom === 'local') {
+        await shell.trashItem(item.localPath);
+        return;
+      }
+      const trash = getTrash();
+      if (trash) await trash.moveToTrash(item.remotePath);
+      else await requireBrowse().removeFile(item.remotePath);
+    },
   });
   queue.on('update', (snap) => send('queue', snap));
 

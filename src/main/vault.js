@@ -6,7 +6,7 @@ const { promisify } = require('util');
 
 const execFileAsync = promisify(execFile);
 
-const SERVICE = 'FTP Cli';
+const SERVICE = 'Charon';
 const ACCOUNT = 'vault-key';
 
 /**
