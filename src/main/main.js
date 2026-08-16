@@ -21,13 +21,18 @@ const {
   localDirSize, remoteDirSize, Finder, expandLocal, expandRemote,
 } = require('./browse');
 const FileMask = require('../common/mask');
+const { AdapterPool } = require('./pool');
 
 let win = null;
 let sites = null;
 let queue = null;
 let editWatcher = null;
 let finder = null;
-let settings = { editor: '', localDir: os.homedir(), transferMask: '' };
+let settings = {
+  editor: '', localDir: os.homedir(), transferMask: '',
+  maxConcurrent: 3, speedLimitKb: 0,
+};
+let pool = null;
 
 const conn = {
   browse: null,     // spojení pro procházení adresářů
@@ -56,20 +61,36 @@ function requireBrowse() {
   return conn.browse;
 }
 
-/** Druhé spojení otevřeme až když je poprvé potřeba. */
-async function getTransferAdapter() {
+/**
+ * Otevře další spojení pro přenosy, oddělené od toho, kterým se prochází.
+ *
+ * Otisky jsou v conn.config potvrzené z prvního spojení, takže se uživatele
+ * neptáme znovu — jen zkontrolujeme, že sedí. Když ne, spojení se neotevře;
+ * ptát se tady podruhé by bylo matoucí.
+ */
+async function openTransferAdapter() {
   if (!conn.config) throw new Error('Nejste připojeni');
-  if (conn.transfer && conn.transfer.connected) return conn.transfer;
   const a = makeAdapter(conn.config.protocol);
-  // Otisky jsou v conn.config už potvrzené z prvního spojení, takže se
-  // uživatele neptáme podruhé — jen zkontrolujeme, že sedí. Když ne,
-  // druhé spojení se neotevře; ptát se tady znovu by bylo matoucí.
   const hooks = conn.config.protocol === 'ftp'
     ? { verifyCertificate: () => false }
     : { verifyHostKey: makeHostKeyHook(conn.config).hook };
   await a.connect(conn.config, hooks);
-  conn.transfer = a;
   return a;
+}
+
+/** Zásoba spojení se zakládá až s prvním přenosem. */
+function transferPool() {
+  if (!pool || pool.closed) {
+    pool = new AdapterPool({
+      open: openTransferAdapter,
+      max: settings.maxConcurrent || 1,
+      onShrink: (n) => {
+        queue.setConcurrency(n);
+        log('warn', `Server nepovolil další spojení — souběžnost snížena na ${n}`);
+      },
+    });
+  }
+  return pool;
 }
 
 // ------------------------------------------------- ověření identity serveru
@@ -285,9 +306,13 @@ async function enqueueUpload(items, remoteDir, extra = {}, maskText = '') {
   for (const localPath of items) {
     await expandLocal(localPath, posix.join(remoteDir, path.basename(localPath)), jobs, mask, stats);
   }
-  const a = await getTransferAdapter();
-  for (const j of jobs.filter((x) => x.direction === 'mkdirRemote')) {
-    await a.mkdir(j.remotePath, true).catch(() => {});
+  const a = await transferPool().acquire();
+  try {
+    for (const j of jobs.filter((x) => x.direction === 'mkdirRemote')) {
+      await a.mkdir(j.remotePath, true).catch(() => {});
+    }
+  } finally {
+    transferPool().release(a);
   }
   // Příznaky (třeba moveFrom) musí být na položce hned při zařazení. Fronta
   // se rozeběhne okamžitě, takže dodatečné označení už nemusí stihnout.
@@ -408,6 +433,13 @@ function registerIpc() {
   handle('settings:set', async (patch) => {
     settings = { ...settings, ...patch };
     await saveSettings();
+    if (patch.maxConcurrent !== undefined) {
+      queue.setConcurrency(settings.maxConcurrent);
+      if (pool && !pool.closed) pool.setMax(settings.maxConcurrent);
+    }
+    if (patch.speedLimitKb !== undefined) {
+      queue.setSpeedLimit((settings.speedLimitKb || 0) * 1024);
+    }
     return settings;
   });
 
@@ -606,6 +638,18 @@ function registerIpc() {
   handle('queue:retry', async (id) => { queue.retry(id); return true; });
   handle('queue:clear', async () => { queue.clearFinished(); return true; });
 
+  /** Limit v kB/s; 0 vypíná. Bez id platí globálně. */
+  handle('queue:speedLimit', async ({ id, kb }) => {
+    const bytes = Math.max(0, Math.floor(kb) || 0) * 1024;
+    if (id) queue.setItemSpeedLimit(id, bytes);
+    else {
+      queue.setSpeedLimit(bytes);
+      settings = { ...settings, speedLimitKb: Math.max(0, Math.floor(kb) || 0) };
+      await saveSettings();
+    }
+    return true;
+  });
+
   /** `mask === undefined` znamená „použij výchozí z nastavení". */
   const effectiveMask = (mask) => (mask === undefined ? settings.transferMask || '' : mask);
 
@@ -700,6 +744,7 @@ async function disconnectAll() {
   queue?.cancelAll();
   await editWatcher?.stopAll().catch(() => {});
   editWatcher = null;
+  if (pool) { await pool.closeAll().catch(() => {}); pool = null; }
   await conn.browse?.disconnect().catch(() => {});
   await conn.transfer?.disconnect().catch(() => {});
   conn.browse = null;
@@ -717,7 +762,9 @@ app.whenReady().then(async () => {
   await sites.load();
 
   queue = new TransferQueue({
-    getAdapter: getTransferAdapter,
+    concurrency: settings.maxConcurrent || 1,
+    acquireAdapter: () => transferPool().acquire(),
+    releaseAdapter: (a) => transferPool().release(a),
     // Když okno zmizí dřív, než uživatel odpoví, přenos raději přeskočíme —
     // mlčky přepsat cizí soubor je horší než ho nechat být.
     onConflict: (info) => prompts.ask(win, 'conflict', info, { action: 'skip' }),
@@ -732,6 +779,8 @@ app.whenReady().then(async () => {
     },
   });
   queue.on('update', (snap) => send('queue', snap));
+
+  queue.setSpeedLimit((settings.speedLimitKb || 0) * 1024);
 
   prompts.register();
   registerIpc();

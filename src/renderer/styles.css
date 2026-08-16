@@ -146,6 +146,9 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
 .q-item.error .bar > i, .q-item.canceled .bar > i { background: var(--err); }
 .q-item.paused .bar > i { background: var(--warn); }
 .q-item .q-err { color: var(--err); font-size: 11px; }
+.q-item.active .bar > i { background: var(--accent); }
+.q-item .q-limited { color: var(--warn); }
+#queue-speed { font-variant-numeric: tabular-nums; }
 .q-x { background: none; border: none; color: var(--fg-dim); padding: 0; }
 .q-x:hover { color: var(--err); background: none; }
 

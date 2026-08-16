@@ -33,7 +33,7 @@ const state = {
 /** Výchozí nastavení; hlavní proces posílá jen to, co je uložené. */
 const DEFAULT_SETTINGS = {
   editor: '', doubleClick: 'edit', typeAhead: true, colOwner: false, colGroup: false,
-  transferMask: '',
+  transferMask: '', maxConcurrent: 3, speedLimitKb: 0,
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -1476,7 +1476,7 @@ function renderQueue(snap) {
     size.textContent = it.status === 'error' ? '' : `${fmtSize(it.transferred)} / ${fmtSize(it.size)}`;
 
     const rate = document.createElement('span');
-    rate.className = it.status === 'error' ? 'q-err' : 'q-num';
+    rate.className = it.status === 'error' ? 'q-err' : it.speedLimit ? 'q-num q-limited' : 'q-num';
     rate.textContent = it.status === 'error' ? it.error
       : it.status === 'active' ? fmtSpeed(it.speed)
         : ({
@@ -1484,6 +1484,21 @@ function renderQueue(snap) {
           skipped: it.note ? `přeskočeno — ${it.note}` : 'přeskočeno',
         })[it.status] || '';
     rate.title = it.error || '';
+
+    // Pravým tlačítkem na položku se dá omezit rychlost jen jí.
+    el.addEventListener('contextmenu', (ev) => {
+      ev.preventDefault();
+      const kb = it.speedLimit ? Math.round(it.speedLimit / 1024) : 0;
+      openMenu([
+        {
+          label: kb ? `Změnit limit (nyní ${kb} kB/s)…` : 'Omezit rychlost této položky…',
+          fn: () => askItemSpeed(it),
+        },
+        ...(kb ? [{ label: 'Zrušit limit položky', fn: () => window.api.queue.speedLimit(it.id, 0) }] : []),
+        null,
+        { label: 'Omezit rychlost všech přenosů…', fn: () => askGlobalSpeed() },
+      ], ev.clientX, ev.clientY);
+    });
 
     const x = document.createElement('button');
     x.className = 'q-x';
@@ -1499,11 +1514,33 @@ function renderQueue(snap) {
   }));
 
   const pct = snap.totalBytes ? Math.round((snap.doneBytes / snap.totalBytes) * 100) : 0;
+  const running = snap.active > 1 ? ` · ${snap.active} naráz` : '';
   $('#queue-summary').textContent = snap.pending
-    ? `${snap.pending} ve frontě · ${fmtSize(snap.doneBytes)} / ${fmtSize(snap.totalBytes)} (${pct} %)${snap.paused ? ' · pozastaveno' : ''}`
+    ? `${snap.pending} ve frontě · ${fmtSize(snap.doneBytes)} / ${fmtSize(snap.totalBytes)} (${pct} %)`
+      + `${running}${snap.paused ? ' · pozastaveno' : ''}`
     : (snap.items.length ? 'hotovo' : 'prázdná');
+
+  const limit = snap.speedLimit ? ` (strop ${fmtSize(snap.speedLimit)}/s)` : '';
+  $('#queue-speed').textContent = snap.speed ? `${fmtSpeed(snap.speed)}${limit}` : limit.trim();
   $('#q-pause').hidden = snap.paused;
   $('#q-resume').hidden = !snap.paused;
+}
+
+async function askItemSpeed(item) {
+  const cur = item.speedLimit ? String(Math.round(item.speedLimit / 1024)) : '';
+  const v = await promptDialog('Limit rychlosti položky', 'kB/s (0 = bez omezení)', cur);
+  if (v === null) return;
+  await call(window.api.queue.speedLimit(item.id, Number(v) || 0));
+}
+
+async function askGlobalSpeed() {
+  const cur = state.settings.speedLimitKb ? String(state.settings.speedLimitKb) : '';
+  const v = await promptDialog('Limit rychlosti všech přenosů', 'kB/s (0 = bez omezení)', cur);
+  if (v === null) return;
+  const kb = Math.max(0, Number(v) || 0);
+  await call(window.api.queue.speedLimit(null, kb));
+  state.settings = { ...state.settings, speedLimitKb: kb };
+  setLog('ok', kb ? `Rychlost omezena na ${kb} kB/s` : 'Omezení rychlosti zrušeno');
 }
 
 $('#q-pause').addEventListener('click', () => window.api.queue.pause());
@@ -1526,6 +1563,8 @@ $('#btn-settings').addEventListener('click', () => {
   const cur = { ...DEFAULT_SETTINGS, ...state.settings };
   f.editor.value = cur.editor;
   f.transferMask.value = cur.transferMask || '';
+  f.maxConcurrent.value = cur.maxConcurrent || 3;
+  f.speedLimitKb.value = cur.speedLimitKb || 0;
   f.doubleClick.value = cur.doubleClick;
   f.typeAhead.checked = cur.typeAhead !== false;
   f.colOwner.checked = Boolean(cur.colOwner);
@@ -1539,6 +1578,8 @@ setDlg.addEventListener('close', async () => {
   const saved = await call(window.api.settings.set({
     editor: f.editor.value.trim(),
     transferMask: f.transferMask.value.trim(),
+    maxConcurrent: Math.max(1, Math.min(16, Number(f.maxConcurrent.value) || 1)),
+    speedLimitKb: Math.max(0, Number(f.speedLimitKb.value) || 0),
     doubleClick: f.doubleClick.value,
     typeAhead: f.typeAhead.checked,
     colOwner: f.colOwner.checked,

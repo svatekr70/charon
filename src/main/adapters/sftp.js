@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const SftpClient = require('ssh2-sftp-client');
+const { makeThrottle } = require('../throttle');
 
 function expandHome(p) {
   if (!p) return p;
@@ -165,11 +166,11 @@ class SftpAdapter {
    * Stažení s podporou navázání. `startAt > 0` znamená, že lokální soubor
    * už obsahuje prvních startAt bajtů a dopisujeme za ně.
    */
-  download(remotePath, localPath, { startAt = 0, onProgress, signal } = {}) {
+  download(remotePath, localPath, { startAt = 0, onProgress, signal, limiters } = {}) {
     return new Promise((resolve, reject) => {
       const rs = this.client.createReadStream(remotePath, startAt > 0 ? { start: startAt } : {});
       const ws = fs.createWriteStream(localPath, startAt > 0 ? { flags: 'a' } : { flags: 'w' });
-      pumpStreams(rs, ws, startAt, onProgress, signal, resolve, reject);
+      pumpStreams(rs, ws, startAt, onProgress, signal, resolve, reject, limiters);
     });
   }
 
@@ -182,21 +183,22 @@ class SftpAdapter {
    * a přijdeme o už přenesenou část. S 'r+' a explicitním `start` je pozice
    * nastavená rovnou v konstruktoru a žádný závod nevzniká.
    */
-  upload(localPath, remotePath, { startAt = 0, onProgress, signal } = {}) {
+  upload(localPath, remotePath, { startAt = 0, onProgress, signal, limiters } = {}) {
     return new Promise((resolve, reject) => {
       const rs = fs.createReadStream(localPath, startAt > 0 ? { start: startAt } : {});
       const ws = this.client.createWriteStream(
         remotePath,
         startAt > 0 ? { flags: 'r+', start: startAt } : { flags: 'w' },
       );
-      pumpStreams(rs, ws, startAt, onProgress, signal, resolve, reject);
+      pumpStreams(rs, ws, startAt, onProgress, signal, resolve, reject, limiters);
     });
   }
 }
 
-function pumpStreams(rs, ws, startAt, onProgress, signal, resolve, reject) {
+function pumpStreams(rs, ws, startAt, onProgress, signal, resolve, reject, limiters) {
   let transferred = startAt;
   let settled = false;
+  const throttle = makeThrottle(limiters);
 
   const finish = (err) => {
     if (settled) return;
@@ -204,6 +206,7 @@ function pumpStreams(rs, ws, startAt, onProgress, signal, resolve, reject) {
     if (signal) signal.removeListener('abort', onAbort);
     if (err) {
       rs.destroy();
+      if (throttle) throttle.destroy();
       ws.destroy();
       reject(err);
     } else {
@@ -218,14 +221,22 @@ function pumpStreams(rs, ws, startAt, onProgress, signal, resolve, reject) {
     signal.once('abort', onAbort);
   }
 
-  rs.on('data', (chunk) => {
+  // Průběh počítáme až za omezovačem — před ním by ukazoval rychlost, kterou
+  // data teprve mají projít.
+  const counted = throttle || rs;
+  counted.on('data', (chunk) => {
     transferred += chunk.length;
     if (onProgress) onProgress(transferred);
   });
+
   rs.on('error', finish);
   ws.on('error', finish);
+  if (throttle) throttle.on('error', finish);
   ws.on('close', () => finish(null));
-  rs.pipe(ws);
+
+  if (throttle) rs.pipe(throttle).pipe(ws);
+  else rs.pipe(ws);
+  return undefined;
 }
 
 function rightsToOctal(rights) {

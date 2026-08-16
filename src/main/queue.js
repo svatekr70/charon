@@ -6,6 +6,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
 
+const { RateLimiter } = require('./throttle');
+
 /** Jednoduchý přerušovací token — adaptéry na něj čekají přes .once('abort'). */
 class AbortToken extends EventEmitter {
   constructor() {
@@ -23,8 +25,14 @@ class AbortToken extends EventEmitter {
 }
 
 /**
- * Fronta přenosů. Běží sériově nad vlastním spojením (odděleným od toho,
- * kterým se prochází adresáře), umí pauzu a navázání na přerušený přenos.
+ * Fronta přenosů.
+ *
+ * Běží nad spojeními oddělenými od toho, kterým se prochází adresáře, a umí
+ * jich mít víc naráz. U tisíců malých souborů rozhoduje latence, ne šířka
+ * pásma, takže několik souběžných přenosů dělá násobný rozdíl.
+ *
+ * Rychlost se dá omezit globálně i u jedné položky; globální limit je sdílený
+ * všemi pracovníky, aby platil dohromady, ne na každý přenos zvlášť.
  */
 class TransferQueue extends EventEmitter {
   /**
@@ -35,21 +43,57 @@ class TransferQueue extends EventEmitter {
    *   kde o tom uživatel už rozhodl (synchronizace, uložení z editoru).
    * @param {Function} [opts.onMoveSource] smaže zdroj po úspěšném přenosu
    *   (přesun místo kopie). Fronta neví, kam se maže — to řeší volající.
+   * @param {Function} opts.acquireAdapter půjčí spojení pro jeden přenos
+   * @param {Function} [opts.releaseAdapter] vrátí spojení zpět do zásoby
+   * @param {number} [opts.concurrency] kolik přenosů naráz
    */
-  constructor({ getAdapter, remoteJoin, onConflict, onMoveSource }) {
+  constructor({
+    getAdapter, acquireAdapter, releaseAdapter, remoteJoin,
+    onConflict, onMoveSource, concurrency = 1,
+  }) {
     super();
     this.items = [];
-    this.getAdapter = getAdapter;
+    // getAdapter je zpětná kompatibilita pro volající, kteří zásobu neřeší
+    // (typicky testy s jedním spojením).
+    this.acquireAdapter = acquireAdapter || getAdapter;
+    this.releaseAdapter = releaseAdapter || (() => {});
     this.remoteJoin = remoteJoin;
     this.onConflict = onConflict || null;
     this.onMoveSource = onMoveSource || null;
-    this.running = false;
+    this.concurrency = Math.max(1, concurrency);
     this.paused = false;
-    this.current = null;
-    this.token = null;
+    this.workers = 0;
+    /** id položky → přerušovací token právě běžícího přenosu */
+    this.active = new Map();
     this._lastEmit = 0;
     // Volba „použít na všechny" platí do vyprázdnění fronty.
     this.policy = null;
+    // Dotazy na konflikt řadíme za sebe, aby dva pracovníci nevyskočili
+    // se dvěma dialogy naráz.
+    this._conflictChain = Promise.resolve();
+    /** Sdílený globální limit rychlosti; 0 = bez omezení. */
+    this.limiter = new RateLimiter(0);
+  }
+
+  setConcurrency(n) {
+    this.concurrency = Math.max(1, Math.min(16, Math.floor(n) || 1));
+    this._kick();
+    this._emitUpdate(true);
+  }
+
+  /** Globální limit v bajtech za sekundu; 0 vypíná. */
+  setSpeedLimit(bytesPerSecond) {
+    this.limiter.setRate(bytesPerSecond);
+    this._emitUpdate(true);
+  }
+
+  /** Limit jen pro jednu položku fronty. Projevit se může až u dalšího pokusu. */
+  setItemSpeedLimit(id, bytesPerSecond) {
+    const it = this.items.find((x) => x.id === id);
+    if (!it) return;
+    it.speedLimit = Math.max(0, Math.floor(bytesPerSecond) || 0);
+    if (it.limiter) it.limiter.setRate(it.speedLimit);
+    this._emitUpdate(true);
   }
 
   add(jobs) {
@@ -68,6 +112,8 @@ class TransferQueue extends EventEmitter {
       conflictResolved: Boolean(j.conflictResolved),
       // Nastaví se u přesunu: 'local' nebo 'remote' podle toho, odkud se bere.
       moveFrom: j.moveFrom || null,
+      speedLimit: Math.max(0, Math.floor(j.speedLimit) || 0),
+      limiter: null,
       note: null,
     }));
     this.items.push(...created);
@@ -95,7 +141,7 @@ class TransferQueue extends EventEmitter {
 
   pause() {
     this.paused = true;
-    if (this.token) this.token.abort('pause');
+    for (const token of this.active.values()) token.abort('pause');
     this._emitUpdate(true);
   }
 
@@ -122,7 +168,8 @@ class TransferQueue extends EventEmitter {
     if (!it) return;
     if (it.status === 'active') {
       it.status = 'canceled';
-      if (this.token) this.token.abort('cancel');
+      const token = this.active.get(id);
+      if (token) token.abort('cancel');
     } else if (it.status === 'pending' || it.status === 'paused') {
       it.status = 'canceled';
     }
@@ -132,12 +179,9 @@ class TransferQueue extends EventEmitter {
   cancelAll() {
     this.policy = null;
     for (const it of this.items) {
-      if (it.status === 'pending' || it.status === 'paused') it.status = 'canceled';
+      if (['pending', 'paused', 'active'].includes(it.status)) it.status = 'canceled';
     }
-    if (this.current) {
-      this.current.status = 'canceled';
-      if (this.token) this.token.abort('cancel');
-    }
+    for (const token of this.active.values()) token.abort('cancel');
     this._emitUpdate(true);
   }
 
@@ -147,14 +191,21 @@ class TransferQueue extends EventEmitter {
   }
 
   snapshot() {
-    const active = this.items.filter((i) => ['pending', 'active', 'paused'].includes(i.status));
-    const totalBytes = active.reduce((a, i) => a + (i.size || 0), 0);
-    const doneBytes = active.reduce((a, i) => a + i.transferred, 0);
+    const open = this.items.filter((i) => ['pending', 'active', 'paused'].includes(i.status));
+    const totalBytes = open.reduce((a, i) => a + (i.size || 0), 0);
+    const doneBytes = open.reduce((a, i) => a + i.transferred, 0);
+    const speed = this.items
+      .filter((i) => i.status === 'active')
+      .reduce((a, i) => a + (i.speed || 0), 0);
     return {
       items: this.items,
       paused: this.paused,
-      running: this.running,
-      pending: active.length,
+      running: this.workers > 0,
+      active: this.active.size,
+      concurrency: this.concurrency,
+      speedLimit: this.limiter.rate,
+      speed,
+      pending: open.length,
       totalBytes,
       doneBytes,
     };
@@ -168,37 +219,44 @@ class TransferQueue extends EventEmitter {
   }
 
   _kick() {
-    if (this.running || this.paused) return;
-    const next = this.items.find((i) => i.status === 'pending');
-    if (!next) return;
-    this.running = true;
-    this._loop().catch(() => {}).finally(() => {
-      this.running = false;
-      this._emitUpdate(true);
-      // Pokud mezitím přibyla práce (typicky Pauza a hned Pokračovat), _kick()
-      // v té chvíli odešel kvůli running === true. Bez tohohle dokopnutí by
-      // fronta zůstala stát napořád.
-      if (!this.paused && this.items.some((i) => i.status === 'pending')) this._kick();
-    });
+    if (this.paused) return;
+    // Pracovníků pouštíme tolik, kolik je práce — nejvýš do zvoleného počtu.
+    while (this.workers < this.concurrency && this.items.some((i) => i.status === 'pending')) {
+      this.workers += 1;
+      this._worker().catch(() => {}).finally(() => {
+        this.workers -= 1;
+        // Politika „použít na všechny" platí jen do vyprázdnění fronty;
+        // zahodit ji smíme teprve když dojedou všichni pracovníci.
+        if (this.workers === 0 && !this.items.some((i) => i.status === 'pending')) {
+          this.policy = null;
+        }
+        this._emitUpdate(true);
+        // Pokud mezitím přibyla práce (typicky Pauza a hned Pokračovat),
+        // _kick() tehdy odešel s plným počtem pracovníků. Bez tohohle
+        // dokopnutí by fronta zůstala stát napořád.
+        if (!this.paused && this.items.some((i) => i.status === 'pending')) this._kick();
+      });
+    }
   }
 
-  async _loop() {
+  async _worker() {
     for (;;) {
       if (this.paused) return;
       const item = this.items.find((i) => i.status === 'pending');
-      if (!item) {
-        this.policy = null; // fronta došla — příště se ptáme znovu
-        return;
-      }
+      if (!item) return;
 
       item.status = 'active';
       item.startedAt = Date.now();
-      this.current = item;
-      this.token = new AbortToken();
+      item.limiter = item.speedLimit ? new RateLimiter(item.speedLimit) : null;
+
+      const token = new AbortToken();
+      this.active.set(item.id, token);
       this._emitUpdate(true);
 
+      let adapter = null;
       try {
-        const outcome = await this._transfer(item);
+        adapter = await this.acquireAdapter();
+        const outcome = await this._transfer(item, adapter, token);
         if (item.status === 'active') {
           if (outcome === 'skipped') {
             item.status = 'skipped';
@@ -220,21 +278,22 @@ class TransferQueue extends EventEmitter {
       } catch (err) {
         if (err && err.aborted) {
           // Rozlišíme pauzu (položka se vrátí do fronty) od zrušení.
-          item.status = this.token.reason === 'pause' ? 'paused' : 'canceled';
+          item.status = token.reason === 'pause' ? 'paused' : 'canceled';
         } else {
           item.status = 'error';
           item.error = err ? err.message : 'Neznámá chyba';
         }
       } finally {
-        this.current = null;
-        this.token = null;
+        this.active.delete(item.id);
+        item.limiter = null;
+        if (adapter) this.releaseAdapter(adapter);
         this._emitUpdate(true);
       }
     }
   }
 
-  async _transfer(item) {
-    const adapter = await this.getAdapter();
+  async _transfer(item, adapter, token) {
+    const limiters = [this.limiter, item.limiter];
     const onProgress = (bytes) => {
       item.transferred = bytes;
       const elapsed = (Date.now() - item.startedAt) / 1000;
@@ -259,7 +318,7 @@ class TransferQueue extends EventEmitter {
       if (parent && parent !== '.') await adapter.mkdir(parent, true).catch(() => {});
 
       if (startAt >= local.size && local.size > 0) return 'done'; // už je celý nahraný
-      await adapter.upload(item.localPath, item.remotePath, { startAt, onProgress, signal: this.token });
+      await adapter.upload(item.localPath, item.remotePath, { startAt, onProgress, signal: token, limiters });
 
       // Přeneseme i čas změny, jinak by synchronizace soubor příště zase
       // označila za rozdílný. Server to nemusí umět — pak jen mlčky přeskočíme.
@@ -278,7 +337,7 @@ class TransferQueue extends EventEmitter {
       item.transferred = startAt;
 
       if (startAt >= remote.size && remote.size > 0) return 'done';
-      await adapter.download(item.remotePath, item.localPath, { startAt, onProgress, signal: this.token });
+      await adapter.download(item.remotePath, item.localPath, { startAt, onProgress, signal: token, limiters });
 
       if (remote.mtime) {
         const t = new Date(remote.mtime);
@@ -305,7 +364,7 @@ class TransferQueue extends EventEmitter {
 
     let choice = this.policy;
     if (!choice) {
-      const answer = await this.onConflict({
+      const answer = await this._askConflict({
         direction: item.direction,
         localPath: item.localPath,
         remotePath: item.remotePath,
@@ -349,6 +408,20 @@ class TransferQueue extends EventEmitter {
         item.note = 'přeskočeno';
         return 'skipped';
     }
+  }
+
+  /**
+   * Dotazy na konflikt jdou jeden po druhém. Se souběžnými přenosy by jinak
+   * vyskočily dva dialogy naráz — a druhý by se ptal na něco, o čem uživatel
+   * mezitím rozhodl volbou „použít na všechny".
+   */
+  _askConflict(info) {
+    const next = this._conflictChain.then(() => {
+      if (this.policy) return { action: this.policy };
+      return this.onConflict(info);
+    });
+    this._conflictChain = next.catch(() => {});
+    return next;
   }
 
   /** Vlastnosti cílového souboru, nebo null když neexistuje. */

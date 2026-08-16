@@ -11,7 +11,14 @@ const path = require('path');
 const { Server } = require('ssh2');
 const { STATUS_CODE, OPEN_MODE } = require('ssh2').utils.sftp;
 
-function startTestServer({ root, hostKeyPath, user = 'test', password = 'test' }) {
+/**
+ * @param {number} [latencyMs] umělé zpoždění každé odpovědi. Na loopbacku je
+ *   latence nulová, takže bez něj nejde změřit, co souběžné přenosy vlastně
+ *   řeší — a to je právě latence, ne šířka pásma.
+ */
+function startTestServer({
+  root, hostKeyPath, user = 'test', password = 'test', latencyMs = 0,
+}) {
   return new Promise((resolve) => {
     const handles = new Map();
     let nextHandle = 1;
@@ -50,6 +57,15 @@ function startTestServer({ root, hostKeyPath, user = 'test', password = 'test' }
           const session = accept();
           session.on('sftp', (acceptSftp) => {
             const sftp = acceptSftp();
+
+            if (latencyMs > 0) {
+              // Odpovědi posíláme se zpožděním; server se tím chová jako
+              // vzdálený stroj přes internet.
+              for (const m of ['status', 'handle', 'data', 'name', 'attrs']) {
+                const orig = sftp[m].bind(sftp);
+                sftp[m] = (...args) => setTimeout(() => orig(...args), latencyMs);
+              }
+            }
 
             sftp.on('REALPATH', (id, p) => {
               const target = p === '.' || p === '' ? '/' : path.normalize(`/${p}`);

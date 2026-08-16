@@ -87,6 +87,7 @@
       <div class="queue-head">
         <strong>Fronta přenosů</strong>
         <span id="queue-summary" class="muted">prázdná</span>
+        <span id="queue-speed" class="muted"></span>
         <span class="spacer"></span>
         <button id="q-pause">⏸ Pauza</button>
         <button id="q-resume" hidden>▶ Pokračovat</button>
@@ -215,6 +216,19 @@
       <p class="muted">Název aplikace tak, jak se jmenuje ve složce Aplikace. Soubor se stáhne do dočasné složky, otevře v editoru a při každém uložení se sám nahraje zpět.</p>
 
       <h3>Přenosy</h3>
+      <div class="grid">
+        <label>Souběžných přenosů
+          <input name="maxConcurrent" type="number" min="1" max="16" />
+        </label>
+        <label>Omezit rychlost (kB/s)
+          <input name="speedLimitKb" type="number" min="0" placeholder="0 = bez omezení" />
+        </label>
+      </div>
+      <p class="muted">Několik přenosů naráz je znát hlavně u spousty malých souborů,
+        kde rozhoduje latence. Servery ale počet spojení z jedné adresy často omezují —
+        když další nepovolí, Charon se sám zmenší a napíše to do stavového řádku.
+        Limit rychlosti platí dohromady pro všechny přenosy.</p>
+
       <label>Výchozí maska pro přenosy
         <input name="transferMask" placeholder="prázdné = přenášet vše" spellcheck="false" />
       </label>

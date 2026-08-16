@@ -31,6 +31,7 @@ předlohy vozí i zpátky.
 | Dopočítání velikosti složek | ✅ |
 | Sloupce vlastníka a skupiny, nastavitelný dvojklik | ✅ |
 | Masky souborů pro přenosy i synchronizaci | ✅ |
+| Souběžné přenosy a omezení rychlosti | ✅ |
 
 Nepodporuje SCP, WebDAV ani S3 — relace v těchto protokolech se při importu
 zobrazí, ale nejdou naimportovat.
@@ -240,6 +241,28 @@ v editoru a hlídá. Při každém uložení se sám nahraje zpět na server —
 dalšího kliknutí. V **Nastavení** si můžete zvolit editor (např.
 `Visual Studio Code`); prázdné pole znamená výchozí aplikaci podle přípony.
 
+## Souběžné přenosy
+
+Ve výchozím stavu běží **3 přenosy naráz**, každý přes vlastní spojení
+(*Nastavení → Přenosy*, 1 až 16). Je to znát hlavně u spousty malých souborů,
+kde rozhoduje latence, ne šířka pásma — při odezvě 20 ms je čtyřnásobná
+souběžnost v testech asi **4× rychlejší**. Na rychlé lince s jedním velkým
+souborem rozdíl nečekejte.
+
+Servery počet spojení z jedné adresy často omezují. Když další nepovolí,
+Charon se sám zmenší na to, co prošlo, napíše to do stavového řádku a pokračuje
+— přenosy kvůli tomu neselžou.
+
+## Omezení rychlosti
+
+Nastavuje se v *Nastavení → Přenosy* v kB/s, nebo pravým tlačítkem na položku
+ve frontě. Globální limit platí **dohromady pro všechny běžící přenosy**, ne na
+každý zvlášť — zadáváte, kolik smí Charon ubrat z linky. Položka může mít navíc
+vlastní limit; pak platí oba a rozhoduje ten přísnější.
+
+Model je „děravý kbelík" se zásobou na jednu sekundu dopředu, takže po chvíli
+nečinnosti přenos nevystřelí na několikanásobek limitu.
+
 ## Masky souborů
 
 Stejný zápis se používá na filtr v panelu, na výběr klávesami `+` a `−`
@@ -331,6 +354,10 @@ npm test
 - `test/browse.test.js` — dopočítání velikosti složek a hledání souborů
 - `test/transfer-mask.test.js` — masky u přenosů a synchronizace, včetně toho,
   že vyloučená složka neprojde ani jako ručně vybraný kořen
+- `test/parallel.test.js` — souběžné přenosy, zásoba spojení a omezení
+  rychlosti. Rychlost se měří proti hodinkám, ne proti počítadlu omezovače;
+  zrychlení souběžností se ověřuje proti serveru s umělou latencí, protože
+  na loopbacku by se neprojevilo
 - `test/e2e.test.js` — SFTP: přenosy, pauza, navázání, chmod a synchronizace proti
   dočasnému SFTP serveru z `test/sftp-server.js`
 - `test/ftp.test.js` — FTP: totéž proti dočasnému FTP serveru, včetně navázání

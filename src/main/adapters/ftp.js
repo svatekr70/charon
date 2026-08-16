@@ -4,6 +4,7 @@ const fs = require('fs');
 const net = require('net');
 const ftp = require('basic-ftp');
 const tlscerts = require('../tlscerts');
+const { makeThrottle } = require('../throttle');
 
 /**
  * FTP / FTPS adaptér se stejným rozhraním jako SftpAdapter.
@@ -197,22 +198,32 @@ class FtpAdapter {
     await this.client.send(`MFMT ${stamp} ${remotePath}`);
   }
 
-  async download(remotePath, localPath, { startAt = 0, onProgress, signal } = {}) {
+  async download(remotePath, localPath, { startAt = 0, onProgress, signal, limiters } = {}) {
     await this.ensureConnected();
     return this._withProgress(startAt, onProgress, signal, async () => {
       const ws = fs.createWriteStream(localPath, startAt > 0 ? { flags: 'a' } : { flags: 'w' });
-      await this.client.downloadTo(ws, remotePath, startAt);
+      const throttle = makeThrottle(limiters);
+      if (!throttle) {
+        await this.client.downloadTo(ws, remotePath, startAt);
+        return;
+      }
+      // Knihovna zapisuje do toho, co jí předáme — podstrčíme jí omezovač
+      // a ten teprve sype do souboru.
+      throttle.pipe(ws);
+      await this.client.downloadTo(throttle, remotePath, startAt);
     });
   }
 
-  async upload(localPath, remotePath, { startAt = 0, onProgress, signal } = {}) {
+  async upload(localPath, remotePath, { startAt = 0, onProgress, signal, limiters } = {}) {
     await this.ensureConnected();
     return this._withProgress(startAt, onProgress, signal, async () => {
-      if (startAt > 0) {
-        await this.client.appendFrom(fs.createReadStream(localPath, { start: startAt }), remotePath);
-      } else {
-        await this.client.uploadFrom(localPath, remotePath);
-      }
+      const throttle = makeThrottle(limiters);
+      const source = () => {
+        const rs = fs.createReadStream(localPath, startAt > 0 ? { start: startAt } : {});
+        return throttle ? rs.pipe(throttle) : rs;
+      };
+      if (startAt > 0) await this.client.appendFrom(source(), remotePath);
+      else await this.client.uploadFrom(source(), remotePath);
     });
   }
 
