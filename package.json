@@ -27,12 +27,27 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": [
-        "dmg"
-      ]
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "identity": null
     },
     "files": [
       "src/**/*",
       "package.json"
-    ]
+    ],
+    "directories": {
+      "output": "dist"
+    }
   }
 }

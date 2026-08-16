@@ -36,11 +36,43 @@ zobrazí, ale nejdou naimportovat.
 
 ## Spuštění
 
+### Rovnou z projektu
+
 ```bash
 npm install
-npm start          # vývojový režim
-npm run dist       # sestaví .dmg do složky dist/
+npm start
 ```
+
+Okno naskočí za pár vteřin. Takhle se aplikace spouští při vývoji — zavřením
+terminálu skončí. `npm run dev` je totéž s otevřenou konzolí pro ladění.
+
+### Jako opravdová aplikace
+
+```bash
+npm run dist
+```
+
+Vznikne `dist/mac-arm64/Charon.app` (na dvojklik) a `dist/Charon-1.0.0-arm64.dmg`
+pro přenos jinam. Do Aplikací se přetáhne z DMG, nebo příkazem:
+
+```bash
+cp -R dist/mac-arm64/Charon.app /Applications/
+```
+
+Aplikace je podepsaná jen ad-hoc, bez vývojářského certifikátu. Sestavená
+lokálně se otevře bez řečí; kdybys DMG poslal na jiný Mac, Gatekeeper ho
+zastaví a bude potřeba **pravý klik → Otevřít**.
+
+Data (relace, nastavení) jsou společná pro oba způsoby spuštění, takže se
+o nic nepřijde přepnutím mezi nimi.
+
+### Mezera v cestě k projektu
+
+Složka projektu má v názvu mezeru, kvůli čemuž se nepodaří sestavit `cpu-features` —
+nepovinný nativní modul, kterým si `ssh2` zrychluje šifrování. Aplikace kvůli
+tomu funguje normálně, jen o kousek pomaleji na velkých přenosech. Kdyby to
+vadilo, stačí složku přejmenovat na cestu bez mezery a spustit `npm run dist`
+znovu.
 
 ## Import z WinSCP
 
