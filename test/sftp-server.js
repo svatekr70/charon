@@ -1,0 +1,178 @@
+'use strict';
+
+/**
+ * Minimální SFTP server pro testy — jen tenká vrstva nad skutečným
+ * adresářem na disku. Slouží k ověření, že adaptér, fronta a synchronizace
+ * mluví s protokolem správně, bez závislosti na externím serveru.
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { Server } = require('ssh2');
+const { STATUS_CODE, OPEN_MODE } = require('ssh2').utils.sftp;
+
+function startTestServer({ root, hostKeyPath, user = 'test', password = 'test' }) {
+  return new Promise((resolve) => {
+    const handles = new Map();
+    let nextHandle = 1;
+
+    const makeHandle = (payload) => {
+      const id = nextHandle++;
+      const buf = Buffer.alloc(4);
+      buf.writeUInt32BE(id, 0);
+      handles.set(id, payload);
+      return buf;
+    };
+    const getHandle = (buf) => handles.get(buf.readUInt32BE(0));
+    const dropHandle = (buf) => handles.delete(buf.readUInt32BE(0));
+
+    // Cesty klienta jsou absolutní posixové — mapujeme je pod testovací kořen.
+    const real = (p) => path.join(root, path.normalize(`/${p}`));
+
+    const attrs = (st) => ({
+      mode: st.mode,
+      uid: st.uid,
+      gid: st.gid,
+      size: st.size,
+      atime: Math.floor(st.atimeMs / 1000),
+      mtime: Math.floor(st.mtimeMs / 1000),
+    });
+
+    const server = new Server({ hostKeys: [fs.readFileSync(hostKeyPath)] }, (client) => {
+      client.on('authentication', (ctx) => {
+        if (ctx.method === 'password' && ctx.username === user && ctx.password === password) ctx.accept();
+        else if (ctx.method === 'none') ctx.reject(['password']);
+        else ctx.reject(['password']);
+      });
+
+      client.on('ready', () => {
+        client.on('session', (accept) => {
+          const session = accept();
+          session.on('sftp', (acceptSftp) => {
+            const sftp = acceptSftp();
+
+            sftp.on('REALPATH', (id, p) => {
+              const target = p === '.' || p === '' ? '/' : path.normalize(`/${p}`);
+              sftp.name(id, [{ filename: target, longname: target, attrs: {} }]);
+            });
+
+            sftp.on('OPENDIR', (id, p) => {
+              try {
+                const entries = fs.readdirSync(real(p));
+                sftp.handle(id, makeHandle({ kind: 'dir', dir: real(p), entries, pos: 0 }));
+              } catch {
+                sftp.status(id, STATUS_CODE.NO_SUCH_FILE);
+              }
+            });
+
+            sftp.on('READDIR', (id, h) => {
+              const st = getHandle(h);
+              if (!st || st.kind !== 'dir') return sftp.status(id, STATUS_CODE.FAILURE);
+              if (st.pos >= st.entries.length) return sftp.status(id, STATUS_CODE.EOF);
+              const batch = st.entries.slice(st.pos, st.pos + 50).map((name) => {
+                const s = fs.lstatSync(path.join(st.dir, name));
+                const a = attrs(s);
+                const kind = s.isDirectory() ? 'd' : s.isSymbolicLink() ? 'l' : '-';
+                const perms = permString(s.mode);
+                return {
+                  filename: name,
+                  longname: `${kind}${perms} 1 owner group ${String(s.size).padStart(8)} Jan  1 00:00 ${name}`,
+                  attrs: a,
+                };
+              });
+              st.pos += batch.length;
+              return sftp.name(id, batch);
+            });
+
+            const doStat = (id, p) => {
+              try { sftp.attrs(id, attrs(fs.lstatSync(real(p)))); }
+              catch { sftp.status(id, STATUS_CODE.NO_SUCH_FILE); }
+            };
+            sftp.on('STAT', doStat);
+            sftp.on('LSTAT', doStat);
+
+            sftp.on('FSTAT', (id, h) => {
+              const st = getHandle(h);
+              if (!st) return sftp.status(id, STATUS_CODE.FAILURE);
+              try { return sftp.attrs(id, attrs(fs.fstatSync(st.fd))); }
+              catch { return sftp.status(id, STATUS_CODE.FAILURE); }
+            });
+
+            sftp.on('OPEN', (id, filename, flags) => {
+              let mode = 'r';
+              if (flags & OPEN_MODE.APPEND) mode = 'a';
+              else if (flags & OPEN_MODE.WRITE) mode = (flags & OPEN_MODE.TRUNC) ? 'w' : 'r+';
+              try {
+                if (mode === 'r+' && !fs.existsSync(real(filename))) mode = 'w';
+                const fd = fs.openSync(real(filename), mode);
+                sftp.handle(id, makeHandle({ kind: 'file', fd }));
+              } catch {
+                sftp.status(id, STATUS_CODE.FAILURE);
+              }
+            });
+
+            sftp.on('READ', (id, h, offset, length) => {
+              const st = getHandle(h);
+              if (!st || st.kind !== 'file') return sftp.status(id, STATUS_CODE.FAILURE);
+              const buf = Buffer.alloc(length);
+              const read = fs.readSync(st.fd, buf, 0, length, offset);
+              if (read === 0) return sftp.status(id, STATUS_CODE.EOF);
+              return sftp.data(id, buf.subarray(0, read));
+            });
+
+            sftp.on('WRITE', (id, h, offset, data) => {
+              const st = getHandle(h);
+              if (!st || st.kind !== 'file') return sftp.status(id, STATUS_CODE.FAILURE);
+              fs.writeSync(st.fd, data, 0, data.length, offset);
+              return sftp.status(id, STATUS_CODE.OK);
+            });
+
+            sftp.on('CLOSE', (id, h) => {
+              const st = getHandle(h);
+              if (st && st.kind === 'file') { try { fs.closeSync(st.fd); } catch { /* už zavřeno */ } }
+              dropHandle(h);
+              sftp.status(id, STATUS_CODE.OK);
+            });
+
+            sftp.on('MKDIR', (id, p) => {
+              try { fs.mkdirSync(real(p), { recursive: true }); sftp.status(id, STATUS_CODE.OK); }
+              catch { sftp.status(id, STATUS_CODE.FAILURE); }
+            });
+            sftp.on('RMDIR', (id, p) => {
+              try { fs.rmdirSync(real(p)); sftp.status(id, STATUS_CODE.OK); }
+              catch { sftp.status(id, STATUS_CODE.FAILURE); }
+            });
+            sftp.on('REMOVE', (id, p) => {
+              try { fs.unlinkSync(real(p)); sftp.status(id, STATUS_CODE.OK); }
+              catch { sftp.status(id, STATUS_CODE.FAILURE); }
+            });
+            sftp.on('RENAME', (id, from, to) => {
+              try { fs.renameSync(real(from), real(to)); sftp.status(id, STATUS_CODE.OK); }
+              catch { sftp.status(id, STATUS_CODE.FAILURE); }
+            });
+            sftp.on('SETSTAT', (id, p, a) => {
+              try {
+                if (a.mode !== undefined) fs.chmodSync(real(p), a.mode & 0o777);
+                if (a.atime !== undefined && a.mtime !== undefined) fs.utimesSync(real(p), a.atime, a.mtime);
+                sftp.status(id, STATUS_CODE.OK);
+              } catch { sftp.status(id, STATUS_CODE.FAILURE); }
+            });
+          });
+        });
+      });
+
+      client.on('error', () => { /* klient se odpojil */ });
+    });
+
+    server.listen(0, '127.0.0.1', () => {
+      resolve({ port: server.address().port, close: () => new Promise((r) => server.close(r)) });
+    });
+  });
+}
+
+function permString(mode) {
+  const b = (n) => `${n & 4 ? 'r' : '-'}${n & 2 ? 'w' : '-'}${n & 1 ? 'x' : '-'}`;
+  return b((mode >> 6) & 7) + b((mode >> 3) & 7) + b(mode & 7);
+}
+
+module.exports = { startTestServer };

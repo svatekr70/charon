@@ -1,0 +1,38 @@
+{
+  "name": "ftp-cli",
+  "version": "1.0.0",
+  "description": "Dvoupanelový SFTP/FTP klient pro macOS — náhrada WinSCP",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "dist": "electron-builder --mac",
+    "test": "node test/winscp-import.test.js && node test/safety.test.js && node test/e2e.test.js && node test/ftp.test.js && node test/ftps.test.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "basic-ftp": "^6.2.0",
+    "chokidar": "^5.0.0",
+    "ssh2-sftp-client": "^12.1.1"
+  },
+  "devDependencies": {
+    "electron": "^43.4.0",
+    "electron-builder": "^26.0.12",
+    "ftp-srv": "^4.6.3"
+  },
+  "build": {
+    "appId": "cz.svatek.ftpcli",
+    "productName": "FTP Cli",
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg"
+      ]
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ]
+  }
+}

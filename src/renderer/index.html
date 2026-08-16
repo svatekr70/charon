@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'" />
+  <title>FTP Cli</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="toolbar">
+      <div class="drag-region"></div>
+      <select id="site-select" title="Uložené relace"><option value="">— vyberte relaci —</option></select>
+      <button id="btn-connect" class="primary">Připojit</button>
+      <button id="btn-disconnect" hidden>Odpojit</button>
+      <span class="sep"></span>
+      <button id="btn-new-site" title="Nová relace">＋ Relace</button>
+      <button id="btn-edit-site" title="Upravit vybranou relaci">Upravit</button>
+      <button id="btn-del-site" title="Smazat vybranou relaci">Smazat</button>
+      <span class="sep"></span>
+      <button id="btn-import">Import z WinSCP…</button>
+      <span class="spacer"></span>
+      <button id="btn-refresh" title="Obnovit oba panely (⌘R)">⟳</button>
+      <button id="btn-sync" title="Synchronizace adresářů (⌘S)">⇅ Sync</button>
+      <button id="btn-settings" title="Nastavení">⚙</button>
+    </header>
+
+    <main class="panes">
+      <section class="pane" id="pane-local" data-side="local">
+        <div class="pane-head">
+          <span class="pane-title">Lokální</span>
+          <button class="icon" data-act="up" title="O úroveň výš">↑</button>
+          <input class="path" data-role="path" spellcheck="false" />
+          <button class="icon" data-act="browse" title="Vybrat složku">…</button>
+        </div>
+        <div class="list-head">
+          <span class="col-name">Název</span><span class="col-size">Velikost</span>
+          <span class="col-date">Změněno</span><span class="col-perm">Práva</span>
+        </div>
+        <div class="list" data-role="list" tabindex="0"></div>
+        <div class="pane-foot" data-role="foot"></div>
+      </section>
+
+      <div class="splitter" id="splitter"></div>
+
+      <section class="pane" id="pane-remote" data-side="remote">
+        <div class="pane-head">
+          <span class="pane-title">Server</span>
+          <button class="icon" data-act="up" title="O úroveň výš">↑</button>
+          <input class="path" data-role="path" spellcheck="false" />
+          <button class="icon" data-act="home" title="Domovský adresář">⌂</button>
+        </div>
+        <div class="list-head">
+          <span class="col-name">Název</span><span class="col-size">Velikost</span>
+          <span class="col-date">Změněno</span><span class="col-perm">Práva</span>
+        </div>
+        <div class="list" data-role="list" tabindex="0"></div>
+        <div class="pane-foot" data-role="foot"></div>
+      </section>
+    </main>
+
+    <section class="queue" id="queue">
+      <div class="queue-head">
+        <strong>Fronta přenosů</strong>
+        <span id="queue-summary" class="muted">prázdná</span>
+        <span class="spacer"></span>
+        <button id="q-pause">⏸ Pauza</button>
+        <button id="q-resume" hidden>▶ Pokračovat</button>
+        <button id="q-cancel">✕ Zrušit vše</button>
+        <button id="q-clear">Vyčistit hotové</button>
+        <button id="q-toggle" title="Sbalit/rozbalit">▾</button>
+      </div>
+      <div class="queue-body" id="queue-body"></div>
+    </section>
+
+    <footer class="status">
+      <span id="conn-status" class="badge off">Odpojeno</span>
+      <span id="edit-status" class="muted"></span>
+      <span class="spacer"></span>
+      <span id="log-line" class="muted"></span>
+    </footer>
+  </div>
+
+  <!-- editor relace -->
+  <dialog id="dlg-site">
+    <form method="dialog" class="dlg">
+      <h2 id="dlg-site-title">Nová relace</h2>
+      <div class="grid">
+        <label>Název<input name="name" required /></label>
+        <label>Složka<input name="folder" placeholder="volitelné" /></label>
+        <label>Protokol
+          <select name="protocol"><option value="sftp">SFTP (SSH)</option><option value="ftp">FTP / FTPS</option></select>
+        </label>
+        <label>Server<input name="host" required /></label>
+        <label>Port<input name="port" type="number" min="1" max="65535" /></label>
+        <label>Uživatel<input name="username" /></label>
+        <label>Heslo<input name="password" type="password" placeholder="beze změny" /></label>
+        <label data-when="ftp" hidden>Šifrování
+          <select name="ftps"><option value="none">Žádné</option><option value="explicit">Explicitní TLS</option><option value="implicit">Implicitní TLS</option></select>
+        </label>
+        <label data-when="sftp">Privátní klíč
+          <span class="row"><input name="privateKeyPath" placeholder="~/.ssh/id_ed25519" /><button type="button" id="pick-key">…</button></span>
+        </label>
+        <label data-when="sftp">Heslo ke klíči<input name="passphrase" type="password" placeholder="beze změny" /></label>
+        <label>Vzdálený adresář<input name="remoteDir" placeholder="/var/www" /></label>
+        <label>Lokální adresář
+          <span class="row"><input name="localDir" /><button type="button" id="pick-local">…</button></span>
+        </label>
+        <label>Složka koše na serveru<input name="recycleBinPath" placeholder="výchozí: ~/.ftpcli-trash" /></label>
+        <label>Vysypat koš po (dnech)<input name="recycleBinDays" type="number" min="0" placeholder="0 = nikdy" /></label>
+        <label class="check"><input type="checkbox" name="useRecycleBin" checked /> Mazat na serveru do koše místo nevratného smazání</label>
+        <label class="check" data-when="sftp"><input type="checkbox" name="useAgent" /> Použít ssh-agent</label>
+        <label class="check" data-when="ftp" hidden><input type="checkbox" name="acceptAnyCert" /> Přijmout jakýkoliv certifikát bez ptaní (nedoporučeno)</label>
+      </div>
+      <menu>
+        <button value="cancel">Zrušit</button>
+        <button value="save" class="primary" id="site-save">Uložit</button>
+        <button value="connect" class="primary" id="site-connect">Uložit a připojit</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <!-- import z WinSCP -->
+  <dialog id="dlg-import">
+    <div class="dlg wide">
+      <h2>Import relací z WinSCP</h2>
+      <p class="muted" id="import-hint">
+        Vyberte <code>WinSCP.ini</code> nebo <code>.reg</code> export z Windows.
+        Ve WinSCP: <em>Tools → Export/Backup Configuration</em>, nebo v regedit exportujte klíč
+        <code>HKCU\Software\Martin Prikryl\WinSCP 2</code>.
+      </p>
+      <div id="import-warning" class="warn" hidden></div>
+      <div class="import-table" id="import-list"></div>
+      <label class="check"><input type="checkbox" id="import-overwrite" /> Přepsat existující relace se stejným serverem a uživatelem</label>
+      <menu>
+        <button id="import-cancel">Zavřít</button>
+        <button id="import-pick">Vybrat soubor…</button>
+        <button id="import-go" class="primary" disabled>Importovat vybrané</button>
+      </menu>
+    </div>
+  </dialog>
+
+  <!-- synchronizace -->
+  <dialog id="dlg-sync">
+    <div class="dlg wide">
+      <h2>Synchronizace adresářů</h2>
+      <div class="sync-paths">
+        <label>Lokální<input id="sync-local" spellcheck="false" /></label>
+        <label>Vzdálený<input id="sync-remote" spellcheck="false" /></label>
+      </div>
+      <div class="sync-opts">
+        <label>Směr
+          <select id="sync-direction">
+            <option value="toRemote">Lokální → Server (upload)</option>
+            <option value="toLocal">Server → Lokální (download)</option>
+            <option value="both">Obousměrně (novější vyhrává)</option>
+          </select>
+        </label>
+        <label>Porovnávat podle
+          <select id="sync-criteria">
+            <option value="timeSize">Času i velikosti</option>
+            <option value="time">Času změny</option>
+            <option value="size">Velikosti</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="sync-delete" /> Mazat, co na druhé straně chybí</label>
+        <button id="sync-compare" class="primary">Porovnat</button>
+      </div>
+      <div class="sync-result" id="sync-result"><p class="muted">Zatím neporovnáno.</p></div>
+      <menu>
+        <button id="sync-cancel">Zavřít</button>
+        <button id="sync-apply" class="primary" disabled>Provést vybrané</button>
+      </menu>
+    </div>
+  </dialog>
+
+  <!-- nastavení -->
+  <dialog id="dlg-settings">
+    <form method="dialog" class="dlg">
+      <h2>Nastavení</h2>
+      <label>Editor pro vzdálené soubory
+        <input name="editor" placeholder="např. Visual Studio Code (prázdné = výchozí aplikace)" />
+      </label>
+      <p class="muted">Název aplikace tak, jak se jmenuje ve složce Aplikace. Soubor se stáhne do dočasné složky, otevře v editoru a při každém uložení se sám nahraje zpět.</p>
+      <menu><button value="cancel">Zrušit</button><button value="save" class="primary">Uložit</button></menu>
+    </form>
+  </dialog>
+
+  <!-- konflikt při přepisu existujícího souboru -->
+  <dialog id="dlg-conflict">
+    <div class="dlg">
+      <h2>Cílový soubor už existuje</h2>
+      <p class="muted" id="conflict-path"></p>
+      <div class="cmp" id="conflict-cmp"></div>
+      <label class="check"><input type="checkbox" id="conflict-all" /> Použít na všechny další v této frontě</label>
+      <menu class="wrapmenu">
+        <button data-action="cancel">Zrušit vše</button>
+        <button data-action="skip">Přeskočit</button>
+        <button data-action="newer">Jen když je novější</button>
+        <button data-action="rename">Přejmenovat</button>
+        <button data-action="resume" id="conflict-resume">Navázat</button>
+        <button data-action="overwrite" class="primary">Přepsat</button>
+      </menu>
+    </div>
+  </dialog>
+
+  <!-- univerzální vstupní dialog -->
+  <dialog id="dlg-prompt">
+    <form method="dialog" class="dlg">
+      <h2 id="prompt-title"></h2>
+      <label id="prompt-label"><span id="prompt-text"></span><input name="value" id="prompt-input" /></label>
+      <menu><button value="cancel">Zrušit</button><button value="ok" class="primary">OK</button></menu>
+    </form>
+  </dialog>
+
+  <div id="ctxmenu" class="ctxmenu" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

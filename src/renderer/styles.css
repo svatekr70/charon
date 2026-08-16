@@ -1,0 +1,195 @@
+:root {
+  --bg: #1b1d23;
+  --bg-2: #22252d;
+  --bg-3: #2a2e38;
+  --line: #363b47;
+  --fg: #e4e7ee;
+  --fg-dim: #99a0b0;
+  --accent: #4c8dff;
+  --accent-2: #2f6fe0;
+  --ok: #47c26a;
+  --warn: #e0a33c;
+  --err: #e55b64;
+  --row-h: 24px;
+  font-size: 13px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; height: 100%;
+  background: var(--bg); color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  overflow: hidden;
+  -webkit-user-select: none; user-select: none;
+}
+
+#app { display: flex; flex-direction: column; height: 100%; }
+
+/* ------------------------------------------------------------- toolbar */
+.toolbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px 6px 84px; /* místo pro semafor okna */
+  background: var(--bg-2); border-bottom: 1px solid var(--line);
+  -webkit-app-region: drag;
+}
+.toolbar > * { -webkit-app-region: no-drag; }
+.drag-region { position: absolute; inset: 0 0 auto 0; height: 38px; -webkit-app-region: drag; z-index: -1; }
+.spacer { flex: 1; }
+.sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+
+button, select, input {
+  font: inherit; color: var(--fg);
+  background: var(--bg-3); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 9px;
+}
+button { cursor: pointer; }
+button:hover:not(:disabled) { background: #333846; }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent-2); border-color: var(--accent-2); }
+button.primary:hover:not(:disabled) { background: var(--accent); }
+button.icon { padding: 3px 7px; }
+select { min-width: 180px; }
+input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* --------------------------------------------------------------- panely */
+.panes { flex: 1; display: flex; min-height: 0; }
+.pane { flex: 1 1 50%; display: flex; flex-direction: column; min-width: 220px; min-height: 0; }
+.splitter { width: 5px; cursor: col-resize; background: var(--line); flex: none; }
+.splitter:hover { background: var(--accent); }
+
+.pane-head {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px; border-bottom: 1px solid var(--line); background: var(--bg-2);
+}
+.pane-title { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-dim); }
+.path { flex: 1; min-width: 0; font-family: "SF Mono", ui-monospace, monospace; font-size: 12px; -webkit-user-select: text; user-select: text; }
+
+.list-head, .row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px 130px 66px;
+  align-items: center; gap: 8px; padding: 0 10px;
+}
+.list-head {
+  height: 22px; font-size: 11px; color: var(--fg-dim);
+  border-bottom: 1px solid var(--line); background: var(--bg);
+}
+.col-size, .col-perm { text-align: right; }
+
+.list { flex: 1; overflow: auto; outline: none; }
+.list:focus-within .row.sel { background: var(--accent-2); }
+
+.row {
+  height: var(--row-h); line-height: var(--row-h);
+  font-size: 12.5px; white-space: nowrap; cursor: default;
+}
+.row:nth-child(even) { background: rgba(255,255,255,.018); }
+.row:hover { background: rgba(255,255,255,.05); }
+.row.sel { background: #35507e; }
+.row .name { overflow: hidden; text-overflow: ellipsis; }
+.row .size, .row .perm { text-align: right; color: var(--fg-dim); font-variant-numeric: tabular-nums; }
+.row .date { color: var(--fg-dim); font-variant-numeric: tabular-nums; font-size: 11.5px; }
+.row.dir .name { color: #8fb8ff; font-weight: 500; }
+.row.link .name { color: #c39bea; font-style: italic; }
+.row.hidden-file { opacity: .55; }
+.row.drop-target { box-shadow: inset 0 0 0 2px var(--accent); }
+
+.pane.drag-over { box-shadow: inset 0 0 0 2px var(--accent); }
+.pane-foot {
+  height: 22px; line-height: 22px; padding: 0 10px;
+  font-size: 11px; color: var(--fg-dim);
+  border-top: 1px solid var(--line); background: var(--bg-2);
+}
+
+/* --------------------------------------------------------------- fronta */
+.queue { border-top: 1px solid var(--line); background: var(--bg-2); display: flex; flex-direction: column; }
+.queue.collapsed .queue-body { display: none; }
+.queue-head { display: flex; align-items: center; gap: 8px; padding: 5px 10px; }
+.queue-body { max-height: 190px; min-height: 60px; overflow: auto; padding: 0 10px 6px; }
+
+.q-item { display: grid; grid-template-columns: 16px minmax(0,1fr) 150px 108px 66px 24px; gap: 8px; align-items: center; height: 26px; font-size: 12px; }
+/* U dlouhých cest je zajímavý konec, ne začátek — proto se ořezává zleva.
+   Vnitřní <bdi> drží text čitelně zleva doprava, jinak by se lomítka
+   přehodila na opačný konec řetězce. */
+.q-item .q-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.q-item .q-path bdi { unicode-bidi: isolate; }
+.q-item .q-num { text-align: right; color: var(--fg-dim); font-variant-numeric: tabular-nums; font-size: 11px; }
+.bar { height: 6px; border-radius: 3px; background: var(--bg); overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); transition: width .15s linear; }
+.q-item.done .bar > i { background: var(--ok); }
+.q-item.error .bar > i, .q-item.canceled .bar > i { background: var(--err); }
+.q-item.paused .bar > i { background: var(--warn); }
+.q-item .q-err { color: var(--err); font-size: 11px; }
+.q-x { background: none; border: none; color: var(--fg-dim); padding: 0; }
+.q-x:hover { color: var(--err); background: none; }
+
+/* -------------------------------------------------------------- status */
+.status { display: flex; align-items: center; gap: 10px; padding: 4px 10px; font-size: 11.5px; background: var(--bg); border-top: 1px solid var(--line); }
+.badge { padding: 1px 8px; border-radius: 10px; font-size: 11px; }
+.badge.off { background: #3a2c2f; color: var(--err); }
+.badge.on { background: #263a2c; color: var(--ok); }
+.badge.wait { background: #3a3527; color: var(--warn); }
+.muted { color: var(--fg-dim); }
+.log-ok { color: var(--ok); } .log-error { color: var(--err); } .log-warn { color: var(--warn); }
+
+/* ------------------------------------------------------------- dialogy */
+dialog { border: none; border-radius: 12px; padding: 0; background: var(--bg-2); color: var(--fg); box-shadow: 0 20px 60px rgba(0,0,0,.55); max-width: 92vw; }
+dialog::backdrop { background: rgba(0,0,0,.5); }
+.dlg { padding: 18px 20px 14px; min-width: 460px; }
+.dlg.wide { min-width: 720px; }
+.dlg h2 { margin: 0 0 12px; font-size: 15px; }
+.dlg label { display: block; margin-bottom: 9px; font-size: 12px; color: var(--fg-dim); }
+.dlg label input:not([type=checkbox]), .dlg label select { display: block; width: 100%; margin-top: 3px; color: var(--fg); }
+.dlg label.check { display: flex; align-items: center; gap: 7px; color: var(--fg); }
+.dlg label.check input { margin: 0; }
+.dlg .row { display: flex; gap: 6px; margin-top: 3px; }
+.dlg .row input { flex: 1; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+.grid label.check { grid-column: 1 / -1; }
+menu { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 0 0; margin: 0; border-top: 1px solid var(--line); }
+code { font-family: "SF Mono", ui-monospace, monospace; background: var(--bg); padding: 1px 4px; border-radius: 3px; }
+.warn { background: #3a3527; color: var(--warn); padding: 8px 10px; border-radius: 6px; margin-bottom: 10px; font-size: 12px; }
+
+.import-table, .sync-result { max-height: 330px; overflow: auto; border: 1px solid var(--line); border-radius: 7px; margin-bottom: 10px; }
+.import-table .ir, .sync-result .sr {
+  display: grid; grid-template-columns: 22px minmax(0,1.6fr) minmax(0,1.4fr) 74px 66px minmax(0,1fr);
+  gap: 8px; align-items: center; padding: 4px 9px; font-size: 12px; border-bottom: 1px solid var(--line);
+}
+.import-table .ir:last-child, .sync-result .sr:last-child { border-bottom: none; }
+.import-table .ir.head, .sync-result .sr.head { position: sticky; top: 0; background: var(--bg-3); color: var(--fg-dim); font-size: 11px; z-index: 1; }
+.import-table .ir span, .sync-result .sr span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sync-result .sr { grid-template-columns: 22px 96px minmax(0,2fr) 82px minmax(0,1.3fr); }
+.tag { font-size: 10.5px; padding: 1px 6px; border-radius: 4px; background: var(--bg-3); color: var(--fg-dim); }
+.tag.up { background: #23384f; color: #7fb4ff; }
+.tag.down { background: #1f3a2b; color: #7fd79a; }
+.tag.del { background: #3d262a; color: #ff9098; }
+.tag.mk { background: #3a3527; color: var(--warn); }
+.tag.conflict { background: #40304a; color: #d0a5ff; }
+.tag.bad { background: #3d262a; color: #ff9098; }
+
+/* porovnání zdroje a cíle při konfliktu */
+.cmp { display: grid; grid-template-columns: 88px 1fr 1fr; gap: 1px; background: var(--line);
+  border: 1px solid var(--line); border-radius: 7px; overflow: hidden; margin: 4px 0 12px; }
+.cmp > span { background: var(--bg-3); padding: 7px 10px; font-size: 12.5px; }
+.cmp > span.h { color: var(--fg-dim); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.cmp > span.k { color: var(--fg-dim); }
+.cmp > span.newer { color: var(--ok); font-weight: 600; }
+.cmp > span.older { color: var(--warn); }
+menu.wrapmenu { flex-wrap: wrap; }
+#conflict-path { font-family: "SF Mono", ui-monospace, monospace; font-size: 12px; word-break: break-all;
+  -webkit-user-select: text; user-select: text; margin: 0 0 10px; }
+
+.sync-paths, .sync-opts { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 10px; }
+.sync-paths label { flex: 1; }
+.sync-opts label:not(.check) { flex: 0 0 190px; }
+
+/* --------------------------------------------------- kontextové menu */
+.ctxmenu {
+  position: fixed; z-index: 100; min-width: 190px; padding: 4px;
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0,0,0,.5);
+}
+.ctxmenu button { display: block; width: 100%; text-align: left; background: none; border: none; border-radius: 5px; padding: 5px 10px; font-size: 12.5px; }
+.ctxmenu button:hover:not(:disabled) { background: var(--accent-2); }
+.ctxmenu hr { border: none; border-top: 1px solid var(--line); margin: 4px 2px; }
+.ctxmenu .shortcut { float: right; color: var(--fg-dim); font-size: 11px; }
