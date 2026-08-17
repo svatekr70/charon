@@ -142,33 +142,70 @@
   <dialog id="dlg-site">
     <form method="dialog" class="dlg">
       <h2 id="dlg-site-title">Nová relace</h2>
-      <div class="grid">
+      <!-- Řádky jsou skládané podle toho, co k sobě patří, ne po dvou na půl.
+           Server je nejdelší údaj, port nejkratší — proto nestejné sloupce. -->
+      <div class="grid g-title">
         <label>Název<input name="name" required /></label>
         <label>Složka<input name="folder" placeholder="volitelné" /></label>
+      </div>
+      <div class="grid g-server">
         <label>Protokol
           <select name="protocol"><option value="sftp">SFTP (SSH)</option><option value="ftp">FTP / FTPS</option></select>
         </label>
         <label>Server<input name="host" required /></label>
         <label>Port<input name="port" type="number" min="1" max="65535" /></label>
+      </div>
+      <div class="grid">
         <label>Uživatel<input name="username" /></label>
         <label>Heslo<span class="row"><input name="password" type="password" placeholder="beze změny" /><button type="button" class="icon ibtn" data-icon="eye" data-reveal="password" title="Ukázat heslo" aria-label="Ukázat heslo"></button></span></label>
-        <label class="check" data-when="ftp" hidden><input type="checkbox" name="anonymous" /> Anonymní přihlášení</label>
-        <label data-when="ftp" hidden>Šifrování
+      </div>
+      <div class="grid g-pair" data-when="ftp" hidden>
+        <label>Šifrování
           <select name="ftps"><option value="none">Žádné</option><option value="explicit">Explicitní TLS</option><option value="implicit">Implicitní TLS</option></select>
         </label>
-        <label data-when="sftp">Privátní klíč
-          <span class="row"><input name="privateKeyPath" placeholder="~/.ssh/id_ed25519" /><button type="button" id="pick-key">…</button></span>
-        </label>
-        <label data-when="sftp">Heslo ke klíči<span class="row"><input name="passphrase" type="password" placeholder="beze změny" /><button type="button" class="icon ibtn" data-icon="eye" data-reveal="passphrase" title="Ukázat heslo" aria-label="Ukázat heslo"></button></span></label>
+        <label class="check"><input type="checkbox" name="anonymous" /> Anonymní přihlášení</label>
+      </div>
+      <div class="grid">
         <label>Vzdálený adresář<input name="remoteDir" placeholder="/var/www" /></label>
         <label>Lokální adresář
           <span class="row"><input name="localDir" /><button type="button" id="pick-local">…</button></span>
         </label>
-        <label>Složka koše na serveru<input name="recycleBinPath" placeholder="výchozí: ~/.charon-trash" /></label>
-        <label>Vysypat koš po (dnech)<input name="recycleBinDays" type="number" min="0" placeholder="0 = nikdy" /></label>
-        <label class="check"><input type="checkbox" name="useRecycleBin" checked /> Mazat na serveru do koše místo nevratného smazání</label>
-        <label class="check" data-when="sftp"><input type="checkbox" name="useAgent" /> Použít ssh-agent</label>
       </div>
+
+      <details id="site-advanced">
+        <summary>Pokročilé</summary>
+        <div class="grid" data-when="sftp">
+          <label>Privátní klíč
+            <span class="row"><input name="privateKeyPath" placeholder="~/.ssh/id_ed25519" /><button type="button" id="pick-key">…</button></span>
+          </label>
+          <label>Heslo ke klíči<span class="row"><input name="passphrase" type="password" placeholder="beze změny" /><button type="button" class="icon ibtn" data-icon="eye" data-reveal="passphrase" title="Ukázat heslo" aria-label="Ukázat heslo"></button></span></label>
+        </div>
+        <label class="check" data-when="sftp"><input type="checkbox" name="useAgent" /> Použít ssh-agent</label>
+
+        <label class="check"><input type="checkbox" name="useRecycleBin" checked /> Mazat na serveru do koše místo nevratného smazání</label>
+        <div class="grid">
+          <label>Složka koše na serveru<input name="recycleBinPath" placeholder="výchozí: ~/.charon-trash" /></label>
+          <label>Vysypat koš po (dnech)<input name="recycleBinDays" type="number" min="0" placeholder="0 = nikdy" /></label>
+        </div>
+
+        <label class="check" data-when="ftp" hidden><input type="checkbox" name="acceptAnyCert" /> Přijmout jakýkoliv certifikát bez ptaní (nedoporučeno)</label>
+        <div class="grid" data-when="ftp" hidden>
+          <label>Kódování názvů
+            <select name="encoding">
+              <option value="auto">Automaticky (podle serveru)</option>
+              <option value="utf8">Vynutit UTF-8</option>
+              <option value="latin1">Latin-1 (starší servery)</option>
+            </select>
+          </label>
+          <label>Časový posun serveru (min)
+            <input name="timeShiftMinutes" type="number" step="15" placeholder="0" />
+          </label>
+        </div>
+        <p class="muted" data-when="ftp" hidden>Starší FTP servery hlásí čas v místní zóně
+          a bez údaje o tom, v jaké — porovnávání podle času pak lže o celé hodiny. Posun se
+          zadává v minutách (např. <code>-60</code>). Kódování řešte, až když názvy s diakritikou
+          dorazí jako změť; SFTP tyhle potíže nemá, tam je UTF-8 dané protokolem.</p>
+      </details>
 
       <details id="site-look">
         <summary>Rozlišení relace — barva a poznámka</summary>
@@ -242,25 +279,6 @@
         </div>
       </details>
 
-      <div class="grid">
-        <label class="check" data-when="ftp" hidden><input type="checkbox" name="acceptAnyCert" /> Přijmout jakýkoliv certifikát bez ptaní (nedoporučeno)</label>
-        <div class="grid" data-when="ftp" hidden>
-          <label>Kódování názvů
-            <select name="encoding">
-              <option value="auto">Automaticky (podle serveru)</option>
-              <option value="utf8">Vynutit UTF-8</option>
-              <option value="latin1">Latin-1 (starší servery)</option>
-            </select>
-          </label>
-          <label>Časový posun serveru (min)
-            <input name="timeShiftMinutes" type="number" step="15" placeholder="0" />
-          </label>
-        </div>
-        <p class="muted" data-when="ftp" hidden>Starší FTP servery hlásí čas v místní zóně
-          a bez údaje o tom, v jaké — porovnávání podle času pak lže o celé hodiny. Posun se
-          zadává v minutách (např. <code>-60</code>). Kódování řešte, až když názvy s diakritikou
-          dorazí jako změť; SFTP tyhle potíže nemá, tam je UTF-8 dané protokolem.</p>
-      </div>
       <menu>
         <button value="cancel">Zrušit</button>
         <button value="save" class="primary" id="site-save">Uložit</button>

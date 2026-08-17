@@ -288,8 +288,15 @@ dialog::backdrop { background: var(--backdrop); }
 .dlg { padding: 18px 20px 14px; min-width: 460px; }
 .dlg.wide { min-width: 720px; }
 .dlg h2 { margin: 0 0 12px; font-size: 15px; }
+/* Vysvětlivka má mít délku řádku, která se čte. Zároveň tím drží šířku
+   celého dialogu: ten se roztahuje podle nejdelšího řádku, takže neomezená
+   próza ho rozjede přes celou obrazovku. */
+.dlg .muted { max-width: 68ch; }
 .dlg label { display: block; margin-bottom: 9px; font-size: 12px; color: var(--fg-dim); }
 .dlg label input:not([type=checkbox]), .dlg label select { display: block; width: 100%; margin-top: 3px; color: var(--fg); }
+/* Stejná výška všech polí v řádku: nativní rozbalovací seznam je sám o sobě
+   o pár pixelů vyšší než textové pole a řádek se pak rozjede. */
+.dlg input:not([type=checkbox]), .dlg select, .dlg .row button { height: 28px; }
 .dlg label.check { display: flex; align-items: center; gap: 7px; color: var(--fg); }
 .dlg label.check input { margin: 0; }
 .dlg .row { display: flex; gap: 6px; margin-top: 3px; }
@@ -298,6 +305,13 @@ dialog::backdrop { background: var(--backdrop); }
 .dlg .row button.icon { flex: none; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
 .grid label.check { grid-column: 1 / -1; }
+/* Půl na půl sedí jen tam, kde jsou oba údaje stejně dlouhé. Název je delší
+   než složka, server delší než protokol a port je vždycky čtyři číslice. */
+.grid.g-title { grid-template-columns: 3fr 2fr; }
+.grid.g-server { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) 92px; }
+/* Zaškrtnutí, které patří k poli vedle sebe, se srovná na jeho spodní hranu —
+   ne na popisek nad ním, kde by viselo v prázdnu. */
+.grid.g-pair label.check { grid-column: auto; align-self: end; margin-bottom: 15px; }
 
 /* Práva zaškrtáváním. Osmičkové pole zůstává tím hlavním — mřížka je jen
    druhý pohled na tutéž hodnotu, aby se nemuselo počítat z hlavy. */
@@ -474,7 +488,6 @@ details[open] > summary { color: var(--accent); }
 .set-panel > .grid,
 .set-panel > .row { max-width: 520px; }
 .set-body .muted {
-  max-width: 68ch;
   font-size: 11.5px;
   line-height: 1.5;
   margin: 0 0 16px;

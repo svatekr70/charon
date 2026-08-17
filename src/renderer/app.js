@@ -2878,6 +2878,11 @@ function openSiteDialog(site) {
   f.proxyPassword.value = '';
   f.proxyPassword.placeholder = site?.hasProxyPassword ? 'uloženo — nechte prázdné' : '';
   // Rozbalíme jen když se něco takového používá; jinak ať nepřekáží.
+  // Rozbalí se jen to, co daná relace opravdu používá — jinak ať nepřekáží.
+  $('#site-advanced').open = Boolean(site?.privateKeyPath || site?.useAgent
+    || site?.recycleBinPath || site?.recycleBinDays || site?.useRecycleBin === false
+    || site?.encoding && site.encoding !== 'auto' || site?.timeShiftMinutes
+    || site?.rejectUnauthorized === false);
   $('#site-path').open = Boolean(site?.tunnelHost || (site?.proxyType && site.proxyType !== 'none'));
   $('#site-look').open = Boolean(site?.color || site?.note);
   $('#site-perms').open = Boolean(site?.uploadPerms || site?.uploadFileMode || site?.uploadDirMode);
