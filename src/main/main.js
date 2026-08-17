@@ -781,6 +781,7 @@ function registerIpc() {
     }
     return id;
   });
+  handle('sites:reveal', async ({ id, field }) => sites.reveal(id, field));
   handle('sites:delete', async (id) => { await sites.remove(id); return true; });
   handle('sites:sync', async ({ id, sync }) => { await sites.setSync(id, sync); return true; });
   handle('sites:duplicate', async (id) => sites.duplicate(id));

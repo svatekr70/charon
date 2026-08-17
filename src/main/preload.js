@@ -44,6 +44,8 @@ contextBridge.exposeInMainWorld('api', {
     remove: (id) => invoke('sites:delete', id),
     saveSync: (id, sync) => invoke('sites:sync', { id, sync }),
     duplicate: (id) => invoke('sites:duplicate', id),
+    // Jen na vyžádání okem v editoru relace; vrací jedno pole, ne celou relaci.
+    reveal: (id, field) => invoke('sites:reveal', { id, field }),
   },
   ssh: {
     read: (file) => invoke('ssh:read', { file }),

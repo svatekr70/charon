@@ -2943,6 +2943,53 @@ siteDlg.addEventListener('close', async () => {
   if (siteDlg.returnValue === 'connect') await connectSelected();
 });
 
+/**
+ * Oko u hesla.
+ *
+ * Uložené heslo se do okna jinak nedostane — teprve kliknutí si o to jedno
+ * pole řekne hlavního procesu. Zhasnutím se pole zase vyprázdní, aby platilo
+ * „prázdné = nech uložené"; jinak by se při uložení posílalo zpátky heslo,
+ * které nikdo needitoval.
+ *
+ * Rozepsané heslo se jen odkryje, nikam se pro něj nechodí.
+ */
+$$('[data-reveal]', siteDlg).forEach((btn) => btn.addEventListener('click', async () => {
+  const pole = siteForm.elements[btn.dataset.reveal];
+  const videt = pole.type === 'text';
+
+  if (videt) {
+    if (btn.dataset.fetched === '1') { pole.value = ''; delete btn.dataset.fetched; }
+    pole.type = 'password';
+    btn.dataset.icon = 'eye';
+    btn.title = 'Ukázat heslo';
+    return;
+  }
+
+  if (!pole.value) {
+    const id = siteDlg.dataset.id;
+    if (!id) return setLog('warn', 'Heslo se ukládá až s relací');
+    const heslo = await call(window.api.sites.reveal(id, btn.dataset.reveal));
+    if (!heslo) return setLog('warn', 'U téhle relace není uložené heslo');
+    pole.value = heslo;
+    btn.dataset.fetched = '1';
+  }
+  pole.type = 'text';
+  btn.dataset.icon = 'eye-off';
+  btn.title = 'Skrýt heslo';
+  return undefined;
+}));
+
+// Zavřením dialogu heslo mizí z okna i z obrazovky.
+siteDlg.addEventListener('close', () => {
+  $$('[data-reveal]', siteDlg).forEach((btn) => {
+    const pole = siteForm.elements[btn.dataset.reveal];
+    if (btn.dataset.fetched === '1') { pole.value = ''; delete btn.dataset.fetched; }
+    pole.type = 'password';
+    btn.dataset.icon = 'eye';
+    btn.title = 'Ukázat heslo';
+  });
+});
+
 $('#pick-key').addEventListener('click', async () => {
   const p = await call(window.api.local.pickFile({ title: 'Vyberte privátní klíč', defaultPath: '~/.ssh' }));
   if (p) siteForm.elements.privateKeyPath.value = p;

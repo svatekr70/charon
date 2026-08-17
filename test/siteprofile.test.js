@@ -25,6 +25,12 @@ const check = (label, got, want) => {
   console.log(`${ok ? 'OK  ' : 'FAIL'} ${label}${ok ? '' : `  got=${JSON.stringify(got)} want=${JSON.stringify(want)}`}`);
 };
 
+const truthy = (label, v, note = '') => {
+  const ok = Boolean(v);
+  ok ? pass++ : fail++;
+  console.log(`${ok ? 'OK  ' : 'FAIL'} ${label}${note ? `  (${note})` : ''}`);
+};
+
 const PROFIL = { direction: 'up', criteria: 'time', mask: '*.php | .git/', deleteExtra: true };
 
 async function main() {
@@ -62,6 +68,23 @@ async function main() {
     ['criteria', 'deleteExtra', 'direction', 'mask']);
   check('a zaškrtnutí je pravdivostní hodnota',
     znovu.list().find((s) => s.id === id).sync.deleteExtra, true);
+
+  // ============ heslo ven jen na vyžádání a jen to jedno pole
+  // Šifrování drží klíč z Keychainu, takže se tu neověřuje obsah, ale co
+  // metoda vůbec pustí ven: cizí pole nesmí projít ani omylem.
+  let chyba = null;
+  try { await znovu.reveal(id, 'username'); } catch (e) { chyba = e; }
+  truthy('jiné než heslo se rozšifrovat nedá', chyba && /není heslo/.test(chyba.message));
+  chyba = null;
+  try { await znovu.reveal(id, 'hostKeyFingerprint'); } catch (e) { chyba = e; }
+  truthy('ani otisk klíče', chyba && /není heslo/.test(chyba.message));
+  chyba = null;
+  try { await znovu.reveal('neexistuje', 'password'); } catch (e) { chyba = e; }
+  truthy('u neznámé relace se ozve', chyba && /neexistuje/.test(chyba.message));
+  check('relace bez hesla vrátí prázdno', await znovu.reveal(id, 'password'), '');
+  check('a seznam hesla dál neposílá',
+    Object.keys(znovu.list()[0]).filter((k) => /password|passphrase/i.test(k)).sort(),
+    ['hasPassphrase', 'hasPassword', 'hasProxyPassword', 'hasTunnelPassword']);
 
   // ============ zapomenutí
   await znovu.setSync(id, null);

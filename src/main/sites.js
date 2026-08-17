@@ -195,8 +195,8 @@ class SiteStore {
   /**
    * Kopie relace i s hesly.
    *
-   * Dělá se to tady, a ne v okně: hesla se do okna nikdy neposílají, takže
-   * kopie sestavená tam by o ně přišla a byla by k ničemu.
+   * Dělá se to tady, a ne v okně: okno hesla nemá — dostane je jen na
+   * vyžádání okem u pole — takže kopie sestavená tam by o ně přišla.
    */
   async duplicate(id) {
     const site = this.sites.find((s) => s.id === id);
@@ -230,6 +230,21 @@ class SiteStore {
       tunnelPassword: await vault.decrypt(site.tunnelPassword),
       proxyPassword: await vault.decrypt(site.proxyPassword),
     };
+  }
+
+  /**
+   * Rozšifruje jedno uložené heslo.
+   *
+   * Do okna se hesla jinak neposílají — tohle je jediná cesta a otevře ji až
+   * kliknutí na oko v editoru relace. Vrací se vždy jen to jedno pole, o které
+   * si okno řeklo, ne celá relace.
+   */
+  async reveal(id, field) {
+    const povolena = ['password', 'passphrase', 'tunnelPassword', 'proxyPassword'];
+    if (!povolena.includes(field)) throw new Error('Tohle pole není heslo');
+    const site = this.sites.find((s) => s.id === id);
+    if (!site) throw new Error('Relace neexistuje');
+    return vault.decrypt(site[field]);
   }
 
   /** Hromadný import (WinSCP). Vrací počty. */

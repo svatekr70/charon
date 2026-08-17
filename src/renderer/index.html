@@ -151,7 +151,7 @@
         <label>Server<input name="host" required /></label>
         <label>Port<input name="port" type="number" min="1" max="65535" /></label>
         <label>Uživatel<input name="username" /></label>
-        <label>Heslo<input name="password" type="password" placeholder="beze změny" /></label>
+        <label>Heslo<span class="row"><input name="password" type="password" placeholder="beze změny" /><button type="button" class="icon ibtn" data-icon="eye" data-reveal="password" title="Ukázat heslo" aria-label="Ukázat heslo"></button></span></label>
         <label class="check" data-when="ftp" hidden><input type="checkbox" name="anonymous" /> Anonymní přihlášení</label>
         <label data-when="ftp" hidden>Šifrování
           <select name="ftps"><option value="none">Žádné</option><option value="explicit">Explicitní TLS</option><option value="implicit">Implicitní TLS</option></select>
@@ -159,7 +159,7 @@
         <label data-when="sftp">Privátní klíč
           <span class="row"><input name="privateKeyPath" placeholder="~/.ssh/id_ed25519" /><button type="button" id="pick-key">…</button></span>
         </label>
-        <label data-when="sftp">Heslo ke klíči<input name="passphrase" type="password" placeholder="beze změny" /></label>
+        <label data-when="sftp">Heslo ke klíči<span class="row"><input name="passphrase" type="password" placeholder="beze změny" /><button type="button" class="icon ibtn" data-icon="eye" data-reveal="passphrase" title="Ukázat heslo" aria-label="Ukázat heslo"></button></span></label>
         <label>Vzdálený adresář<input name="remoteDir" placeholder="/var/www" /></label>
         <label>Lokální adresář
           <span class="row"><input name="localDir" /><button type="button" id="pick-local">…</button></span>
@@ -224,7 +224,7 @@
           <label>Brána (jump host)<input name="tunnelHost" placeholder="prázdné = přímo" /></label>
           <label>Port brány<input name="tunnelPort" type="number" min="1" max="65535" placeholder="22" /></label>
           <label>Uživatel na bráně<input name="tunnelUsername" /></label>
-          <label>Heslo na bráně<input name="tunnelPassword" type="password" placeholder="beze změny" /></label>
+          <label>Heslo na bráně<span class="row"><input name="tunnelPassword" type="password" placeholder="beze změny" /><button type="button" class="icon ibtn" data-icon="eye" data-reveal="tunnelPassword" title="Ukázat heslo" aria-label="Ukázat heslo"></button></span></label>
           <label>Klíč pro bránu
             <span class="row"><input name="tunnelKeyPath" placeholder="~/.ssh/id_ed25519" /><button type="button" id="pick-tunnel-key">…</button></span>
           </label>
@@ -238,7 +238,7 @@
           <label>Adresa proxy<input name="proxyHost" /></label>
           <label>Port proxy<input name="proxyPort" type="number" min="1" max="65535" /></label>
           <label>Uživatel proxy<input name="proxyUsername" /></label>
-          <label>Heslo proxy<input name="proxyPassword" type="password" placeholder="beze změny" /></label>
+          <label>Heslo proxy<span class="row"><input name="proxyPassword" type="password" placeholder="beze změny" /><button type="button" class="icon ibtn" data-icon="eye" data-reveal="proxyPassword" title="Ukázat heslo" aria-label="Ukázat heslo"></button></span></label>
         </div>
       </details>
 

@@ -145,7 +145,7 @@ která relace je vybraná. Samostatná tlačítka *Připojit*, *＋ Relace*,
 *Upravit* a *Smazat* zmizela; dělala podruhé to, co dialog.
 
 **Duplikovat** vytvoří kopii včetně hesla — kopie se skládá v hlavním procesu,
-protože do okna se hesla nikdy neposílají.
+protože do okna se hesla posílají jen na vyžádání okem u pole.
 
 ## Lišta
 
@@ -388,6 +388,13 @@ kolik jich z kolika vyšlo.
 
 Hesla se do `sites.json` zapisují zašifrovaná (AES-256-GCM); klíč leží
 v Keychain, ne v souboru.
+
+Do okna se neposílají — s jedinou výjimkou, kterou je **oko u pole s heslem**
+v editoru relace. Kliknutí si řekne hlavnímu procesu o jedno jediné pole, to se
+rozšifruje a ukáže; zhasnutím nebo zavřením dialogu se z pole zase smaže. Jiné
+pole než heslo tou cestou ven neprojde. Bezpečné to samozřejmě není o nic víc
+než heslo napsané na obrazovce — je to pro chvíle, kdy ho potřebujete opsat
+jinam a nechcete kvůli tomu do Keychainu.
 
 ## Ikona
 

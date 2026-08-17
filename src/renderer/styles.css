@@ -294,6 +294,8 @@ dialog::backdrop { background: var(--backdrop); }
 .dlg label.check input { margin: 0; }
 .dlg .row { display: flex; gap: 6px; margin-top: 3px; }
 .dlg .row input { flex: 1; }
+/* Oko u hesla nesmí přerůst pole, u kterého stojí. */
+.dlg .row button.icon { flex: none; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
 .grid label.check { grid-column: 1 / -1; }
 
