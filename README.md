@@ -754,7 +754,9 @@ Změna práv u otevřené relace platí hned, na příští připojení se neče
 ## Nastavení
 
 `⌘,` nebo ozubené kolo vpravo v liště. Vlevo oddíly, vpravo jeden po druhém —
-jako v systémových nastaveních.
+jako v systémových nastaveních. Paměť výpisů složek sedí v **Síti**, ne ve
+*Vzhledu*: rozhoduje o tom, kdy se server ptáme znovu, ne o tom, jak co
+vypadá.
 
 Uvnitř oddílu má každá skupina voleb nadpis a pod ovládacím prvkem sedí
 vysvětlivka: proč to tam je a co se stane, když se to přehodí. Vysvětlivky mají
