@@ -519,10 +519,13 @@ async function enqueueUpload(session, items, remoteDir, extra = {}, maskText = '
   }
 
   const a = await session.transferPool().acquire();
+  // Složky vznikají mimo frontu, práva se jim ale mají řídit stejnou
+  // kaskádou jako souborům — přenos nad relací nad nastavením.
+  const pravaSlozek = perms.dirMode(perms.resolve(extra.perms || {}, session.queue.perms));
   try {
     for (const j of jobs.filter((x) => x.direction === 'mkdirRemote')) {
       await a.mkdir(j.remotePath, true).catch(() => {});
-      await perms.apply(a, j.remotePath, perms.dirMode(settings));
+      await perms.apply(a, j.remotePath, pravaSlozek);
     }
   } finally {
     session.transferPool().release(a);
@@ -582,7 +585,9 @@ async function enqueueDownload(session, items, localDir, extra = {}, maskText = 
 function profileOptions(profil) {
   if (!profil) return {};
   const out = {};
-  if (profil.uploadPerms) {
+  // Stačí jedno vyplněné pole; co profil neurčí, dodědí se z relace a
+  // z nastavení aplikace.
+  if (profil.uploadPerms || profil.uploadFileMode || profil.uploadDirMode) {
     out.perms = {
       uploadPerms: profil.uploadPerms,
       uploadFileMode: profil.uploadFileMode,
@@ -760,7 +765,19 @@ function registerIpc() {
 
   // --- uložené relace ---
   handle('sites:list', async () => sites.list());
-  handle('sites:save', async (site) => sites.upsert(site));
+  handle('sites:save', async (site) => {
+    const id = await sites.upsert(site);
+    // Práva se dají změnit u relace, která je zrovna otevřená — čekat na
+    // příští připojení by znamenalo, že se změna tiše neprojeví.
+    for (const s of manager.all()) {
+      if (s.siteId !== id) continue;
+      s.config.uploadPerms = site.uploadPerms || '';
+      s.config.uploadFileMode = site.uploadFileMode || '';
+      s.config.uploadDirMode = site.uploadDirMode || '';
+      s.applySettings(settings);
+    }
+    return id;
+  });
   handle('sites:delete', async (id) => { await sites.remove(id); return true; });
   handle('sites:sync', async ({ id, sync }) => { await sites.setSync(id, sync); return true; });
   handle('sites:duplicate', async (id) => sites.duplicate(id));
@@ -1304,7 +1321,7 @@ function registerIpc() {
       switch (act.action) {
         case 'mkdirRemote':
           await a.mkdir(act.remotePath, true).catch(() => {});
-          await perms.apply(a, act.remotePath, perms.dirMode(settings));
+          await perms.apply(a, act.remotePath, perms.dirMode(session.queue.perms));
           break;
         case 'mkdirLocal': await fsp.mkdir(act.localPath, { recursive: true }); break;
         // conflictResolved: v náhledu synchronizace uživatel o přepisu

@@ -699,13 +699,30 @@ položek se to týká. Odhad, který nemůže vyjít, je horší než žádný.
 
 ## Práva nahraných souborů
 
-**Nastavení → Přenosy → Práva nahraných souborů**: nechat na serveru (výchozí),
-nastavit pevně, nebo zachovat lokální. U složek zachovávat není co — vznikají až
-na serveru — takže se řídí pevnou hodnotou vedle.
+Volby jsou tři: nechat na serveru (výchozí), nastavit pevně, nebo zachovat
+lokální. Soubory a složky se nastavují každé zvlášť — u složek zachovávat není
+co, vznikají až na serveru, takže se řídí pevnou hodnotou vedle.
+
+Nastavit je jde na třech místech a **dědí se odshora dolů**:
+
+| Kde | Platí pro | Prázdné znamená |
+| --- | --- | --- |
+| **Nastavení → Přenosy** | všechny servery | nechat na serveru |
+| **relace → Práva nahraných souborů** | jeden server | platí nastavení aplikace |
+| **Přenést s volbami** | jednu dávku | platí relace, pod ní nastavení |
+
+Dědí se po jednotlivých polích, ne po celé trojici. Relace tedy může předepsat
+jen práva složek a práva souborů nechat na obecném nastavení; jeden přenos zase
+může přebít jen práva souborů. Dialog *Přenést s volbami* pod poli píše, co
+zrovna platí a odkud to je.
 
 Práva se nastavují až na konečné cestě, aby to dopadlo stejně s dočasným názvem
-i bez něj. Když je server nastavit neumí (starší FTP bez `SITE CHMOD`), přenos
-kvůli tomu neselže a jen se to připíše k položce.
+i bez něj. Týkají se jen nahrávání — při stahování rozhoduje místní systém, a
+proto se v dialogu při stahování ani nenabízejí. Když je server nastavit neumí
+(starší FTP bez `SITE CHMOD`), přenos kvůli tomu neselže a jen se to připíše
+k položce.
+
+Změna práv u otevřené relace platí hned, na příští připojení se nečeká.
 
 ## Textový režim
 

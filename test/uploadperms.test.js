@@ -55,6 +55,25 @@ async function main() {
   check('a bez zapnutí se složek netýká nic', perms.dirMode({ uploadDirMode: '755' }), null);
   check('setuid bit projde, když ho někdo chce', perms.fileMode({ uploadPerms: 'preserve' }, 0o4755), 0o4755);
 
+  // ================================================ dědění tří úrovní
+  // Pořadí je od nejkonkrétnější vrstvy: přenos, relace, nastavení aplikace.
+  const app = { uploadPerms: 'fixed', uploadFileMode: '644', uploadDirMode: '755' };
+  check('bez nižších vrstev platí nastavení aplikace',
+    perms.resolve({}, {}, app), { uploadPerms: 'fixed', uploadFileMode: '644', uploadDirMode: '755' });
+  check('relace přebije nastavení',
+    perms.resolve({}, { uploadPerms: 'keep' }, app).uploadPerms, 'keep');
+  check('přenos přebije relaci i nastavení',
+    perms.resolve({ uploadPerms: 'preserve' }, { uploadPerms: 'keep' }, app).uploadPerms, 'preserve');
+  check('co vrstva nevyplní, dodědí po polích',
+    perms.resolve({}, { uploadDirMode: '775' }, app),
+    { uploadPerms: 'fixed', uploadFileMode: '644', uploadDirMode: '775' });
+  check('prázdný řetězec neplatí jako volba',
+    perms.resolve({ uploadPerms: '', uploadFileMode: '' }, {}, app).uploadFileMode, '644');
+  check('bez jediné vrstvy se práva nechávají být',
+    perms.resolve({}, {}, {}), { uploadPerms: 'keep', uploadFileMode: '', uploadDirMode: '' });
+  check('sloučená vrstva projde rozborem beze změny',
+    perms.fileMode(perms.resolve({ uploadFileMode: '600' }, {}, app), 0o644), 0o600);
+
   // ================================================ proti skutečnému serveru
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'charon-perm-'));
   const serverRoot = path.join(tmp, 'server');
@@ -111,6 +130,27 @@ async function main() {
   check('i při přenosu přes dočasný název', await mode(path.join(serverRoot, 'www', 'docasny.php')), '640');
   check('a dočasný soubor po sobě nezůstal',
     fs.existsSync(path.join(serverRoot, 'www', 'docasny.php.filepart')), false);
+
+  // --- volby jednoho přenosu přebijí to, co platí pro relaci
+  const q6 = new TransferQueue({ getAdapter: async () => adapter });
+  q6.setPermissions(perms.resolve({ uploadDirMode: '775' }, { uploadPerms: 'fixed', uploadFileMode: '644', uploadDirMode: '755' }));
+  q6.add([{
+    direction: 'up',
+    localPath: zdroj,
+    remotePath: '/www/jednorazova.php',
+    size: 13,
+    conflictResolved: true,
+    perms: { uploadFileMode: '664' },
+  }]);
+  const konecJ = Date.now();
+  while (Date.now() - konecJ < 15000) {
+    const items = q6.snapshot().items;
+    if (items.length && items.every((i) => ['done', 'error', 'skipped', 'canceled'].includes(i.status))) break;
+    await sleep(80);
+  }
+  check('volba přenosu přebije relaci', await mode(path.join(serverRoot, 'www', 'jednorazova.php')), '664');
+  check('a co přenos neurčí, zůstává z vyšších vrstev', q6._permsFor({ perms: { uploadFileMode: '664' } }),
+    { uploadPerms: 'fixed', uploadFileMode: '664', uploadDirMode: '775' });
 
   // --- server, který chmod neumí: přenos musí projít
   const hluchy = {

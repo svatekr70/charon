@@ -193,6 +193,30 @@
           nejlevnější pojistka proti smazání něčeho na špatném stroji.</p>
       </details>
 
+      <details id="site-perms">
+        <summary>Práva nahraných souborů — jen pro tuhle relaci</summary>
+        <div class="grid">
+          <label>Práva
+            <select name="uploadPerms">
+              <option value="">Podle nastavení aplikace</option>
+              <option value="keep">Nechat na serveru</option>
+              <option value="fixed">Nastavit pevně</option>
+              <option value="preserve">Zachovat lokální (u složek pevně)</option>
+            </select>
+          </label>
+          <label>Soubory (osmičkově)
+            <input name="uploadFileMode" placeholder="podle nastavení" spellcheck="false" />
+          </label>
+          <label>Složky (osmičkově)
+            <input name="uploadDirMode" placeholder="podle nastavení" spellcheck="false" />
+          </label>
+        </div>
+        <p class="muted">Co necháte prázdné, se vezme z <strong>Nastavení → Přenosy</strong> —
+          a to po jednotlivých polích, takže jde předepsat jen práva složek a práva souborů
+          nechat na obecném nastavení. Hodí se u hostingu, který má jiná pravidla než
+          zbytek serverů; jednorázovou odchylku řešte v <em>Přenést s volbami</em>.</p>
+      </details>
+
       <details data-when="sftp" id="site-path">
         <summary>Cesta k serveru — brána nebo proxy</summary>
         <p class="muted">Jen pro SFTP. FTP potřebuje kromě řídicího i datová spojení
@@ -426,6 +450,10 @@
         u složek zachovávat není co, ty vznikají až na serveru, takže se řídí polem
         vedle. Když server práva nastavit neumí (starší FTP bez <code>SITE CHMOD</code>),
         přenos kvůli tomu neselže a jen se to napíše k položce.</p>
+      <p class="muted">Tohle je základ pro všechny servery. Jednotlivá relace ho může
+        přebít ve svém nastavení (<em>Práva nahraných souborů</em>) a jeden přenos ještě
+        v <em>Přenést s volbami</em>. Dědí se po polích: co níž zůstane prázdné, platí
+        odtud.</p>
 
       <label>Výchozí maska pro přenosy
         <input name="transferMask" placeholder="prázdné = přenášet vše" spellcheck="false" />
@@ -832,6 +860,23 @@
       </label>
       <p class="muted">Výluka za svislítkem má přednost. Na složky platí jen výluky —
         maska <code>*.php</code> tedy nezakáže vstup do podsložek.</p>
+      <div class="grid" id="xfer-perms">
+        <label>Práva nahraných souborů
+          <select name="uploadPerms">
+            <option value="">Podle relace a nastavení</option>
+            <option value="keep">Nechat na serveru</option>
+            <option value="fixed">Nastavit pevně</option>
+            <option value="preserve">Zachovat lokální (u složek pevně)</option>
+          </select>
+        </label>
+        <label>Soubory (osmičkově)
+          <input name="uploadFileMode" placeholder="beze změny" spellcheck="false" />
+        </label>
+        <label>Složky (osmičkově)
+          <input name="uploadDirMode" placeholder="beze změny" spellcheck="false" />
+        </label>
+      </div>
+      <p class="muted" id="xfer-perms-note"></p>
       <label class="check"><input type="checkbox" name="onlyNewer" /> Jen nové a změněné soubory</label>
       <p class="muted">Porovná se velikost a čas změny s druhou stranou; shodné a starší
         soubory se do fronty vůbec nedostanou. Když se stav cíle nedá zjistit, soubor se

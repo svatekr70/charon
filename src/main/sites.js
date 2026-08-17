@@ -87,6 +87,11 @@ class SiteStore {
       useAgent: Boolean(site.useAgent),
       remoteDir: site.remoteDir || '',
       localDir: site.localDir || '',
+      // Práva nahraných souborů pro tenhle server. Prázdné = platí nastavení
+      // aplikace; vyplňuje se jen tam, kde se hosting chová jinak než zbytek.
+      uploadPerms: site.uploadPerms || '',
+      uploadFileMode: site.uploadFileMode || '',
+      uploadDirMode: site.uploadDirMode || '',
       rejectUnauthorized: site.rejectUnauthorized !== false,
       // Otisky potvrzené uživatelem; mění je jen setHostKey/setTlsFingerprint.
       hostKeyFingerprint: existing ? existing.hostKeyFingerprint || '' : '',

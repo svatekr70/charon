@@ -10,6 +10,7 @@ const { AdapterPool } = require('./pool');
 const { RemoteTrash } = require('./trash');
 const { Finder } = require('./browse');
 const { ListCache } = require('./listcache');
+const perms = require('./perms');
 
 /**
  * Jedno připojení se vším, co k němu patří.
@@ -67,7 +68,7 @@ class Session {
     });
     this.queue.setSpeedLimit((settings.speedLimitKb || 0) * 1024);
     this.queue.setTempName(settings.tempName !== false, (settings.tempNameMinKb || 0) * 1024);
-    this.queue.setPermissions(settings);
+    this.queue.setPermissions(perms.resolve(this.config, settings));
     this.queue.setBackup(settings.backupOverwritten, (a, p, mode) => this.backupBeforeOverwrite(a, p, mode));
     this.queue.setTextMode(settings.textMask, settings.serverEol);
     this.queue.setSegments((settings.segmentedMinMb || 0) * 1024 * 1024, settings.segmentCount);
@@ -277,7 +278,7 @@ class Session {
     this.queue.setConcurrency(settings.maxConcurrent || 1);
     this.queue.setSpeedLimit((settings.speedLimitKb || 0) * 1024);
     this.queue.setTempName(settings.tempName !== false, (settings.tempNameMinKb || 0) * 1024);
-    this.queue.setPermissions(settings);
+    this.queue.setPermissions(perms.resolve(this.config, settings));
     this.queue.setBackup(settings.backupOverwritten, (a, p, mode) => this.backupBeforeOverwrite(a, p, mode));
     this.queue.setTextMode(settings.textMask, settings.serverEol);
     this.queue.setSegments((settings.segmentedMinMb || 0) * 1024 * 1024, settings.segmentCount);

@@ -12,6 +12,32 @@
  * tomu neselže — soubor je nahraný a to je to podstatné. Jen se to řekne.
  */
 
+/**
+ * Práva se nastavují na třech místech a dědí se odshora dolů: nastavení
+ * aplikace platí všude, relace ho pro svůj server přebije a jednorázový přenos
+ * přebije obojí. Co nižší úroveň nevyplní, bere se z té vyšší — a to po
+ * jednotlivých polích, takže relace může předepsat práva složek a práva
+ * souborů nechat na nastavení aplikace.
+ *
+ * @param {...object} vrstvy od nejkonkrétnější po nejobecnější
+ * @returns {{uploadPerms: string, uploadFileMode: string, uploadDirMode: string}}
+ */
+function resolve(...vrstvy) {
+  // „inherit" je prázdná volba v dialozích — znamená „nech to na vyšší úrovni".
+  const vyplneno = (h) => h !== undefined && h !== null && h !== 'inherit' && String(h).trim() !== '';
+  const prvni = (klic) => {
+    for (const v of vrstvy) {
+      if (v && vyplneno(v[klic])) return String(v[klic]).trim();
+    }
+    return '';
+  };
+  return {
+    uploadPerms: prvni('uploadPerms') || 'keep',
+    uploadFileMode: prvni('uploadFileMode'),
+    uploadDirMode: prvni('uploadDirMode'),
+  };
+}
+
 /** Osmičkový zápis práv na číslo; `null` když pole zůstalo prázdné nebo je nesmysl. */
 function parseMode(text) {
   const v = String(text === undefined || text === null ? '' : text).trim();
@@ -63,4 +89,6 @@ async function apply(adapter, remotePath, mode) {
   }
 }
 
-module.exports = { parseMode, fileMode, dirMode, apply };
+module.exports = {
+  parseMode, resolve, fileMode, dirMode, apply,
+};

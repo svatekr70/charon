@@ -779,11 +779,50 @@ function openTransferOptions(from) {
   xferForm.elements.target.value = to === 'local' ? state.local.path : state.remote.path;
   xferForm.elements.mask.value = state.settings.transferMask || '';
   xferForm.elements.onlyNewer.checked = false;
+  xferForm.elements.uploadPerms.value = '';
+  xferForm.elements.uploadFileMode.value = '';
+  xferForm.elements.uploadDirMode.value = '';
+  // Práva se nastavují jen tomu, co na server teprve poletí; při stahování
+  // rozhoduje lokální systém a pole by jen mátla.
+  const nahravani = from === 'local';
+  $('#xfer-perms').hidden = !nahravani;
+  $('#xfer-perms-note').hidden = !nahravani;
+  if (nahravani) renderXferPermsNote();
   renderProfileOptions();
   xferForm.elements.profileName.value = '';
   xferForm.elements.asDefault.checked = false;
   xferDlg.showModal();
   return undefined;
+}
+
+/**
+ * Práva, která pro tenhle přenos platí, když se do nich nesáhne.
+ *
+ * Dědění po polích je popsané u `perms.resolve()` v hlavním procesu, který
+ * o právech rozhoduje; tady se jen počítá, co uživateli napsat.
+ */
+function zdedenaPrava() {
+  const site = activeSite() || {};
+  const vyplneno = (h) => h !== undefined && h !== null && String(h).trim() !== '';
+  const prvni = (klic) => [site, state.settings].find((v) => vyplneno(v[klic]))?.[klic] || '';
+  return {
+    uploadPerms: prvni('uploadPerms') || 'keep',
+    uploadFileMode: prvni('uploadFileMode'),
+    uploadDirMode: prvni('uploadDirMode'),
+    zRelace: vyplneno(site.uploadPerms) || vyplneno(site.uploadFileMode) || vyplneno(site.uploadDirMode),
+  };
+}
+
+/** Napíše pod pole, co se stane, když zůstanou prázdná. */
+function renderXferPermsNote() {
+  const p = zdedenaPrava();
+  const popis = {
+    keep: 'nechat na serveru',
+    fixed: `nastavit pevně (soubory ${p.uploadFileMode || '—'}, složky ${p.uploadDirMode || '—'})`,
+    preserve: `zachovat lokální (složky ${p.uploadDirMode || '—'})`,
+  }[p.uploadPerms] || p.uploadPerms;
+  const odkud = p.zRelace ? 'z relace' : 'z nastavení aplikace';
+  $('#xfer-perms-note').textContent = `Prázdné pole nechává platit, co je nastavené jinde — teď ${odkud}: ${popis}.`;
 }
 
 /** Naplní výběr profilů; vybraný zůstává, dokud existuje. */
@@ -807,6 +846,9 @@ xferForm.elements.profile.addEventListener('change', () => {
   if (!p) return;
   xferForm.elements.mask.value = p.mask || '';
   xferForm.elements.onlyNewer.checked = Boolean(p.onlyNewer);
+  xferForm.elements.uploadPerms.value = p.uploadPerms || '';
+  xferForm.elements.uploadFileMode.value = p.uploadFileMode || '';
+  xferForm.elements.uploadDirMode.value = p.uploadDirMode || '';
   xferForm.elements.profileName.value = p.name;
 });
 
@@ -814,16 +856,17 @@ $('#xfer-save-profile').addEventListener('click', async () => {
   const name = xferForm.elements.profileName.value.trim();
   if (!name) return setLog('error', 'Zadejte název profilu');
 
-  // Profil bere i práva a textový režim z aktuálního nastavení — to jsou
-  // volby, které se u různých serverů liší nejčastěji.
+  // Práva si profil pamatuje tak, jak jsou v dialogu — tedy i prázdná,
+  // což znamená „nech to na relaci a nastavení". Textový režim se zatím
+  // nastavuje jen v nastavení aplikace, ten se do profilu opíše odtud.
   const profil = {
     id: `p${Date.now()}`,
     name,
     mask: xferForm.elements.mask.value.trim(),
     onlyNewer: xferForm.elements.onlyNewer.checked,
-    uploadPerms: state.settings.uploadPerms || 'keep',
-    uploadFileMode: state.settings.uploadFileMode || '',
-    uploadDirMode: state.settings.uploadDirMode || '',
+    uploadPerms: xferForm.elements.uploadPerms.value,
+    uploadFileMode: xferForm.elements.uploadFileMode.value.trim(),
+    uploadDirMode: xferForm.elements.uploadDirMode.value.trim(),
     textMask: state.settings.textMask || '',
     serverEol: state.settings.serverEol || 'lf',
   };
@@ -859,11 +902,18 @@ xferDlg.addEventListener('close', async () => {
     const saved = await call(window.api.settings.set({ transferMask: mask }));
     if (saved) applySettings(saved);
   }
+  // Co je vyplněné v dialogu, platí; profil je jen předvyplnění, které si
+  // uživatel mohl přepsat.
+  const prava = {
+    uploadPerms: xferForm.elements.uploadPerms.value,
+    uploadFileMode: xferForm.elements.uploadFileMode.value.trim(),
+    uploadDirMode: xferForm.elements.uploadDirMode.value.trim(),
+  };
   await transfer(from, from === 'local' ? 'remote' : 'local', {
     mask,
     target: xferForm.elements.target.value.trim(),
     onlyNewer: xferForm.elements.onlyNewer.checked,
-    profile: selectedProfile(),
+    profile: { ...(selectedProfile() || {}), ...prava },
   });
 });
 
@@ -2748,6 +2798,9 @@ function openSiteDialog(site) {
   f.timeShiftMinutes.value = site?.timeShiftMinutes || '';
   f.color.value = site?.color || '';
   f.note.value = site?.note || '';
+  f.uploadPerms.value = site?.uploadPerms || '';
+  f.uploadFileMode.value = site?.uploadFileMode || '';
+  f.uploadDirMode.value = site?.uploadDirMode || '';
   f.tunnelHost.value = site?.tunnelHost || '';
   f.tunnelPort.value = site?.tunnelPort || 22;
   f.tunnelUsername.value = site?.tunnelUsername || '';
@@ -2763,6 +2816,7 @@ function openSiteDialog(site) {
   // Rozbalíme jen když se něco takového používá; jinak ať nepřekáží.
   $('#site-path').open = Boolean(site?.tunnelHost || (site?.proxyType && site.proxyType !== 'none'));
   $('#site-look').open = Boolean(site?.color || site?.note);
+  $('#site-perms').open = Boolean(site?.uploadPerms || site?.uploadFileMode || site?.uploadDirMode);
   f.acceptAnyCert.checked = site ? site.rejectUnauthorized === false : false;
   f.password.placeholder = site?.hasPassword ? 'uloženo — nechte prázdné' : '';
   f.passphrase.placeholder = site?.hasPassphrase ? 'uloženo — nechte prázdné' : '';
@@ -2801,6 +2855,9 @@ siteDlg.addEventListener('close', async () => {
     timeShiftMinutes: Number(f.timeShiftMinutes.value) || 0,
     color: f.color.value,
     note: f.note.value.trim(),
+    uploadPerms: f.uploadPerms.value,
+    uploadFileMode: f.uploadFileMode.value.trim(),
+    uploadDirMode: f.uploadDirMode.value.trim(),
     tunnelHost: f.tunnelHost.value.trim(),
     tunnelPort: Number(f.tunnelPort.value) || 22,
     tunnelUsername: f.tunnelUsername.value.trim(),

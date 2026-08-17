@@ -143,12 +143,18 @@ class TransferQueue extends EventEmitter {
     this.segmentCount = Math.min(8, Math.max(2, Number(count) || 4));
   }
 
-  /** Práva pro danou položku — z profilu, jinak z nastavení. */
+  /**
+   * Práva pro danou položku.
+   *
+   * Volby jednoho přenosu přebíjejí to, co platí pro celou relaci — ale jen
+   * v tom, co samy určují; zbytek se dědí. `this.perms` je už výsledek
+   * dědění relace nad nastavením aplikace.
+   */
   _permsFor(item) {
-    return item.perms || this.perms;
+    return item.perms ? perms.resolve(item.perms, this.perms) : this.perms;
   }
 
-  /** Práva nahraných souborů (Nastavení → Přenosy). */
+  /** Práva nahraných souborů — vrstvy relace a nastavení už jsou sloučené. */
   setPermissions(settings) {
     this.perms = settings || {};
   }
