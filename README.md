@@ -1143,4 +1143,10 @@ npm test
   že se při nepotvrzeném certifikátu heslo na server vůbec neodešle
 
 Testovací SSH klíč a certifikáty v `test/fixtures/` slouží **jen k testům** —
-servery běží na `127.0.0.1` na náhodném portu a nikam se nepublikují.
+servery běží na `127.0.0.1` na náhodném portu a nikam se nepublikují. Jsou
+uložené v repozitáři, takže se testy dají spustit bez příprav; k ničemu mimo
+tenhle stroj nepatří.
+
+## Licence
+
+MIT, viz [LICENSE](LICENSE). Dělejte si s tím, co chcete; záruka žádná.
