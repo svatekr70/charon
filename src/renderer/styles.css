@@ -352,6 +352,9 @@ table.ph td:first-child { width: 150px; }
 
 /* hledání souborů */
 .find-opts { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 8px; }
+/* Spodní okraj popisku by se počítal do zarovnání na spodní hranu a tlačítka
+   vedle pole by seděla o kus níž než samo pole. */
+.find-opts label { margin-bottom: 0; }
 .find-opts label:not(.check) { flex: 1; }
 .find-results { max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: 7px; margin-bottom: 10px; min-height: 90px; }
 .find-results .fr {

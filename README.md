@@ -139,6 +139,11 @@ aplikace pamatuje.
 Rozbalovací seznam, který tu byl původně, stačil na pět relací; u sedmdesáti
 ve dvaceti složkách se v něm nedalo nic najít.
 
+Připojení, zakládání, úprava i mazání relací se odbývá tady, takže v liště
+zůstalo jediné tlačítko, které správce otevře — na jeho popisku je vidět,
+která relace je vybraná. Samostatná tlačítka *Připojit*, *＋ Relace*,
+*Upravit* a *Smazat* zmizela; dělala podruhé to, co dialog.
+
 **Duplikovat** vytvoří kopii včetně hesla — kopie se skládá v hlavním procesu,
 protože do okna se hesla nikdy neposílají.
 

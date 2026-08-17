@@ -1957,8 +1957,10 @@ function renderSiteButton() {
   const s = state.sites.find((x) => x.id === $('#site-select').value);
   $('#btn-sites-label').textContent = s
     ? `${s.folder ? `${s.folder} / ` : ''}${s.name}`
-    : '— vyberte relaci —';
-  $('#btn-sites').title = s ? `${s.username ? `${s.username}@` : ''}${s.host}:${s.port}` : 'Relace (⌘K)';
+    : 'Relace';
+  $('#btn-sites').title = s
+    ? `${s.username ? `${s.username}@` : ''}${s.host}:${s.port} — správce relací (⌘K)`
+    : 'Relace (⌘K)';
 }
 
 async function refreshSites(selectId) {
@@ -2470,12 +2472,14 @@ $('#sites-tree').addEventListener('keydown', (ev) => {
 
 $('#sites-new').addEventListener('click', () => {
   sitesDlg.close();
-  $('#btn-new-site').click();
+  openSiteDialog(null);
 });
 $('#sites-edit').addEventListener('click', () => {
-  $('#site-select').value = sitesUi.selected;
+  const s = state.sites.find((x) => x.id === sitesUi.selected);
+  if (!s) return;
+  $('#site-select').value = s.id;
   sitesDlg.close();
-  $('#btn-edit-site').click();
+  openSiteDialog(s);
 });
 $('#sites-del').addEventListener('click', async () => {
   $('#site-select').value = sitesUi.selected;
@@ -3580,12 +3584,6 @@ for (const tab of $$('.set-tab')) {
 
 /* ------------------------------------------------------------- toolbar */
 
-$('#btn-connect').addEventListener('click', connectSelected);
-$('#btn-new-site').addEventListener('click', () => openSiteDialog(null));
-$('#btn-edit-site').addEventListener('click', () => {
-  const s = state.sites.find((x) => x.id === $('#site-select').value);
-  if (s) openSiteDialog(s); else setLog('error', 'Nejdřív vyberte relaci');
-});
 async function deleteSelectedSite() {
   const s = state.sites.find((x) => x.id === $('#site-select').value);
   if (!s) return setLog('error', 'Nejdřív vyberte relaci');
@@ -3596,14 +3594,12 @@ async function deleteSelectedSite() {
   await refreshSites();
   return undefined;
 }
-$('#btn-del-site').addEventListener('click', deleteSelectedSite);
 $('#btn-refresh').addEventListener('click', async () => {
   // Ruční obnovení jde vždycky na server, uložený výpis se přeskočí.
   await loadPane('local', state.local.path);
   if (state.connected) await loadPane('remote', state.remote.path, { refresh: true });
 });
 $('#btn-sync').addEventListener('click', openSync);
-$('#site-select').addEventListener('dblclick', connectSelected);
 
 /* --------------------------------------------------------------- start */
 

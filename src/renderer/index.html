@@ -17,12 +17,9 @@
       <!-- Výběr drží skrytý select, aby na něj mohl navazovat zbytek kódu;
            uživatel k němu chodí přes správce relací. -->
       <select id="site-select" hidden><option value="">— vyberte relaci —</option></select>
-      <button id="btn-sites" title="Relace (⌘K)"><span id="btn-sites-label">— vyberte relaci —</span> ▾</button>
-      <button id="btn-connect" class="primary">Připojit</button>
-      <span class="sep"></span>
-      <button id="btn-new-site" title="Nová relace">＋ Relace</button>
-      <button id="btn-edit-site" title="Upravit vybranou relaci">Upravit</button>
-      <button id="btn-del-site" title="Smazat vybranou relaci">Smazat</button>
+      <!-- Připojení, zakládání, úpravy i mazání relací obstará správce relací;
+           v liště proto stačí jediné tlačítko, které ho otevře. -->
+      <button id="btn-sites" class="primary" title="Relace (⌘K)"><span id="btn-sites-label">Relace</span> …</button>
       <span class="spacer"></span>
       <button id="btn-refresh" title="Obnovit oba panely (⌘R)">⟳</button>
       <button id="btn-compare" title="Zvýraznit rozdíly mezi panely (⌘D)">⇄ Porovnat</button>
