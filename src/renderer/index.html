@@ -203,17 +203,16 @@
               <option value="preserve">Zachovat lokální (u složek pevně)</option>
             </select>
           </label>
-          <label>Soubory (osmičkově)
+          <label>Práva souborů (osmičkově)
             <input name="uploadFileMode" spellcheck="false" />
           </label>
-          <label>Složky (osmičkově)
-            <input name="uploadDirMode" spellcheck="false" />
-          </label>
         </div>
+        <label class="check" data-role="dirx-row"><input type="checkbox" name="uploadDirExec" /> Složkám přidat procházení</label>
+        <p class="muted" data-role="dirx-note"></p>
         <p class="muted">Předvyplněno podle <strong>Nastavení → Přenosy</strong>. Co tu změníte,
-          platí jen pro tuhle relaci a obecné nastavení přebije — po jednotlivých polích, takže
-          jde předepsat třeba jen práva složek. Co necháte, jak je, se řídí dál nastavením
-          aplikace, včetně jeho pozdějších změn. Jednorázovou odchylku řešte
+          platí jen pro tuhle relaci a obecné nastavení přebije; co necháte, jak je, se řídí
+          dál nastavením aplikace včetně jeho pozdějších změn. Hodí se u hostingu, který má
+          jiná pravidla než zbytek serverů — jednorázovou odchylku řešte
           v <em>Přenést s volbami</em>.</p>
       </details>
 
@@ -437,19 +436,19 @@
         </select>
       </label>
       <div class="grid">
-        <label>Soubory (osmičkově)
+        <label>Práva souborů (osmičkově)
           <input name="uploadFileMode" placeholder="644" spellcheck="false" />
         </label>
-        <label>Složky (osmičkově)
-          <input name="uploadDirMode" placeholder="755" spellcheck="false" />
-        </label>
       </div>
+      <label class="check" data-role="dirx-row"><input type="checkbox" name="uploadDirExec" /> Složkám přidat procházení</label>
+      <p class="muted" data-role="dirx-note"></p>
       <p class="muted">Na sdíleném hostingu rozhoduje, s jakými právy soubor na serveru
         skončí — nahraný soubor s právy 600 web neukáže. Výchozí je nesahat na to,
         co server nastaví sám. „Zachovat lokální" přenese práva ze souboru na disku;
-        u složek zachovávat není co, ty vznikají až na serveru, takže se řídí polem
-        vedle. Když server práva nastavit neumí (starší FTP bez <code>SITE CHMOD</code>),
-        přenos kvůli tomu neselže a jen se to napíše k položce.</p>
+        u složek zachovávat není co, ty vznikají až na serveru, takže se u téhle volby
+        zadává rovnou jejich číslo. Když server práva nastavit neumí (starší FTP bez
+        <code>SITE CHMOD</code>), přenos kvůli tomu neselže a jen se to napíše
+        k položce.</p>
       <p class="muted">Tohle je základ pro všechny servery. Jednotlivá relace ho může
         přebít ve svém nastavení (<em>Práva nahraných souborů</em>) a jeden přenos ještě
         v <em>Přenést s volbami</em>. Dědí se po polích: co níž zůstane prázdné, platí
@@ -713,7 +712,7 @@
       <div class="grid">
         <label id="props-mode-label">Práva (osmičkově)<input id="props-file-mode" placeholder="beze změny" spellcheck="false" /></label>
       </div>
-      <label class="check" id="props-dirx-row" hidden><input type="checkbox" id="props-dir-exec" checked /> Složkám přidat spouštění</label>
+      <label class="check" id="props-dirx-row" hidden><input type="checkbox" id="props-dir-exec" checked /> Složkám přidat procházení</label>
       <p class="muted" id="props-dirx-note" hidden></p>
       <label class="check" id="props-recursive-row"><input type="checkbox" id="props-recursive" /> Použít i na podsložky a soubory uvnitř</label>
       <p class="muted" id="props-recursive-note" hidden>Práva dostane vybraná složka a s ní
@@ -871,13 +870,12 @@
             <option value="preserve">Zachovat lokální (u složek pevně)</option>
           </select>
         </label>
-        <label>Soubory (osmičkově)
+        <label>Práva souborů (osmičkově)
           <input name="uploadFileMode" spellcheck="false" />
         </label>
-        <label>Složky (osmičkově)
-          <input name="uploadDirMode" spellcheck="false" />
-        </label>
       </div>
+      <label class="check" data-role="dirx-row"><input type="checkbox" name="uploadDirExec" /> Složkám přidat procházení</label>
+      <p class="muted" data-role="dirx-note"></p>
       <p class="muted" id="xfer-perms-note"></p>
       <label class="check"><input type="checkbox" name="onlyNewer" /> Jen nové a změněné soubory</label>
       <p class="muted">Porovná se velikost a čas změny s druhou stranou; shodné a starší

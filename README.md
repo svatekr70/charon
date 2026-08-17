@@ -715,10 +715,14 @@ Nižší úroveň nenabízí volbu „podle té vyšší" — rovnou se do ní o
 a kdo to chce přebít, hodnotu přepíše. Uloží se jenom ta odchylka, takže co
 zůstane, jak bylo, se dál řídí vyšší úrovní včetně jejích pozdějších změn.
 
-Dědí se po jednotlivých polích, ne po celé trojici. Relace tedy může předepsat
-jen práva složek a práva souborů nechat na obecném nastavení; jeden přenos zase
-může přebít jen práva souborů. Dialog *Přenést s volbami* nad poli píše, odkud
-se předvyplnila.
+Zadává se jedno číslo — práva souborů — a k němu volba **Složkám přidat
+procházení**, stejně jako ve Vlastnostech: 644 → 755, 640 → 750, 664 → 775.
+Dvě nezávislá pole vedle sebe nutila psát oba údaje pokaždé znovu, přitom se
+lišila právě jen tímhle bitem. Ukazuje se jen to, co při zvolené volbě něco
+znamená — u „nechat na serveru" žádné číslo, u „zachovat lokální" jen práva
+složek, protože soubory si ta svá přinesou z disku.
+
+Dialog *Přenést s volbami* nad poli píše, odkud se předvyplnila.
 
 Ve **Vlastnostech** vybrané položky na serveru se zadává jedno číslo — práva
 souborů — a složky se od něj odvozují volbou **Složkám přidat spouštění**:
@@ -731,8 +735,8 @@ Pole pro složky se ukazuje jen tam, kde má co dělat: u vybraného souboru
 žádná volba pro složky není, u samotné složky bez rekurze je zadané číslo
 přímo její.
 
-Osmičkový zápis je všude doprovázený zaškrtávací mřížkou (vlastník / skupina /
-ostatní × čtení / zápis / spouštění) a pod ní zápisem, jak ho ukazuje panel —
+Osmičkový zápis je všude doprovázený jednou zaškrtávací mřížkou (vlastník /
+skupina / ostatní × čtení / zápis / spouštění) a pod ní zápisem, jak ho ukazuje panel —
 `rwxr-xr-x`. Obojí je tatáž hodnota: kdo umí `755`, napíše ho, kdo ne, zaškrtá.
 Prázdné pole zůstává prázdné, dokud se do mřížky neklikne; zvláštní bity
 (setuid, setgid, sticky) mřížka nenabízí, ale když je v poli někdo má, zůstanou

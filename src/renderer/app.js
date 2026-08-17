@@ -779,15 +779,14 @@ function openTransferOptions(from) {
   xferForm.elements.target.value = to === 'local' ? state.local.path : state.remote.path;
   xferForm.elements.mask.value = state.settings.transferMask || '';
   xferForm.elements.onlyNewer.checked = false;
-  const zdedena = slozPrava(activeSite() || {}, state.settings);
-  for (const klic of PRAVA_POLE) xferForm.elements[klic].value = zdedena[klic];
+  permBloky.prenos.fill(slozPrava(activeSite() || {}, state.settings));
   // Práva se nastavují jen tomu, co na server teprve poletí; při stahování
   // rozhoduje lokální systém a pole by jen mátla.
   const nahravani = from === 'local';
   $('#xfer-perms').hidden = !nahravani;
   $('#xfer-perms-note').hidden = !nahravani;
   if (nahravani) renderXferPermsNote();
-  refreshPermGrids();
+  refreshPermUi();
   renderProfileOptions();
   xferForm.elements.profileName.value = '';
   xferForm.elements.asDefault.checked = false;
@@ -828,10 +827,10 @@ function slozPrava(...vrstvy) {
  * to, co v ní jen bylo předvyplněné, a pozdější změna nastavení aplikace by se
  * do ní nepropsala.
  */
-function odchylkaPrav(pole, zaklad) {
+function odchylkaPrav(hodnoty, zaklad) {
   const out = {};
   for (const klic of PRAVA_POLE) {
-    const v = pole[klic].value.trim();
+    const v = String(hodnoty[klic] || '').trim();
     out[klic] = v === zaklad[klic] ? '' : v;
   }
   return out;
@@ -866,10 +865,9 @@ xferForm.elements.profile.addEventListener('change', () => {
   if (!p) return;
   xferForm.elements.mask.value = p.mask || '';
   xferForm.elements.onlyNewer.checked = Boolean(p.onlyNewer);
-  const zdedena = slozPrava(p, activeSite() || {}, state.settings);
-  for (const klic of PRAVA_POLE) xferForm.elements[klic].value = zdedena[klic];
+  permBloky.prenos.fill(slozPrava(p, activeSite() || {}, state.settings));
   xferForm.elements.profileName.value = p.name;
-  refreshPermGrids();
+  refreshPermUi();
 });
 
 $('#xfer-save-profile').addEventListener('click', async () => {
@@ -884,7 +882,7 @@ $('#xfer-save-profile').addEventListener('click', async () => {
     name,
     mask: xferForm.elements.mask.value.trim(),
     onlyNewer: xferForm.elements.onlyNewer.checked,
-    ...odchylkaPrav(xferForm.elements, slozPrava(activeSite() || {}, state.settings)),
+    ...odchylkaPrav(permBloky.prenos.read(), slozPrava(activeSite() || {}, state.settings)),
     textMask: state.settings.textMask || '',
     serverEol: state.settings.serverEol || 'lf',
   };
@@ -922,7 +920,7 @@ xferDlg.addEventListener('close', async () => {
   }
   // Posílá se jen to, čím se dialog liší od zděděného; zbytek dořeší
   // kaskáda v hlavním procesu.
-  const prava = odchylkaPrav(xferForm.elements, slozPrava(activeSite() || {}, state.settings));
+  const prava = odchylkaPrav(permBloky.prenos.read(), slozPrava(activeSite() || {}, state.settings));
   await transfer(from, from === 'local' ? 'remote' : 'local', {
     mask,
     target: xferForm.elements.target.value.trim(),
@@ -1358,7 +1356,7 @@ function renderPropsPerms() {
         + `${slozkam & 0o111 ? '.' : ' — do takové složky se nedá vstoupit.'}`;
     }
   }
-  refreshPermGrids();
+  refreshPermUi();
 }
 
 async function openProperties(side) {
@@ -2867,8 +2865,7 @@ function openSiteDialog(site) {
   f.note.value = site?.note || '';
   // Relace nemá volbu „podle nastavení" — hodnoty se opíšou a co se změní,
   // je přebití. Uloží se pak jen ta odchylka.
-  const zdedena = slozPrava(site || {}, state.settings);
-  for (const klic of PRAVA_POLE) f[klic].value = zdedena[klic];
+  permBloky.relace.fill(slozPrava(site || {}, state.settings));
   f.tunnelHost.value = site?.tunnelHost || '';
   f.tunnelPort.value = site?.tunnelPort || 22;
   f.tunnelUsername.value = site?.tunnelUsername || '';
@@ -2889,7 +2886,7 @@ function openSiteDialog(site) {
   f.password.placeholder = site?.hasPassword ? 'uloženo — nechte prázdné' : '';
   f.passphrase.placeholder = site?.hasPassphrase ? 'uloženo — nechte prázdné' : '';
   toggleProtocolFields();
-  refreshPermGrids();
+  refreshPermUi();
   siteDlg.showModal();
 }
 
@@ -2924,7 +2921,7 @@ siteDlg.addEventListener('close', async () => {
     timeShiftMinutes: Number(f.timeShiftMinutes.value) || 0,
     color: f.color.value,
     note: f.note.value.trim(),
-    ...odchylkaPrav(f, slozPrava(state.settings)),
+    ...odchylkaPrav(permBloky.relace.read(), slozPrava(state.settings)),
     tunnelHost: f.tunnelHost.value.trim(),
     tunnelPort: Number(f.tunnelPort.value) || 22,
     tunnelUsername: f.tunnelUsername.value.trim(),
@@ -3457,7 +3454,7 @@ $('#q-toggle').addEventListener('click', () => {
  */
 const PERM_RADKY = [['Vlastník', 6], ['Skupina', 3], ['Ostatní', 0]];
 const PERM_SLOUPCE = [['Čtení', 4], ['Zápis', 2], ['Spouštění', 1]];
-const permGridy = [];
+const permUi = [];
 
 /** `rwxr-xr-x`, jak práva ukazuje panel; zvláštní bity jako `s` a `t`. */
 function permSymbol(hodnota) {
@@ -3534,23 +3531,119 @@ function wirePermGrid(input) {
 
   for (const { ch } of boxy) ch.addEventListener('change', zMrizky);
   input.addEventListener('input', zObou);
-  permGridy.push(zObou);
+  permUi.push(zObou);
   zObou();
 }
 
+/**
+ * Oddíl s právy nahraných souborů.
+ *
+ * Zadává se jedno číslo a k němu volba, jestli složkám přidat procházení —
+ * stejně jako ve Vlastnostech. Dvě nezávislá pole vedle sebe nutila psát
+ * 644 a 755 pokaždé znovu, přitom se lišila právě jen tímhle bitem.
+ *
+ * Co která volba znamená:
+ * - „nechat na serveru" — číslo nikam nejde, pole se ani neukazuje;
+ * - „nastavit pevně" — číslo dostanou soubory, složky s procházením navíc;
+ * - „zachovat lokální" — soubory si práva přinesou z disku, číslo je tedy
+ *   práv složek a přidávat k nim není co.
+ */
+function permsBlock(root) {
+  const sel = $('[name=uploadPerms]', root);
+  const mode = $('[name=uploadFileMode]', root);
+  const dirx = $('[name=uploadDirExec]', root);
+  const dirxRow = $('[data-role=dirx-row]', root);
+  const dirxNote = $('[data-role=dirx-note]', root);
+  const cell = mode.closest('.perm-cell');
+  const popis = (t) => { mode.closest('label').firstChild.textContent = t; };
+
+  const render = () => {
+    const rezim = sel.value;
+    cell.hidden = rezim === 'keep';
+    dirxRow.hidden = rezim !== 'fixed';
+    dirxNote.hidden = rezim !== 'fixed';
+    popis(rezim === 'preserve' ? 'Práva složek (osmičkově)' : 'Práva souborů (osmičkově)');
+
+    if (rezim === 'fixed') {
+      const slozkam = dirx.checked ? pridatProchazeni(mode.value) : mode.value.trim();
+      dirxNote.textContent = !slozkam
+        ? 'Bez procházení by do složky nikdo nevstoupil, i kdyby v ní soubory číst směl.'
+        : dirx.checked
+          ? `Složky dostanou ${slozkam} — procházení tam, kde je čtení.`
+          : `Složky dostanou ${slozkam} stejně jako soubory`
+            + `${/[1357]/.test(slozkam.slice(-3)) ? '.' : ' — do takové složky se nedá vstoupit.'}`;
+    }
+  };
+
+  return {
+    render,
+    /** Naplní oddíl z uložené trojice. */
+    fill(hodnoty) {
+      sel.value = hodnoty.uploadPerms || 'keep';
+      const souborum = (hodnoty.uploadFileMode || '').trim();
+      const slozkam = (hodnoty.uploadDirMode || '').trim();
+      if (sel.value === 'preserve') {
+        mode.value = slozkam;
+        dirx.checked = false;
+      } else {
+        mode.value = souborum || slozkam;
+        // Uloženo je obojí; zaškrtnutí se pozná podle toho, že se liší.
+        dirx.checked = !souborum || !slozkam ? true : souborum !== slozkam;
+      }
+      render();
+    },
+    /** Trojice k uložení; složky se dopočítají. */
+    read() {
+      const v = mode.value.trim();
+      if (sel.value === 'preserve') {
+        return { uploadPerms: 'preserve', uploadFileMode: '', uploadDirMode: v };
+      }
+      return {
+        uploadPerms: sel.value,
+        uploadFileMode: v,
+        uploadDirMode: dirx.checked ? pridatProchazeni(v) : v,
+      };
+    },
+  };
+}
+
+/**
+ * Práva složek odvozená od práv souborů — přidá `x` tam, kde je `r`.
+ * Rozhoduje o tom `perms.addExec()` v hlavním procesu; tady se to jen
+ * ukazuje a předvyplňuje.
+ */
+function pridatProchazeni(text) {
+  const v = String(text || '').trim();
+  if (!/^[0-7]{3,4}$/.test(v)) return '';
+  const cislo = parseInt(v, 8);
+  return (cislo | ((cislo & 0o444) >> 2)).toString(8).padStart(v.length, '0');
+}
+
 /** Po naplnění formuláře z kódu — `value = …` samo událost nevyvolá. */
-function refreshPermGrids() {
-  for (const f of permGridy) f();
+function refreshPermUi() {
+  for (const f of permUi) f();
 }
 
 // Všechna místa, kde se práva zadávají: vlastnosti souboru a tři úrovně
 // nastavení práv pro nahrávání.
 for (const sel of [
   '#props-file-mode',
-  '#dlg-settings [name=uploadFileMode]', '#dlg-settings [name=uploadDirMode]',
-  '#dlg-site [name=uploadFileMode]', '#dlg-site [name=uploadDirMode]',
-  '#dlg-xfer [name=uploadFileMode]', '#dlg-xfer [name=uploadDirMode]',
+  '#dlg-settings [name=uploadFileMode]',
+  '#dlg-site [name=uploadFileMode]',
+  '#dlg-xfer [name=uploadFileMode]',
 ]) wirePermGrid($(sel));
+
+// Tři úrovně práv sdílejí tentýž oddíl; liší se jen tím, čím se předvyplní.
+const permBloky = {};
+for (const [klic, sel] of [['nastaveni', '#dlg-settings'], ['relace', '#dlg-site'], ['prenos', '#dlg-xfer']]) {
+  const blok = permsBlock($(sel));
+  permBloky[klic] = blok;
+  permUi.push(blok.render);
+  for (const el of $$('[name=uploadPerms], [name=uploadFileMode], [name=uploadDirExec]', $(sel))) {
+    el.addEventListener('change', blok.render);
+    el.addEventListener('input', blok.render);
+  }
+}
 
 /* ------------------------------------------------------------ nastavení */
 
@@ -3587,13 +3680,11 @@ $('#btn-settings').addEventListener('click', () => {
   f.connectTimeoutSeconds.value = cur.connectTimeoutSeconds || '';
   // Pravidla se zapisují jako text; pole objektů by se do jednoho řádku nevešlo.
   f.editorRules.value = (cur.editorRules || []).map((r) => `${r.mask} = ${r.app}`).join(' | ');
-  f.uploadPerms.value = cur.uploadPerms || 'keep';
-  f.uploadFileMode.value = cur.uploadFileMode || '';
-  f.uploadDirMode.value = cur.uploadDirMode || '';
+  permBloky.nastaveni.fill(cur);
   f.typeAhead.checked = cur.typeAhead !== false;
   f.colOwner.checked = Boolean(cur.colOwner);
   f.colGroup.checked = Boolean(cur.colGroup);
-  refreshPermGrids();
+  refreshPermUi();
   setDlg.showModal();
 });
 
@@ -3634,9 +3725,7 @@ setDlg.addEventListener('close', async () => {
         return i === -1 ? null : { mask: cast.slice(0, i).trim(), app: cast.slice(i + 1).trim() };
       })
       .filter((r) => r && r.mask && r.app),
-    uploadPerms: f.uploadPerms.value,
-    uploadFileMode: f.uploadFileMode.value.trim(),
-    uploadDirMode: f.uploadDirMode.value.trim(),
+    ...permBloky.nastaveni.read(),
     typeAhead: f.typeAhead.checked,
     colOwner: f.colOwner.checked,
     colGroup: f.colGroup.checked,
