@@ -46,6 +46,7 @@ let settings = {
   theme: 'system',
   // Práva nahraných souborů: 'keep' | 'fixed' | 'preserve'.
   uploadPerms: 'keep', uploadFileMode: '644', uploadDirMode: '755',
+  colExt: true, colWidths: {},
   cacheListings: true,
   collapsedFolders: [],
   // Co udělat, až fronta dojede: 'none' | 'notify' | 'disconnect' | 'sleep'.

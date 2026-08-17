@@ -42,6 +42,15 @@ check('šablona Twig taky', kind('base.twig'), 'markup');
 check('CSS jsou styly', kind('styl.css'), 'style');
 check('SCSS taky', kind('_promenne.scss'), 'style');
 check('JavaScript je kód', kind('app.js'), 'code');
+
+// Sloupec Typ v panelech ukazuje přesně tuhle příponu, a řadí se podle ní.
+const ext = (n, t) => K.of(n, t).ext;
+check('přípona bez tečky a malými písmeny', ext('Index.PHP'), 'php');
+check('bere se ta poslední', ext('web.tar.gz'), 'gz');
+check('soubor začínající tečkou příponu nemá', ext('.htaccess'), '');
+check('ani soubor končící tečkou', ext('divny.'), '');
+check('ani soubor bez tečky', ext('Makefile'), '');
+check('složka příponu nemá', ext('web.old', 'd'), '');
 check('TypeScript taky', kind('main.ts'), 'code');
 
 // ================================================ přípona lže

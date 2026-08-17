@@ -175,12 +175,13 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
 
 /* Šířky sloupců drží jedna proměnná, aby hlavička a řádky nikdy neujely
    od sebe. Vlastník a skupina se zapínají v nastavení. */
-#app { --cols: minmax(0, 1fr) 90px 130px 66px; }
-#app.c-owner { --cols: minmax(0, 1fr) 90px 130px 66px 92px; }
-#app.c-group { --cols: minmax(0, 1fr) 90px 130px 66px 92px; }
-#app.c-owner.c-group { --cols: minmax(0, 1fr) 90px 130px 66px 92px 92px; }
+/* Sloupce skládá `applyColumns()` v okně podle toho, které jsou zapnuté a jak
+   široké si je kdo natáhl; tohle je jen záloha, než se nastavení načte. */
+#app { --cols: minmax(0, 1fr) 60px 90px 130px 66px; }
 
-.col-owner, .col-group, .row .owner, .row .group { display: none; }
+.col-ext, .col-owner, .col-group,
+.row .ext, .row .owner, .row .group { display: none; }
+#app.c-ext .col-ext, #app.c-ext .row .ext,
 #app.c-owner .col-owner, #app.c-owner .row .owner,
 #app.c-group .col-group, #app.c-group .row .group { display: block; }
 
@@ -194,6 +195,24 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accen
   border-bottom: 1px solid var(--line); background: var(--bg);
 }
 .col-size, .col-perm { text-align: right; }
+.row .ext { color: var(--fg-dim); overflow: hidden; text-overflow: ellipsis; }
+
+/* Tažení za hranu sloupce.
+
+   Hranice je vidět pořád — jinak se hledá místo, kde chytit, po hmatu.
+   V klidu je to tenká linka jako ve zbytku rozhraní, pod myší zesílí
+   a obarví se. Úchyt sám je širší než ta čára, aby se dal trefit, a sedí
+   na levé hraně své hlavičky; kliknutí na něj nesmí propadnout na řazení
+   pod ním. */
+.list-head > span { position: relative; }
+.col-grip { position: absolute; left: -8px; top: -3px; bottom: -3px; width: 9px; cursor: col-resize; }
+.col-grip::after {
+  content: ''; position: absolute; left: 4px; top: 2px; bottom: 2px; width: 1px;
+  background: var(--line);
+}
+.col-grip:hover::after, .list-head.resizing .col-grip::after {
+  background: var(--accent); left: 3px; width: 2px; top: 0; bottom: 0;
+}
 .list-head [data-sort] { cursor: pointer; user-select: none; }
 .list-head [data-sort]:hover { color: var(--fg); }
 .list-head [data-sort].sorted { color: var(--accent); }

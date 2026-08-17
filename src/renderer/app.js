@@ -90,6 +90,7 @@ const DEFAULT_SETTINGS = {
   cacheListings: true,
   theme: 'system', toolbarLabels: false,
   uploadPerms: 'keep', uploadFileMode: '644', uploadDirMode: '755',
+  colExt: true, colWidths: {},
   tempName: true, tempNameMinKb: 0,
 };
 
@@ -129,6 +130,49 @@ function fmtDate(ms) {
   const d = new Date(ms);
   const p = (n) => String(n).padStart(2, '0');
   return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/**
+ * Sloupce seznamu.
+ *
+ * Šířky si drží nastavení a platí pro oba panely — hlavička i řádky berou
+ * tutéž proměnnou, takže se nemají jak rozejít. Název je pružný, zbytek pevný.
+ */
+const COL_WIDTHS = {
+  ext: 60, size: 90, date: 130, perm: 66, owner: 92, group: 92,
+};
+
+/**
+ * Přípona pro sloupec Typ.
+ *
+ * Bere se ze sdíleného modulu, který ji už rozeznává kvůli ikonám — dvě
+ * místa s vlastními pravidly by se dřív nebo později rozešla. Složky ani
+ * odkazy příponu nemají a soubor začínající tečkou taky ne.
+ */
+function extOf(entry) {
+  return window.FileKind.of(entry.name, entry.type).ext;
+}
+
+function colVisible(klic) {
+  if (klic === 'ext') return state.settings.colExt !== false;
+  if (klic === 'owner') return Boolean(state.settings.colOwner);
+  if (klic === 'group') return Boolean(state.settings.colGroup);
+  return true;
+}
+
+function colWidth(klic) {
+  if (docasneSirky[klic] !== undefined) return docasneSirky[klic];
+  const ulozene = (state.settings.colWidths || {})[klic];
+  return Math.max(40, Math.min(400, Number(ulozene) || COL_WIDTHS[klic]));
+}
+
+function applyColumns() {
+  const app = $('#app');
+  const sirky = Object.keys(COL_WIDTHS).filter(colVisible).map((k) => `${colWidth(k)}px`);
+  app.style.setProperty('--cols', ['minmax(0, 1fr)', ...sirky].join(' '));
+  app.classList.toggle('c-ext', colVisible('ext'));
+  app.classList.toggle('c-owner', colVisible('owner'));
+  app.classList.toggle('c-group', colVisible('group'));
 }
 
 function fmtPerm(mode) {
@@ -298,7 +342,11 @@ function sortedEntries(side) {
     // Adresáře vždy nahoře, jako ve WinSCP.
     if ((a.type === 'd') !== (b.type === 'd')) return a.type === 'd' ? -1 : 1;
     let r = 0;
-    if (key === 'size') r = (sizeOf(side, a) || 0) - (sizeOf(side, b) || 0);
+    if (key === 'ext') {
+      // Při shodné příponě rozhoduje název, jinak by se soubory téhož typu
+      // míchaly při každém překreslení jinak.
+      r = extOf(a).localeCompare(extOf(b), 'cs') || a.name.localeCompare(b.name, 'cs', { numeric: true });
+    } else if (key === 'size') r = (sizeOf(side, a) || 0) - (sizeOf(side, b) || 0);
     else if (key === 'date') r = (a.mtime || 0) - (b.mtime || 0);
     else if (key === 'perm') r = (a.mode || 0) - (b.mode || 0);
     else if (key === 'owner') r = String(a.owner ?? '').localeCompare(String(b.owner ?? ''), 'cs', { numeric: true });
@@ -380,13 +428,15 @@ function renderPane(side) {
     const computed = e.type === 'd' && st.sizes.has(e.name);
     const size = computed ? fmtSize(st.sizes.get(e.name)) : (e.type === 'd' ? '' : fmtSize(e.size));
 
-    row.innerHTML = `<span class="name"></span><span class="size${computed ? ' computed' : ''}">${size}</span>`
+    row.innerHTML = `<span class="name"></span><span class="ext"></span>`
+      + `<span class="size${computed ? ' computed' : ''}">${size}</span>`
       + `<span class="date">${fmtDate(e.mtime)}</span><span class="perm">${fmtPerm(e.mode)}</span>`
       + '<span class="owner"></span><span class="group"></span>';
     // textContent kvůli názvům, které mohou obsahovat < a >
     row.children[0].textContent = e.name;
-    row.children[4].textContent = e.owner ?? '';
-    row.children[5].textContent = e.group ?? '';
+    row.children[1].textContent = extOf(e);
+    row.children[5].textContent = e.owner ?? '';
+    row.children[6].textContent = e.group ?? '';
     frag.appendChild(row);
   });
 
@@ -411,6 +461,70 @@ function paintSelection(side) {
     row.classList.toggle('sel', Boolean(entry) && st.sel.has(entry.name));
   }
   updateFoot(side);
+}
+
+/**
+ * Šířka sloupců tažením.
+ *
+ * Úchyt patří k levé hraně své hlavičky, takže tažením doleva sloupec roste.
+ * Šířky jsou společné pro oba panely — jinak by se stejné sloupce v jednom
+ * a druhém rozešly a porovnávat by se nedalo. Ukládá se až po puštění, aby
+ * se při tažení nezapisovalo padesátkrát za vteřinu.
+ */
+function wireColumnResize(head) {
+  for (const cell of $$('[data-col]', head)) {
+    const grip = document.createElement('span');
+    grip.className = 'col-grip';
+    grip.title = 'Táhnutím změníte šířku, dvojklikem vrátíte výchozí';
+    cell.appendChild(grip);
+
+    // Zastavit stačí mousedown, ale kliknutí je vlastní událost — bez tohohle
+    // by se po tažení ještě přeřadilo podle sloupce.
+    grip.addEventListener('click', (ev) => ev.stopPropagation());
+
+    grip.addEventListener('dblclick', (ev) => {
+      ev.stopPropagation();
+      ulozSirku(cell.dataset.col, null);
+    });
+
+    grip.addEventListener('mousedown', (ev) => {
+      // Kliknutí na úchyt nesmí propadnout na řazení pod ním.
+      ev.preventDefault();
+      ev.stopPropagation();
+      const klic = cell.dataset.col;
+      const zacatek = ev.clientX;
+      const puvodni = colWidth(klic);
+      head.classList.add('resizing');
+
+      const tahni = (e) => {
+        const nova = Math.max(40, Math.min(400, puvodni - (e.clientX - zacatek)));
+        docasneSirky[klic] = nova;
+        applyColumns();
+      };
+      const pust = () => {
+        window.removeEventListener('mousemove', tahni);
+        window.removeEventListener('mouseup', pust);
+        head.classList.remove('resizing');
+        const nova = docasneSirky[klic];
+        delete docasneSirky[klic];
+        if (nova !== undefined) ulozSirku(klic, nova);
+      };
+      window.addEventListener('mousemove', tahni);
+      window.addEventListener('mouseup', pust);
+    });
+  }
+}
+
+/** Šířky roztažené právě teď myší; do nastavení jdou až po puštění. */
+const docasneSirky = {};
+
+async function ulozSirku(klic, hodnota) {
+  const sirky = { ...(state.settings.colWidths || {}) };
+  if (hodnota === null) delete sirky[klic]; else sirky[klic] = Math.round(hodnota);
+  state.settings = { ...state.settings, colWidths: sirky };
+  applyColumns();
+  const saved = await call(window.api.settings.set({ colWidths: sirky }), { silent: true });
+  if (saved) state.settings = { ...state.settings, colWidths: saved.colWidths };
 }
 
 function updateSortIndicator(side) {
@@ -529,6 +643,9 @@ function wirePane(side) {
     else if (act === 'filter') toggleFilter(side);
     else if (act === 'filter-clear') setFilter(side, '');
   }));
+
+  // --- tažení za hranu sloupce ---
+  wireColumnResize($('[data-role=head]', pane));
 
   // --- řazení kliknutím na hlavičku sloupce ---
   $('[data-role=head]', pane).addEventListener('click', (ev) => {
@@ -3733,6 +3850,7 @@ function openSettings() {
   f.editorRules.value = (cur.editorRules || []).map((r) => `${r.mask} = ${r.app}`).join(' | ');
   permBloky.nastaveni.fill(cur);
   f.typeAhead.checked = cur.typeAhead !== false;
+  f.colExt.checked = cur.colExt !== false;
   f.colOwner.checked = Boolean(cur.colOwner);
   f.colGroup.checked = Boolean(cur.colGroup);
   refreshPermUi();
@@ -3779,6 +3897,7 @@ setDlg.addEventListener('close', async () => {
       .filter((r) => r && r.mask && r.app),
     ...permBloky.nastaveni.read(),
     typeAhead: f.typeAhead.checked,
+    colExt: f.colExt.checked,
     colOwner: f.colOwner.checked,
     colGroup: f.colGroup.checked,
   }));
@@ -3787,8 +3906,7 @@ setDlg.addEventListener('close', async () => {
 
 function applySettings(next) {
   state.settings = { ...DEFAULT_SETTINGS, ...next };
-  $('#app').classList.toggle('c-owner', Boolean(state.settings.colOwner));
-  $('#app').classList.toggle('c-group', Boolean(state.settings.colGroup));
+  applyColumns();
   applyTheme(state.settings.theme);
   applyFonts(state.settings);
   $('#app').classList.toggle('tb-labels', state.settings.toolbarLabels === true);

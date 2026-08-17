@@ -30,6 +30,7 @@ předlohy vozí i zpátky.
 | Hledání souborů na serveru | ✅ |
 | Dopočítání velikosti složek | ✅ |
 | Sloupce vlastníka a skupiny, nastavitelný dvojklik | ✅ |
+| Sloupec typu a šířka sloupců tažením | ✅ |
 | Masky souborů pro přenosy i synchronizaci | ✅ |
 | Souběžné přenosy a omezení rychlosti | ✅ |
 | Přenos přes dočasný název | ✅ |
@@ -451,6 +452,23 @@ funkcí `light-dark()`. Přepnutí motivu je pak jediná vlastnost na `<html>`:
 bez ní rozhoduje systém, s `data-theme` uživatel. Že se barva nezačne psát
 natvrdo někde v pravidlech, hlídá `test/theme.test.js` — v tom druhém motivu
 by se to projevilo jako nečitelné místo a všiml by si toho až uživatel.
+
+## Sloupce v panelech
+
+Název, **Typ** (přípona), Velikost, Změněno, Práva a volitelně Vlastník
+a Skupina. Kliknutím na hlavičku se řadí, druhé kliknutí obrátí směr; složky
+zůstávají nahoře vždycky. Podle typu se řadí sekundárně názvem, jinak by se
+soubory téže přípony při každém překreslení zamíchaly jinak.
+
+Přípona se bere ze `src/common/filekind.js` — tedy odtud, odkud se určuje
+ikona. Dvě místa s vlastními pravidly by se dřív nebo později rozešla a jeden
+soubor by byl jednou `.env`, jindy nic.
+
+Šířku sloupce změníte tažením za svislou hranu v hlavičce; hranice je vidět
+i v klidu, pod myší zesílí. Platí pro **oba panely naráz** — jinak by se stejné
+sloupce vlevo a vpravo rozešly a porovnávat by se nedalo — a pamatuje se do
+příště. Dvojklik na hranu vrátí výchozí šířku. Zapnout a vypnout jednotlivé
+sloupce jde v **Nastavení → Panely → Sloupce**.
 
 ## Ikony a typy souborů
 

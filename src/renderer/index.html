@@ -65,11 +65,12 @@
         </div>
         <div class="list-head" data-role="head">
           <span class="col-name" data-sort="name">Název</span>
-          <span class="col-size" data-sort="size">Velikost</span>
-          <span class="col-date" data-sort="date">Změněno</span>
-          <span class="col-perm" data-sort="perm">Práva</span>
-          <span class="col-owner" data-sort="owner">Vlastník</span>
-          <span class="col-group" data-sort="group">Skupina</span>
+          <span class="col-ext" data-sort="ext" data-col="ext">Typ</span>
+          <span class="col-size" data-sort="size" data-col="size">Velikost</span>
+          <span class="col-date" data-sort="date" data-col="date">Změněno</span>
+          <span class="col-perm" data-sort="perm" data-col="perm">Práva</span>
+          <span class="col-owner" data-sort="owner" data-col="owner">Vlastník</span>
+          <span class="col-group" data-sort="group" data-col="group">Skupina</span>
         </div>
         <div class="list" data-role="list" tabindex="0"></div>
         <div class="pane-foot" data-role="foot"></div>
@@ -95,11 +96,12 @@
         </div>
         <div class="list-head" data-role="head">
           <span class="col-name" data-sort="name">Název</span>
-          <span class="col-size" data-sort="size">Velikost</span>
-          <span class="col-date" data-sort="date">Změněno</span>
-          <span class="col-perm" data-sort="perm">Práva</span>
-          <span class="col-owner" data-sort="owner">Vlastník</span>
-          <span class="col-group" data-sort="group">Skupina</span>
+          <span class="col-ext" data-sort="ext" data-col="ext">Typ</span>
+          <span class="col-size" data-sort="size" data-col="size">Velikost</span>
+          <span class="col-date" data-sort="date" data-col="date">Změněno</span>
+          <span class="col-perm" data-sort="perm" data-col="perm">Práva</span>
+          <span class="col-owner" data-sort="owner" data-col="owner">Vlastník</span>
+          <span class="col-group" data-sort="group" data-col="group">Skupina</span>
         </div>
         <div class="list" data-role="list" tabindex="0"></div>
         <div class="pane-foot" data-role="foot"></div>
@@ -560,8 +562,11 @@
 
       
       <h3>Sloupce</h3>
+      <label class="check"><input type="checkbox" name="colExt" /> Zobrazit typ (příponu)</label>
       <label class="check"><input type="checkbox" name="colOwner" /> Zobrazit vlastníka</label>
       <label class="check"><input type="checkbox" name="colGroup" /> Zobrazit skupinu</label>
+      <p class="muted">Šířku sloupců změníte tažením za svislou hranu v jejich hlavičce;
+        platí pro oba panely naráz a pamatuje se. Dvojklik na hranu vrátí výchozí šířku.</p>
 
               </section>
         <section class="set-panel" data-tab="sit" hidden>
