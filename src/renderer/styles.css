@@ -285,6 +285,31 @@ dialog::backdrop { background: var(--backdrop); }
 .dlg .row input { flex: 1; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
 .grid label.check { grid-column: 1 / -1; }
+
+/* Práva zaškrtáváním. Osmičkové pole zůstává tím hlavním — mřížka je jen
+   druhý pohled na tutéž hodnotu, aby se nemuselo počítat z hlavy. */
+.perm-cell { display: block; }
+.dlg .perm-grid {
+  display: grid;
+  grid-template-columns: auto auto auto auto;
+  gap: 4px 14px;
+  align-items: center;
+  margin: 0 0 9px;
+  font-size: 12px;
+}
+.dlg .perm-grid > span { color: var(--fg-dim); }
+.dlg .perm-grid label {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin: 0; color: var(--fg);
+}
+.dlg .perm-grid label input { margin: 0; }
+/* Zápis, jak ho ukazuje panel — kontrola, že zaškrtnuté sedí s tím, co bude na serveru. */
+.dlg .perm-grid .sym {
+  grid-column: 1 / -1;
+  font-family: var(--mono-font);
+  color: var(--fg-dim);
+  margin-top: 2px;
+}
 /* Lišta tlačítek zůstává vidět i u dlouhého dialogu, který se roluje.
    Přilepuje se na spodní hranu rolovací oblasti — žádné záporné odsazení:
    to dřív vysunulo spodní polovinu tlačítek mimo dialog, takže kliknutí do ní

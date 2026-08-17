@@ -716,6 +716,13 @@ jen práva složek a práva souborů nechat na obecném nastavení; jeden přeno
 může přebít jen práva souborů. Dialog *Přenést s volbami* pod poli píše, co
 zrovna platí a odkud to je.
 
+Osmičkový zápis je všude doprovázený zaškrtávací mřížkou (vlastník / skupina /
+ostatní × čtení / zápis / spouštění) a pod ní zápisem, jak ho ukazuje panel —
+`rwxr-xr-x`. Obojí je tatáž hodnota: kdo umí `755`, napíše ho, kdo ne, zaškrtá.
+Prázdné pole zůstává prázdné, dokud se do mřížky neklikne; zvláštní bity
+(setuid, setgid, sticky) mřížka nenabízí, ale když je v poli někdo má, zůstanou
+tam. Totéž ovládání je i ve **Vlastnostech** vybraného souboru na serveru.
+
 Práva se nastavují až na konečné cestě, aby to dopadlo stejně s dočasným názvem
 i bez něj. Týkají se jen nahrávání — při stahování rozhoduje místní systém, a
 proto se v dialogu při stahování ani nenabízejí. Když je server nastavit neumí

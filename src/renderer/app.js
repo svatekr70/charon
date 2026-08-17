@@ -788,6 +788,7 @@ function openTransferOptions(from) {
   $('#xfer-perms').hidden = !nahravani;
   $('#xfer-perms-note').hidden = !nahravani;
   if (nahravani) renderXferPermsNote();
+  refreshPermGrids();
   renderProfileOptions();
   xferForm.elements.profileName.value = '';
   xferForm.elements.asDefault.checked = false;
@@ -850,6 +851,7 @@ xferForm.elements.profile.addEventListener('change', () => {
   xferForm.elements.uploadFileMode.value = p.uploadFileMode || '';
   xferForm.elements.uploadDirMode.value = p.uploadDirMode || '';
   xferForm.elements.profileName.value = p.name;
+  refreshPermGrids();
 });
 
 $('#xfer-save-profile').addEventListener('click', async () => {
@@ -1341,6 +1343,7 @@ async function openProperties(side) {
   $('#props-owner').value = first && first.owner !== null ? first.owner : '';
   $('#props-group').value = first && first.group !== null ? first.group : '';
   $('#props-recursive').checked = false;
+  refreshPermGrids();
   $('#props-hash').style.display = 'none';
   $('#props-hash').textContent = '';
 
@@ -2821,6 +2824,7 @@ function openSiteDialog(site) {
   f.password.placeholder = site?.hasPassword ? 'uloženo — nechte prázdné' : '';
   f.passphrase.placeholder = site?.hasPassphrase ? 'uloženo — nechte prázdné' : '';
   toggleProtocolFields();
+  refreshPermGrids();
   siteDlg.showModal();
 }
 
@@ -3375,6 +3379,116 @@ $('#q-toggle').addEventListener('click', () => {
   $('#q-toggle').textContent = q.classList.contains('collapsed') ? '▸' : '▾';
 });
 
+/* --------------------------------------------------------- mřížka práv */
+
+/**
+ * Zaškrtávací mřížka k poli s osmičkovými právy.
+ *
+ * Osmičkový zápis zůstává tím hlavním — mřížka je druhý pohled na tutéž
+ * hodnotu, ne druhé místo, kde by se dala uložit. Kdo umí `755`, napíše ho;
+ * kdo ne, zaškrtá. Prázdné pole znamená „nesahat" a nesmí se samo vyplnit,
+ * proto se z prázdna vychází až prvním kliknutím.
+ *
+ * Zvláštní bity (setuid, setgid, sticky) mřížka nenabízí — patří k tomu, co
+ * se nemá naklikat omylem — ale když je v poli někdo má, zůstanou tam.
+ */
+const PERM_RADKY = [['Vlastník', 6], ['Skupina', 3], ['Ostatní', 0]];
+const PERM_SLOUPCE = [['Čtení', 4], ['Zápis', 2], ['Spouštění', 1]];
+const permGridy = [];
+
+/** `rwxr-xr-x`, jak práva ukazuje panel; zvláštní bity jako `s` a `t`. */
+function permSymbol(hodnota) {
+  const zvlastni = (hodnota >> 9) & 7;
+  let out = '';
+  PERM_RADKY.forEach(([, posun], i) => {
+    const b = (hodnota >> posun) & 7;
+    const x = b & 1;
+    // setuid/setgid/sticky se píšou na místo „x" — velké písmeno, když
+    // spouštění zapnuté není.
+    const zvl = (zvlastni >> (2 - i)) & 1;
+    const treti = zvl ? (x ? 'sst'[i] : 'SST'[i]) : (x ? 'x' : '-');
+    out += `${b & 4 ? 'r' : '-'}${b & 2 ? 'w' : '-'}${treti}`;
+  });
+  return out;
+}
+
+function wirePermGrid(input) {
+  const label = input.closest('label') || input;
+  const cell = document.createElement('div');
+  cell.className = 'perm-cell';
+  label.parentNode.insertBefore(cell, label);
+  cell.appendChild(label);
+
+  const grid = document.createElement('div');
+  grid.className = 'perm-grid';
+  const text = (t, cls) => Object.assign(document.createElement('span'), { textContent: t, className: cls || '' });
+
+  // Nadpisy sloupců by jen zdvojily slova u zaškrtávátek; stačí ta slova.
+  const boxy = [];
+  for (const [radek, posun] of PERM_RADKY) {
+    grid.appendChild(text(radek));
+    for (const [sloupec, bit] of PERM_SLOUPCE) {
+      const l = document.createElement('label');
+      const ch = document.createElement('input');
+      ch.type = 'checkbox';
+      ch.setAttribute('aria-label', `${radek} — ${sloupec.toLowerCase()}`);
+      l.append(ch, document.createTextNode(sloupec));
+      grid.appendChild(l);
+      boxy.push({ ch, maska: bit << posun });
+    }
+  }
+  const sym = text('', 'sym');
+  grid.appendChild(sym);
+  cell.appendChild(grid);
+
+  /** Hodnota pole, nebo null když je prázdné či nesmyslné. */
+  const zPole = () => {
+    const t = input.value.trim();
+    return /^[0-7]{3,4}$/.test(t) ? parseInt(t, 8) : null;
+  };
+
+  const zMrizky = () => {
+    const hodnota = zPole();
+    // Zvláštní bity si držíme z pole; mřížka o nich nerozhoduje.
+    let v = hodnota === null ? 0 : hodnota & 0o7000;
+    for (const { ch, maska } of boxy) if (ch.checked) v |= maska;
+    const delka = v & 0o7000 ? 4 : 3;
+    input.value = v.toString(8).padStart(delka, '0');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    zObou();
+  };
+
+  const zObou = () => {
+    const hodnota = zPole();
+    for (const { ch, maska } of boxy) ch.checked = hodnota !== null && Boolean(hodnota & maska);
+    if (hodnota === null) {
+      // Prázdné i nesmyslné pole říká totéž: mřížka teď nic neurčuje.
+      sym.textContent = input.value.trim() ? 'zápis práv nedává smysl' : (input.placeholder || 'beze změny');
+    } else {
+      sym.textContent = permSymbol(hodnota);
+    }
+  };
+
+  for (const { ch } of boxy) ch.addEventListener('change', zMrizky);
+  input.addEventListener('input', zObou);
+  permGridy.push(zObou);
+  zObou();
+}
+
+/** Po naplnění formuláře z kódu — `value = …` samo událost nevyvolá. */
+function refreshPermGrids() {
+  for (const f of permGridy) f();
+}
+
+// Všechna místa, kde se práva zadávají: vlastnosti souboru a tři úrovně
+// nastavení práv pro nahrávání.
+for (const sel of [
+  '#props-file-mode', '#props-dir-mode',
+  '#dlg-settings [name=uploadFileMode]', '#dlg-settings [name=uploadDirMode]',
+  '#dlg-site [name=uploadFileMode]', '#dlg-site [name=uploadDirMode]',
+  '#dlg-xfer [name=uploadFileMode]', '#dlg-xfer [name=uploadDirMode]',
+]) wirePermGrid($(sel));
+
 /* ------------------------------------------------------------ nastavení */
 
 const setDlg = $('#dlg-settings');
@@ -3416,6 +3530,7 @@ $('#btn-settings').addEventListener('click', () => {
   f.typeAhead.checked = cur.typeAhead !== false;
   f.colOwner.checked = Boolean(cur.colOwner);
   f.colGroup.checked = Boolean(cur.colGroup);
+  refreshPermGrids();
   setDlg.showModal();
 });
 
