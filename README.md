@@ -148,17 +148,28 @@ která relace je vybraná. Samostatná tlačítka *Připojit*, *＋ Relace*,
 **Duplikovat** vytvoří kopii včetně hesla — kopie se skládá v hlavním procesu,
 protože do okna se hesla posílají jen na vyžádání okem u pole.
 
-## Lišta
+## Lišty
 
-Zleva relace, pak přenos (nahrát, stáhnout, přenést s volbami), operace se
-soubory (nová složka, přejmenovat, editor, smazat), panely (obnovit, porovnat,
-souběžné procházení, hledání) a nástroje (synchronizace, hlídání složky,
-příkazy na serveru). Vpravo nastavení.
+Lišty jsou dvě úrovně. **Nahoře** je jen to, co platí pro obě strany naráz:
+relace, obnovit, porovnat, souběžné procházení, synchronizace, hlídání složky,
+příkazy na serveru a nastavení.
 
-Akce míří na panel, ve kterém stojíte — kromě nahrání a stažení, kde je směr
-dán tlačítkem; kdyby se i ta ptala na aktivní panel, znamenalo by jedno
-tlačítko pokaždé něco jiného. Co zrovna nejde, je zašedlé: bez spojení
-zůstane přístupná jen lokální strana, bez výběru jen „nová složka".
+**Každý panel má vlastní lištu** pod cestou, protože akce nad soubory se týkají
+konkrétní strany:
+
+| | Levý (lokální) | Pravý (server) |
+| --- | --- | --- |
+| Analogické | → kopírovat, → přesunout, přenést s volbami | ← kopírovat, ← přesunout, přenést s volbami |
+| Společné | nová složka, přejmenovat, smazat, Terminál zde | totéž |
+| Vlastní | ukázat ve Finderu | editor, vlastnosti a práva, hledání |
+
+Směr přenosu je dán panelem, ne tím, který je zrovna vpředu — šipka v levé
+liště míří doprava, v pravé doleva. Kopie nese plus jako táhnutí s <kbd>⌥</kbd>
+v systému: na druhé straně něco přibude. Přesun je holá šipka, nic nepřibývá.
+
+Co zrovna nejde, je zašedlé, a každý panel se řídí svým vlastním výběrem: bez
+spojení zůstane přístupná jen lokální strana, bez výběru jen „nová složka"
+a Terminál.
 
 Ikony jsou kreslené jako maska ve stejném zápisu jako ikony souborů
 (rám 16 × 16, tah 1,4, kulaté rohy) — barvu berou z písma tlačítka, takže
@@ -464,10 +475,15 @@ Přípona se bere ze `src/common/filekind.js` — tedy odtud, odkud se určuje
 ikona. Dvě místa s vlastními pravidly by se dřív nebo později rozešla a jeden
 soubor by byl jednou `.env`, jindy nic.
 
-Šířku sloupce změníte tažením za svislou hranu v hlavičce; hranice je vidět
-i v klidu, pod myší zesílí. Platí pro **oba panely naráz** — jinak by se stejné
-sloupce vlevo a vpravo rozešly a porovnávat by se nedalo — a pamatuje se do
-příště. Dvojklik na hranu vrátí výchozí šířku. Zapnout a vypnout jednotlivé
+Šířku měníte tažením za dělicí čáru v hlavičce. Táhne se hranice mezi dvěma
+sloupci: co se přidá levému, ubere se pravému, takže se hýbe jenom ta jedna
+čára a zbytek hlavičky zůstane stát. Název je pružný a dorovnává, co ostatní
+pustí; za posledním sloupcem se netáhne, vpravo od něj už není co zúžit.
+Hranice jsou vidět i v klidu — jinak se místo, kde chytit, hledá po hmatu.
+
+Šířky platí pro **oba panely naráz** — jinak by se stejné sloupce vlevo
+a vpravo rozešly a porovnávat by se nedalo — a pamatují se do příště. Dvojklik
+na čáru vrátí oběma sousedům výchozí šířku. Zapnout a vypnout jednotlivé
 sloupce jde v **Nastavení → Panely → Sloupce**.
 
 ## Ikony a typy souborů

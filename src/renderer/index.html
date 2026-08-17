@@ -22,21 +22,12 @@
       <button id="btn-sites" class="primary ibtn" data-icon="sites" title="Relace (⌘K)"><span id="btn-sites-label">Relace</span><span class="ibtn caret" data-icon="caret"></span></button>
       <span class="sep"></span>
 
-      <!-- Akce míří na panel, ve kterém stojíte; co zrovna nejde, je zašedlé.
-           Popisky se zapínají v Nastavení → Vzhled, jinak je nese tooltip. -->
-      <button id="tb-upload" class="ibtn" data-icon="upload" title="Nahrát na server (F5)" aria-label="Nahrát na server"><span class="lbl">Nahrát</span></button>
-      <button id="tb-download" class="ibtn" data-icon="download" title="Stáhnout (F5)" aria-label="Stáhnout"><span class="lbl">Stáhnout</span></button>
-      <button id="tb-transfer-opts" class="ibtn" data-icon="transfer-opts" title="Přenést s volbami (⇧F5)" aria-label="Přenést s volbami"></button>
-      <span class="sep"></span>
-      <button id="tb-newfolder" class="ibtn" data-icon="newfolder" title="Nová složka (F7)" aria-label="Nová složka"></button>
-      <button id="tb-rename" class="ibtn" data-icon="rename" title="Přejmenovat (F2)" aria-label="Přejmenovat"></button>
-      <button id="tb-edit" class="ibtn" data-icon="edit" title="Upravit v editoru (F4)" aria-label="Upravit v editoru"></button>
-      <button id="tb-delete" class="ibtn" data-icon="delete" title="Smazat (⌫)" aria-label="Smazat"></button>
-      <span class="sep"></span>
+      <!-- Nahoře zůstalo jen to, co platí pro obě strany naráz. Akce nad
+           soubory patří k panelu, kterého se týkají — mají vlastní lištu
+           pod cestou. Popisky se zapínají v Nastavení → Vzhled. -->
       <button id="btn-refresh" class="ibtn" data-icon="refresh" title="Obnovit oba panely (⌘R)" aria-label="Obnovit"><span class="lbl">Obnovit</span></button>
       <button id="btn-compare" class="ibtn" data-icon="compare" title="Zvýraznit rozdíly mezi panely (⌘D)" aria-label="Porovnat panely"><span class="lbl">Porovnat</span></button>
       <button id="btn-syncbrowse" class="ibtn" data-icon="syncbrowse" title="Souběžné procházení (⌘Y)" aria-label="Souběžné procházení"></button>
-      <button id="tb-find" class="ibtn" data-icon="find" title="Najít soubory na serveru (⌘F)" aria-label="Najít na serveru"></button>
       <span class="sep"></span>
       <button id="btn-sync" class="ibtn" data-icon="sync" title="Synchronizace adresářů (⌘S)" aria-label="Synchronizovat adresáře"><span class="lbl">Synchronizovat</span></button>
       <button id="tb-watch" class="ibtn" data-icon="watch" title="Hlídat složku a nahrávat změny (⌘U)" aria-label="Hlídat složku"></button>
@@ -58,6 +49,19 @@
           <button class="icon ibtn" data-icon="bookmark" data-act="bookmark" title="Záložky cest" aria-label="Záložky cest"></button>
           <button class="icon ibtn" data-icon="filter" data-act="filter" title="Filtr podle masky" aria-label="Filtr podle masky"></button>
           <button class="icon ibtn" data-icon="browse" data-act="browse" title="Vybrat složku" aria-label="Vybrat složku"></button>
+        </div>
+        <div class="pane-tools">
+          <button class="icon ibtn" data-icon="copy-right" data-act="copy" title="Kopírovat na server (F5)" aria-label="Kopírovat na server"></button>
+          <button class="icon ibtn" data-icon="move-right" data-act="move" title="Přesunout na server (F6)" aria-label="Přesunout na server"></button>
+          <button class="icon ibtn" data-icon="transfer-opts" data-act="xfer-opts" title="Přenést s volbami (⇧F5)" aria-label="Přenést s volbami"></button>
+          <span class="sep"></span>
+          <button class="icon ibtn" data-icon="newfolder" data-act="mkdir" title="Nová složka (F7)" aria-label="Nová složka"></button>
+          <button class="icon ibtn" data-icon="rename" data-act="rename" title="Přejmenovat (F2)" aria-label="Přejmenovat"></button>
+          <button class="icon ibtn" data-icon="delete" data-act="delete" title="Smazat (⌫)" aria-label="Smazat"></button>
+          <span class="sep"></span>
+          <button class="icon ibtn" data-icon="reveal" data-act="reveal" title="Ukázat ve Finderu" aria-label="Ukázat ve Finderu"></button>
+          <span class="spacer"></span>
+          <button class="icon ibtn" data-icon="shell" data-act="terminal" title="Otevřít Terminál zde" aria-label="Otevřít Terminál zde"></button>
         </div>
         <div class="filter-bar" data-role="filterbar" hidden>
           <input data-role="filter" placeholder="Maska, např. *.php; *.css | .git/" spellcheck="false" />
@@ -89,6 +93,21 @@
           <button class="icon ibtn" data-icon="bookmark" data-act="bookmark" title="Záložky cest" aria-label="Záložky cest"></button>
           <button class="icon ibtn" data-icon="filter" data-act="filter" title="Filtr podle masky" aria-label="Filtr podle masky"></button>
           <button class="icon ibtn" data-icon="home" data-act="home" title="Domovský adresář" aria-label="Domovský adresář"></button>
+        </div>
+        <div class="pane-tools">
+          <button class="icon ibtn" data-icon="copy-left" data-act="copy" title="Kopírovat k sobě (F5)" aria-label="Kopírovat k sobě"></button>
+          <button class="icon ibtn" data-icon="move-left" data-act="move" title="Přesunout k sobě (F6)" aria-label="Přesunout k sobě"></button>
+          <button class="icon ibtn" data-icon="transfer-opts" data-act="xfer-opts" title="Přenést s volbami (⇧F5)" aria-label="Přenést s volbami"></button>
+          <span class="sep"></span>
+          <button class="icon ibtn" data-icon="newfolder" data-act="mkdir" title="Nová složka (F7)" aria-label="Nová složka"></button>
+          <button class="icon ibtn" data-icon="rename" data-act="rename" title="Přejmenovat (F2)" aria-label="Přejmenovat"></button>
+          <button class="icon ibtn" data-icon="delete" data-act="delete" title="Smazat (⌫)" aria-label="Smazat"></button>
+          <span class="sep"></span>
+          <button class="icon ibtn" data-icon="edit" data-act="edit" title="Upravit v editoru (F4)" aria-label="Upravit v editoru"></button>
+          <button class="icon ibtn" data-icon="properties" data-act="props" title="Vlastnosti a práva (⌘I)" aria-label="Vlastnosti a práva"></button>
+          <button class="icon ibtn" data-icon="find" data-act="find" title="Najít soubory na serveru (⌘F)" aria-label="Najít na serveru"></button>
+          <span class="spacer"></span>
+          <button class="icon ibtn" data-icon="shell" data-act="terminal" title="Otevřít Terminál zde" aria-label="Otevřít Terminál zde"></button>
         </div>
         <div class="filter-bar" data-role="filterbar" hidden>
           <input data-role="filter" placeholder="Maska, např. *.php; *.css | .git/" spellcheck="false" />

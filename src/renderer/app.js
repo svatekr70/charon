@@ -141,6 +141,9 @@ function fmtDate(ms) {
 const COL_WIDTHS = {
   ext: 60, size: 90, date: 130, perm: 66, owner: 92, group: 92,
 };
+/** Pořadí sloupců za názvem; Název je pružný a šířku uloženou nemá. */
+const COL_ORDER = Object.keys(COL_WIDTHS);
+const mezeSirky = (w) => Math.max(40, Math.min(400, w));
 
 /**
  * Přípona pro sloupec Typ.
@@ -162,17 +165,27 @@ function colVisible(klic) {
 
 function colWidth(klic) {
   if (docasneSirky[klic] !== undefined) return docasneSirky[klic];
-  const ulozene = (state.settings.colWidths || {})[klic];
-  return Math.max(40, Math.min(400, Number(ulozene) || COL_WIDTHS[klic]));
+  return mezeSirky(Number((state.settings.colWidths || {})[klic]) || COL_WIDTHS[klic]);
+}
+
+function visibleCols() {
+  return COL_ORDER.filter(colVisible);
 }
 
 function applyColumns() {
   const app = $('#app');
-  const sirky = Object.keys(COL_WIDTHS).filter(colVisible).map((k) => `${colWidth(k)}px`);
-  app.style.setProperty('--cols', ['minmax(0, 1fr)', ...sirky].join(' '));
+  const poradi = visibleCols();
+  app.style.setProperty('--cols', ['minmax(0, 1fr)', ...poradi.map((k) => `${colWidth(k)}px`)].join(' '));
   app.classList.toggle('c-ext', colVisible('ext'));
   app.classList.toggle('c-owner', colVisible('owner'));
   app.classList.toggle('c-group', colVisible('group'));
+
+  // Za posledním sloupcem se hranice nekreslí ani netáhne — vpravo od něj
+  // už není co zúžit.
+  const posledni = poradi[poradi.length - 1];
+  for (const cell of $$('.list-head [data-col]')) {
+    cell.classList.toggle('last-col', cell.dataset.col === posledni);
+  }
 }
 
 function fmtPerm(mode) {
@@ -464,50 +477,73 @@ function paintSelection(side) {
 }
 
 /**
- * Šířka sloupců tažením.
+ * Šířka sloupců tažením za dělicí čáru.
  *
- * Úchyt patří k levé hraně své hlavičky, takže tažením doleva sloupec roste.
- * Šířky jsou společné pro oba panely — jinak by se stejné sloupce v jednom
- * a druhém rozešly a porovnávat by se nedalo. Ukládá se až po puštění, aby
- * se při tažení nezapisovalo padesátkrát za vteřinu.
+ * Táhne se hranice mezi dvěma sloupci: co se přidá levému, ubere se pravému,
+ * takže se hýbe jenom ta jedna čára a zbytek hlavičky zůstane stát. Sloupec
+ * Název je pružný a šířku uloženou nemá — u něj se mění jen soused vpravo
+ * a Název dorovná sám.
+ *
+ * Za poslední sloupec se netáhne: napravo od něj už není co zúžit, takže by
+ * se místo hranice posouval jeho protější okraj.
  */
 function wireColumnResize(head) {
-  for (const cell of $$('[data-col]', head)) {
+  const cells = [$('.col-name', head), ...COL_ORDER.map((k) => $(`[data-col=${k}]`, head))];
+  for (const cell of cells) {
     const grip = document.createElement('span');
     grip.className = 'col-grip';
-    grip.title = 'Táhnutím změníte šířku, dvojklikem vrátíte výchozí';
+    grip.title = 'Táhnutím posunete hranici sloupců, dvojklikem vrátíte výchozí šířku';
     cell.appendChild(grip);
-
-    // Zastavit stačí mousedown, ale kliknutí je vlastní událost — bez tohohle
-    // by se po tažení ještě přeřadilo podle sloupce.
     grip.addEventListener('click', (ev) => ev.stopPropagation());
+
+    const sousedVpravo = () => {
+      const poradi = visibleCols();
+      const i = cell.dataset.col ? poradi.indexOf(cell.dataset.col) : -1;
+      return poradi[i + 1];
+    };
 
     grip.addEventListener('dblclick', (ev) => {
       ev.stopPropagation();
-      ulozSirku(cell.dataset.col, null);
+      const dalsi = sousedVpravo();
+      if (!dalsi) return;
+      ulozSirky({ [dalsi]: null, ...(cell.dataset.col ? { [cell.dataset.col]: null } : {}) });
     });
 
     grip.addEventListener('mousedown', (ev) => {
       // Kliknutí na úchyt nesmí propadnout na řazení pod ním.
       ev.preventDefault();
       ev.stopPropagation();
-      const klic = cell.dataset.col;
+      const dalsi = sousedVpravo();
+      if (!dalsi) return;
+
+      const klic = cell.dataset.col || null;
       const zacatek = ev.clientX;
-      const puvodni = colWidth(klic);
+      const sirkaA = klic ? colWidth(klic) : null;
+      const sirkaB = colWidth(dalsi);
       head.classList.add('resizing');
 
       const tahni = (e) => {
-        const nova = Math.max(40, Math.min(400, puvodni - (e.clientX - zacatek)));
-        docasneSirky[klic] = nova;
+        let dx = e.clientX - zacatek;
+        // Nejdřív omezí levý sloupec, pak pravý; posun platí pro oba stejný,
+        // jinak by se hranice utrhla od myši.
+        if (klic !== null) dx = mezeSirky(sirkaA + dx) - sirkaA;
+        dx = sirkaB - mezeSirky(sirkaB - dx);
+        docasneSirky[dalsi] = sirkaB - dx;
+        if (klic !== null) docasneSirky[klic] = sirkaA + dx;
         applyColumns();
       };
       const pust = () => {
         window.removeEventListener('mousemove', tahni);
         window.removeEventListener('mouseup', pust);
         head.classList.remove('resizing');
-        const nova = docasneSirky[klic];
-        delete docasneSirky[klic];
-        if (nova !== undefined) ulozSirku(klic, nova);
+        const zmeny = {};
+        for (const k of [klic, dalsi]) {
+          if (k !== null && docasneSirky[k] !== undefined) {
+            zmeny[k] = docasneSirky[k];
+            delete docasneSirky[k];
+          }
+        }
+        if (Object.keys(zmeny).length) ulozSirky(zmeny);
       };
       window.addEventListener('mousemove', tahni);
       window.addEventListener('mouseup', pust);
@@ -518,9 +554,11 @@ function wireColumnResize(head) {
 /** Šířky roztažené právě teď myší; do nastavení jdou až po puštění. */
 const docasneSirky = {};
 
-async function ulozSirku(klic, hodnota) {
+async function ulozSirky(zmeny) {
   const sirky = { ...(state.settings.colWidths || {}) };
-  if (hodnota === null) delete sirky[klic]; else sirky[klic] = Math.round(hodnota);
+  for (const [klic, hodnota] of Object.entries(zmeny)) {
+    if (hodnota === null) delete sirky[klic]; else sirky[klic] = Math.round(hodnota);
+  }
   state.settings = { ...state.settings, colWidths: sirky };
   applyColumns();
   const saved = await call(window.api.settings.set({ colWidths: sirky }), { silent: true });
@@ -558,7 +596,7 @@ function updateFoot(side) {
       + porovnano;
   // Patička se překresluje při každé změně výběru, takže je to nejlevnější
   // místo, odkud udržet lištu v souladu s tím, co je vybrané.
-  renderToolbar();
+  renderActionButtons();
 }
 
 /* ------------------------------------------------------------ interakce */
@@ -580,7 +618,7 @@ function setActive(side) {
   state.activeSide = side;
   panes.local.classList.toggle('active', side === 'local');
   panes.remote.classList.toggle('active', side === 'remote');
-  renderToolbar();
+  renderActionButtons();
 }
 
 async function openEntry(side, entry) {
@@ -642,6 +680,24 @@ function wirePane(side) {
     } else if (act === 'bookmark') showBookmarkMenu(side, ev.currentTarget);
     else if (act === 'filter') toggleFilter(side);
     else if (act === 'filter-clear') setFilter(side, '');
+    // Lišta panelu: co dělá, se týká téhle strany. Směr přenosu je dán
+    // panelem, ne tím, který je zrovna vpředu.
+    else if (act === 'copy') await transfer(side, other);
+    else if (act === 'move') await transfer(side, other, { move: true });
+    else if (act === 'xfer-opts') openTransferOptions(side);
+    else if (act === 'mkdir') await mkdirIn(side);
+    else if (act === 'rename') {
+      if (selectedEntries(side).length > 1) openBulkRename(side); else await renameSelected(side);
+    } else if (act === 'delete') await deleteSelected(side);
+    else if (act === 'terminal') await openTerminal(side);
+    else if (act === 'reveal') {
+      const [e] = selectedEntries(side);
+      await call(window.api.local.reveal(e ? fullPath(side, e) : state[side].path));
+    } else if (act === 'edit') {
+      const [e] = selectedEntries('remote');
+      if (e && e.type !== 'd') await editRemote(fullPath('remote', e));
+    } else if (act === 'props') await openProperties('remote');
+    else if (act === 'find') openFind();
   }));
 
   // --- tažení za hranu sloupce ---
@@ -2934,14 +2990,14 @@ function applyConnState() {
   if (info && info.status === 'connecting') {
     badge.className = 'badge wait';
     badge.textContent = `Obnovuji spojení k ${info.host}…`;
-    renderToolbar();
+    renderActionButtons();
     return;
   }
   badge.className = `badge ${state.connected ? 'on' : 'off'}`;
   badge.textContent = state.connected && info
     ? `${info.protocol.toUpperCase()} · ${info.username ? `${info.username}@` : ''}${info.host}`
     : 'Odpojeno';
-  renderToolbar();
+  renderActionButtons();
 }
 
 /* ------------------------------------------------------- editor relace */
@@ -4104,58 +4160,49 @@ $('#btn-refresh').addEventListener('click', async () => {
 });
 $('#btn-sync').addEventListener('click', openSync);
 
-/**
- * Akce v liště.
- *
- * Míří na panel, ve kterém se stojí — kromě nahrání a stažení, kde je směr
- * dán tlačítkem samotným. Kdyby se ptaly na aktivní panel i ty, znamenalo by
- * jedno tlačítko pokaždé něco jiného.
- */
-$('#tb-upload').addEventListener('click', () => transfer('local', 'remote'));
-$('#tb-download').addEventListener('click', () => transfer('remote', 'local'));
-$('#tb-transfer-opts').addEventListener('click', () => openTransferOptions(state.activeSide));
-$('#tb-newfolder').addEventListener('click', () => mkdirIn(state.activeSide));
-$('#tb-rename').addEventListener('click', () => {
-  const side = state.activeSide;
-  if (selectedEntries(side).length > 1) openBulkRename(side); else renameSelected(side);
-});
-$('#tb-edit').addEventListener('click', () => {
-  const sel = selectedEntries('remote');
-  if (sel.length === 1) editRemote(fullPath('remote', sel[0]));
-});
-$('#tb-delete').addEventListener('click', () => deleteSelected(state.activeSide));
-$('#tb-find').addEventListener('click', openFind);
+/* Nástroje platné pro obě strany; akce nad soubory mají lišty panelů. */
 $('#tb-watch').addEventListener('click', openWatch);
 $('#tb-terminal').addEventListener('click', openConsole);
 
 /**
  * Co zrovna nejde, je zašedlé.
  *
- * Volá se odevšad, kde se může změnit výběr, strana nebo spojení — je to
- * pár řádků a levnější než hlídat, které z toho se zrovna změnilo.
+ * Každý panel se řídí svým vlastním výběrem — proto je to průchod přes obě
+ * strany, ne pohled na tu aktivní. Volá se odevšad, kde se může výběr nebo
+ * spojení změnit; je to pár řádků a levnější než hlídat, co přesně se stalo.
  */
-function renderToolbar() {
-  const side = state.activeSide;
+function renderActionButtons() {
   const conn = state.connected;
-  const zde = selectedEntries(side).length;
-  const naServeru = selectedEntries('remote');
-  // Lokálně jde pracovat i bez spojení; na serveru bez něj není s čím.
-  const jdeUpravovat = side === 'local' || conn;
-  const nastav = (sel, ok) => { $(sel).disabled = !ok; };
+  const nastav = (sel, ok, kde = document) => { const el = $(sel, kde); if (el) el.disabled = !ok; };
 
-  nastav('#tb-upload', conn && selectedEntries('local').length > 0);
-  nastav('#tb-download', conn && naServeru.length > 0);
-  nastav('#tb-transfer-opts', conn && zde > 0);
-  nastav('#tb-newfolder', jdeUpravovat);
-  nastav('#tb-rename', jdeUpravovat && zde > 0);
-  nastav('#tb-edit', conn && naServeru.length === 1 && naServeru[0].type !== 'd');
-  nastav('#tb-delete', jdeUpravovat && zde > 0);
+  // Horní lišta platí pro obě strany naráz, takže rozhoduje jen spojení.
   nastav('#btn-compare', conn);
   nastav('#btn-syncbrowse', conn);
-  nastav('#tb-find', conn);
   nastav('#btn-sync', conn);
   nastav('#tb-watch', conn);
   nastav('#tb-terminal', conn);
+
+  for (const side of ['local', 'remote']) {
+    const pane = panes[side];
+    const vybrano = selectedEntries(side).length;
+    // Lokálně jde pracovat i bez spojení; na serveru bez něj není s čím,
+    // a přenášet se nedá ani z jedné strany.
+    const jdeUpravovat = side === 'local' || conn;
+
+    nastav('[data-act=copy]', conn && vybrano > 0, pane);
+    nastav('[data-act=move]', conn && vybrano > 0, pane);
+    nastav('[data-act=xfer-opts]', conn && vybrano > 0, pane);
+    nastav('[data-act=mkdir]', jdeUpravovat, pane);
+    nastav('[data-act=rename]', jdeUpravovat && vybrano > 0, pane);
+    nastav('[data-act=delete]', jdeUpravovat && vybrano > 0, pane);
+    nastav('[data-act=terminal]', jdeUpravovat, pane);
+    nastav('[data-act=reveal]', vybrano > 0 || Boolean(state[side].path), pane);
+    nastav('[data-act=find]', conn, pane);
+    nastav('[data-act=props]', conn && vybrano > 0, pane);
+
+    const [prvni] = selectedEntries(side);
+    nastav('[data-act=edit]', conn && vybrano === 1 && prvni && prvni.type !== 'd', pane);
+  }
 }
 
 /* --------------------------------------------------------------- start */
