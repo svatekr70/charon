@@ -26,8 +26,9 @@ const check = (label, got, want) => {
 };
 const truthy = (label, v) => check(label, Boolean(v), true);
 
-const FIXTURES = path.join(__dirname, 'fixtures');
-const HOST_KEY = path.join(FIXTURES, 'host_key');
+const { hostKeyPath } = require('./fixtures');
+
+const HOST_KEY = hostKeyPath();
 
 async function main() {
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'ftpcli-safety-'));

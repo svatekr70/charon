@@ -16,6 +16,7 @@ const path = require('path');
 const { startTestServer } = require('./sftp-server');
 const { SftpAdapter } = require('../src/main/adapters/sftp');
 const { FtpAdapter } = require('../src/main/adapters/ftp');
+const { hostKeyPath } = require('./fixtures');
 const {
   shellQuote, expand, findPrompts, runLocal,
 } = require('../src/main/commands');
@@ -109,7 +110,7 @@ async function main() {
   // ================================================= spuštění na serveru
   const serverRoot = path.join(tmp, 'server');
   await fsp.mkdir(path.join(serverRoot, 'www'), { recursive: true });
-  const server = await startTestServer({ root: serverRoot, hostKeyPath: path.join(__dirname, 'fixtures', 'host_key') });
+  const server = await startTestServer({ root: serverRoot, hostKeyPath: hostKeyPath() });
   const adapter = new SftpAdapter();
   await adapter.connect(
     { host: '127.0.0.1', port: server.port, username: 'test', password: 'test' },

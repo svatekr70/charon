@@ -28,7 +28,7 @@ const check = (label, got, want) => {
 };
 const truthy = (label, v) => check(label, Boolean(v), true);
 
-const FIXTURES = path.join(__dirname, 'fixtures');
+const { certPaths } = require('./fixtures');
 const quiet = { trace() {}, debug() {}, info() {}, warn() {}, error() {}, child() { return this; } };
 
 function freePort() {
@@ -49,8 +49,8 @@ async function startFtps(root, certName) {
     pasv_url: '127.0.0.1',
     anonymous: false,
     tls: {
-      key: fs.readFileSync(path.join(FIXTURES, `${certName}_key.pem`)),
-      cert: fs.readFileSync(path.join(FIXTURES, `${certName}_cert.pem`)),
+      key: fs.readFileSync(certPaths(certName).key),
+      cert: fs.readFileSync(certPaths(certName).cert),
     },
     log: quiet,
   });
@@ -66,7 +66,7 @@ async function startFtps(root, certName) {
 
 function opensslFingerprint(certName) {
   return execFileSync('openssl', [
-    'x509', '-in', path.join(FIXTURES, `${certName}_cert.pem`), '-noout', '-fingerprint', '-sha256',
+    'x509', '-in', certPaths(certName).cert, '-noout', '-fingerprint', '-sha256',
   ], { encoding: 'utf8' }).trim().split('=')[1];
 }
 

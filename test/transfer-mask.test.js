@@ -19,6 +19,7 @@ const { SftpAdapter } = require('../src/main/adapters/sftp');
 const { compare, walkLocal, walkRemote } = require('../src/main/sync');
 const { expandLocal, expandRemote } = require('../src/main/browse');
 const FileMask = require('../src/common/mask');
+const { hostKeyPath } = require('./fixtures');
 
 let pass = 0;
 let fail = 0;
@@ -68,7 +69,7 @@ async function main() {
   await buildTree(localRoot);
   await fsp.mkdir(path.join(serverRoot, 'www'), { recursive: true });
 
-  const server = await startTestServer({ root: serverRoot, hostKeyPath: path.join(__dirname, 'fixtures', 'host_key') });
+  const server = await startTestServer({ root: serverRoot, hostKeyPath: hostKeyPath() });
   const adapter = new SftpAdapter();
   await adapter.connect(
     { host: '127.0.0.1', port: server.port, username: 'test', password: 'test' },

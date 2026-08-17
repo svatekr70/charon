@@ -18,6 +18,7 @@ const path = require('path');
 
 const { FtpSrv } = require('ftp-srv');
 const { startTestServer } = require('../test/sftp-server');
+const { hostKeyPath } = require('../test/fixtures');
 
 const ROOT = path.join(__dirname, '..', 'test-data');
 const SFTP_PORT = 2222;
@@ -50,7 +51,7 @@ async function startSftp() {
 
   const s = await startTestServer({
     root,
-    hostKeyPath: path.join(__dirname, '..', 'test', 'fixtures', 'host_key'),
+    hostKeyPath: hostKeyPath(),
     user: USER,
     password: PASSWORD,
     port: SFTP_PORT,

@@ -17,6 +17,7 @@ const path = require('path');
 const { startTestServer } = require('./sftp-server');
 const { SftpAdapter } = require('../src/main/adapters/sftp');
 const { Session } = require('../src/main/session');
+const { hostKeyPath } = require('./fixtures');
 
 let pass = 0;
 let fail = 0;
@@ -58,9 +59,9 @@ async function main() {
   await fsp.mkdir(path.join(serverRoot, 'www'), { recursive: true });
   await fsp.writeFile(path.join(serverRoot, 'www', 'a.txt'), 'obsah');
 
-  const hostKeyPath = path.join(__dirname, 'fixtures', 'host_key');
+  const klicServeru = hostKeyPath();
   const port = await freePort();
-  const start = () => startTestServer({ root: serverRoot, hostKeyPath, port });
+  const start = () => startTestServer({ root: serverRoot, hostKeyPath: klicServeru, port });
 
   let server = await start();
 

@@ -16,6 +16,7 @@ const path = require('path');
 const { startTestServer } = require('./sftp-server');
 const { SftpAdapter } = require('../src/main/adapters/sftp');
 const { FtpAdapter } = require('../src/main/adapters/ftp');
+const { hostKeyPath } = require('./fixtures');
 
 let pass = 0;
 let fail = 0;
@@ -38,7 +39,7 @@ async function main() {
   await fsp.writeFile(path.join(www, 'index.php'), '<?php echo "ahoj";');
   await fsp.chmod(path.join(www, 'index.php'), 0o640);
 
-  const server = await startTestServer({ root: serverRoot, hostKeyPath: path.join(__dirname, 'fixtures', 'host_key') });
+  const server = await startTestServer({ root: serverRoot, hostKeyPath: hostKeyPath() });
   const a = new SftpAdapter();
   await a.connect(
     { host: '127.0.0.1', port: server.port, username: 'test', password: 'test' },

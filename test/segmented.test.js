@@ -19,6 +19,7 @@ const { startTestServer } = require('./sftp-server');
 const { SftpAdapter } = require('../src/main/adapters/sftp');
 const { AdapterPool } = require('../src/main/pool');
 const { TransferQueue } = require('../src/main/queue');
+const { hostKeyPath } = require('./fixtures');
 
 let pass = 0;
 let fail = 0;
@@ -54,7 +55,7 @@ async function main() {
   await fsp.writeFile(path.join(www, 'velky.bin'), data);
   const otiskZdroje = await otisk(path.join(www, 'velky.bin'));
 
-  const server = await startTestServer({ root: serverRoot, hostKeyPath: path.join(__dirname, 'fixtures', 'host_key') });
+  const server = await startTestServer({ root: serverRoot, hostKeyPath: hostKeyPath() });
   const otevri = async () => {
     const a = new SftpAdapter();
     await a.connect(

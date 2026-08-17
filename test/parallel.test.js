@@ -19,6 +19,7 @@ const { SftpAdapter } = require('../src/main/adapters/sftp');
 const { TransferQueue } = require('../src/main/queue');
 const { AdapterPool } = require('../src/main/pool');
 const { RateLimiter, ThrottleStream, makeThrottle } = require('../src/main/throttle');
+const { hostKeyPath } = require('./fixtures');
 
 let pass = 0;
 let fail = 0;
@@ -159,7 +160,7 @@ async function main() {
   truthy('selhání prvního spojení se ohlásí', deadErr && /nedostupné/.test(deadErr.message));
 
   // ======================================= 3. souběžnost proti serveru
-  const server = await startTestServer({ root: serverRoot, hostKeyPath: path.join(__dirname, 'fixtures', 'host_key') });
+  const server = await startTestServer({ root: serverRoot, hostKeyPath: hostKeyPath() });
   const cfg = { host: '127.0.0.1', port: server.port, username: 'test', password: 'test' };
 
   const realPool = new AdapterPool({
@@ -268,7 +269,7 @@ async function main() {
   // Testovací server proto umí odpovídat se zpožděním jako vzdálený stroj.
   const slow = await startTestServer({
     root: serverRoot,
-    hostKeyPath: path.join(__dirname, 'fixtures', 'host_key'),
+    hostKeyPath: hostKeyPath(),
     latencyMs: 20,
   });
   const slowCfg = { host: '127.0.0.1', port: slow.port, username: 'test', password: 'test' };

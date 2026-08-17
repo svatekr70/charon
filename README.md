@@ -1142,10 +1142,13 @@ npm test
 - `test/ftps.test.js` — FTPS: potvrzování otisku certifikátu a hlavně kontrola,
   že se při nepotvrzeném certifikátu heslo na server vůbec neodešle
 
-Testovací SSH klíč a certifikáty v `test/fixtures/` slouží **jen k testům** —
-servery běží na `127.0.0.1` na náhodném portu a nikam se nepublikují. Jsou
-uložené v repozitáři, takže se testy dají spustit bez příprav; k ničemu mimo
-tenhle stroj nepatří.
+Testovací SSH klíč a certifikáty pro servery si testy **vyrábějí samy**
+(`test/fixtures.js`, přes systémové `ssh-keygen` a `openssl`) a odkládají je
+do dočasné složky. V repozitáři žádný privátní klíč není: i když by šlo o klíč
+k serveru na `127.0.0.1`, který žije jen po dobu jednoho testu, hlídače
+tajemství to hlásí, lidi to mate a jednou by se podle toho vzoru uložil klíč,
+na kterém záleží. Vyrobení stojí kolem desetiny vteřiny a příště se použije
+znovu; smazat je jde kdykoliv, udělají se nové.
 
 ## Licence
 

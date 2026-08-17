@@ -14,6 +14,7 @@ const { FtpAdapter } = require('../src/main/adapters/ftp');
 const { remoteChmod } = require('../src/main/browse');
 const { isDir } = require('../src/main/session');
 const perms = require('../src/main/perms');
+const { hostKeyPath } = require('./fixtures');
 
 let pass = 0;
 let fail = 0;
@@ -37,7 +38,7 @@ async function main() {
   await fsp.writeFile(path.join(root, 'www', 'a.txt'), 'obsah a');
   await fsp.writeFile(path.join(root, 'www', 'sub', 'b.txt'), 'obsah b');
 
-  const server = await startTestServer({ root, hostKeyPath: path.join(__dirname, 'fixtures', 'host_key') });
+  const server = await startTestServer({ root, hostKeyPath: hostKeyPath() });
   const adapter = new SftpAdapter();
   await adapter.connect(
     { host: '127.0.0.1', port: server.port, username: 'test', password: 'test' },

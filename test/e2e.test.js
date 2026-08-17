@@ -15,6 +15,7 @@ const { startTestServer } = require('./sftp-server');
 const { SftpAdapter } = require('../src/main/adapters/sftp');
 const { TransferQueue } = require('../src/main/queue');
 const { compare } = require('../src/main/sync');
+const { hostKeyPath } = require('./fixtures');
 
 let pass = 0;
 let fail = 0;
@@ -36,7 +37,7 @@ async function main() {
 
   const server = await startTestServer({
     root: serverRoot,
-    hostKeyPath: path.join(__dirname, 'fixtures', 'host_key'),
+    hostKeyPath: hostKeyPath(),
   });
   console.log(`Testovací SFTP server na portu ${server.port}, kořen ${serverRoot}\n`);
 
