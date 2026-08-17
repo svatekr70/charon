@@ -444,7 +444,10 @@ details[open] > summary { color: var(--accent); }
 /* -------------------------------------------------------- nastavení */
 /* Voleb je tolik, že v jednom svitku se nedalo nic najít. Nalevo seznam
    oddílů, napravo jeden po druhém — jako v systémových nastaveních. */
-.set-layout { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 16px; }
+/* Sloupec s volbami má pevnou šířku: dialog se jinak roztahuje podle obsahu
+   právě otevřeného oddílu a přepínání karet okno pokaždé přeskládá. Na úzkém
+   okně se smrskne, aby nepřetekl. */
+.set-layout { display: grid; grid-template-columns: 150px minmax(0, 540px); gap: 16px; }
 .set-nav { display: flex; flex-direction: column; gap: 2px; }
 .set-tab {
   text-align: left; background: none; border: none; border-radius: 6px;
@@ -454,6 +457,32 @@ details[open] > summary { color: var(--accent); }
 .set-tab.on { background: var(--accent-2); color: var(--on-accent); }
 .set-body { min-width: 0; max-height: 62vh; overflow: auto; padding-right: 4px; }
 .set-panel > h3:first-child, .set-body h3:first-child { margin-top: 0; }
+
+/* Nastavení se stejnou měrou čte a klikne, takže rozhoduje délka řádku
+   a to, co k čemu patří.
+
+   Šířka není kosmetika: dialog se roztahuje podle nejdelšího řádku, takže
+   bez omezení vysvětlivek naroste přes celou obrazovku a text má přes sto
+   znaků na řádek. Omezením prózy se srovná i okno.
+
+   Vysvětlivka patří k prvku nad sebou — proto sedí těsně pod ním a odstup
+   je až za ní, mezi skupinami. Dřív byla mezera všude stejná a nedalo se
+   poznat, co ke které volbě je. */
+.set-panel > label,
+.set-panel > .grid,
+.set-panel > .row { max-width: 520px; }
+.set-body .muted {
+  max-width: 68ch;
+  font-size: 11.5px;
+  line-height: 1.5;
+  margin: 0 0 16px;
+}
+.set-body label { margin-bottom: 5px; }
+.set-body label.check { margin-bottom: 7px; }
+.set-body h3 { margin: 20px 0 7px; }
+/* Do pole pro počet spojení se vejdou dvě číslice; přes půl dialogu působí,
+   že se čeká něco delšího. */
+.set-body input[type=number] { max-width: 180px; }
 
 /* ------------------------------------------------------ správce relací */
 .sites-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 12px; }

@@ -685,6 +685,9 @@ function buildMenu() {
       submenu: [
         { label: 'O aplikaci Charon', click: () => send('menu', 'about') },
         { type: 'separator' },
+        // Systémová zkratka pro nastavení; bez ní se do něj jde jen myší.
+        { label: 'Nastavení…', accelerator: 'Cmd+,', click: () => send('menu', 'settings') },
+        { type: 'separator' },
         { role: 'services' }, { type: 'separator' },
         { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
         { type: 'separator' }, { role: 'quit' },

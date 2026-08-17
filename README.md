@@ -608,6 +608,7 @@ a nad 5 MB se odloží stranou.
 | `⌘I` | Vlastnosti vybraného |
 | `⌘O` | Připojit v nové záložce |
 | `⌘W` | Zavřít záložku |
+| `⌘,` | Nastavení |
 
 ## Editace se zpětným nahráním
 
@@ -749,6 +750,18 @@ proto se v dialogu při stahování ani nenabízejí. Když je server nastavit n
 k položce.
 
 Změna práv u otevřené relace platí hned, na příští připojení se nečeká.
+
+## Nastavení
+
+`⌘,` nebo ozubené kolo vpravo v liště. Vlevo oddíly, vpravo jeden po druhém —
+jako v systémových nastaveních.
+
+Uvnitř oddílu má každá skupina voleb nadpis a pod ovládacím prvkem sedí
+vysvětlivka: proč to tam je a co se stane, když se to přehodí. Vysvětlivky mají
+omezenou šířku na zhruba sedmdesát znaků a menší písmo, aby nepřebily to, co se
+ovládá — a hlavně proto, že dialog se roztahuje podle nejdelšího řádku, takže
+neomezená próza dřív rozjela okno přes celou obrazovku. Sloupec s volbami má
+pevnou šířku, jinak se okno při každém přepnutí karty přeskládá.
 
 ## Textový režim
 

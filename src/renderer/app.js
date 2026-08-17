@@ -3649,7 +3649,7 @@ for (const [klic, sel] of [['nastaveni', '#dlg-settings'], ['relace', '#dlg-site
 const setDlg = $('#dlg-settings');
 const setForm = $('form', setDlg);
 
-$('#btn-settings').addEventListener('click', () => {
+function openSettings() {
   const f = setForm.elements;
   const cur = { ...DEFAULT_SETTINGS, ...state.settings };
   f.editor.value = cur.editor;
@@ -3685,7 +3685,8 @@ $('#btn-settings').addEventListener('click', () => {
   f.colGroup.checked = Boolean(cur.colGroup);
   refreshPermUi();
   setDlg.showModal();
-});
+}
+$('#btn-settings').addEventListener('click', openSettings);
 
 setDlg.addEventListener('close', async () => {
   if (setDlg.returnValue !== 'save') return;
@@ -4051,6 +4052,7 @@ window.api.onMenu(async (cmd) => {
   else if (cmd === 'zoomout') changeZoom(-0.1);
   else if (cmd === 'zoomreset') changeZoom(0, true);
   else if (cmd === 'about') openAbout();
+  else if (cmd === 'settings') openSettings();
   else if (cmd === 'refresh') $('#btn-refresh').click();
 });
 

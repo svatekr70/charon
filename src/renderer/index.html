@@ -362,6 +362,7 @@
         </nav>
         <div class="set-body">
         <section class="set-panel" data-tab="prenosy">
+      <h3>Souběžnost a rychlost</h3>
       <div class="grid">
         <label>Souběžných přenosů
           <input name="maxConcurrent" type="number" min="1" max="16" />
@@ -375,6 +376,7 @@
         když další nepovolí, Charon se sám zmenší a napíše to do stavového řádku.
         Limit rychlosti platí dohromady pro všechny přenosy.</p>
 
+      <h3>Dočasný název</h3>
       <label class="check"><input type="checkbox" name="tempName" /> Přenášet přes dočasný název <code>.filepart</code></label>
       <label>Dočasný název až od velikosti (kB)
         <input name="tempNameMinKb" type="number" min="0" placeholder="0 = vždy" />
@@ -384,6 +386,7 @@
         přejmenování navíc na soubor — u tisíců drobných souborů přes pomalou linku se vyplatí
         nastavit spodní hranici.</p>
 
+      <h3>Velké soubory</h3>
       <div class="grid">
         <label>Víc spojení na jeden soubor od (MB)
           <input name="segmentedMinMb" type="number" min="0" max="10000" placeholder="0 = vypnuto" />
@@ -399,7 +402,8 @@
         navazovat</b> — dokud nedojede, je v souboru díra a z velikosti se nic nepozná —
         a nejde dohromady s textovým režimem.</p>
 
-      <label>Textový režim — maska souborů
+      <h3>Textový režim</h3>
+      <label>Maska souborů
         <input name="textMask" spellcheck="false" placeholder="prázdné = vypnuto; např. *.php; *.txt; *.sh" />
       </label>
       <div class="grid">
@@ -416,7 +420,8 @@
         zase na Windows. <b>Navazování přerušeného přenosu se v textovém režimu nepoužije</b> —
         po převodu neodpovídá počet bajtů zdroji, takže dopisovat od poloviny nejde.</p>
 
-      <label>Před přepsáním souboru
+      <h3>Před přepsáním souboru</h3>
+      <label>Co udělat s původním
         <select name="backupOverwritten">
           <option value="none">nic (rovnou přepsat)</option>
           <option value="suffix">odložit vedle jako .bak-datum</option>
@@ -428,7 +433,8 @@
         Záloha se dělá jen při plném nahrání; při navazování rozepsaného přenosu ne,
         tam už je stejně přepsáno.</p>
 
-      <label>Práva nahraných souborů
+      <h3>Práva nahraných souborů</h3>
+      <label>Práva
         <select name="uploadPerms">
           <option value="keep">Nechat na serveru</option>
           <option value="fixed">Nastavit pevně</option>
@@ -454,6 +460,7 @@
         v <em>Přenést s volbami</em>. Dědí se po polích: co níž zůstane prázdné, platí
         odtud.</p>
 
+      <h3>Maska</h3>
       <label>Výchozí maska pro přenosy
         <input name="transferMask" placeholder="prázdné = přenášet vše" spellcheck="false" />
       </label>
@@ -463,12 +470,14 @@
 
               </section>
         <section class="set-panel" data-tab="editor" hidden>
+      <h3>Výchozí editor</h3>
       <label>Editor pro vzdálené soubory
         <input name="editor" placeholder="např. Visual Studio Code (prázdné = výchozí aplikace)" />
       </label>
       <p class="muted">Název aplikace tak, jak se jmenuje ve složce Aplikace. Soubor se stáhne do dočasné složky, otevře v editoru a při každém uložení se sám nahraje zpět.</p>
 
-      <label>Podle přípony
+      <h3>Podle přípony</h3>
+      <label>Pravidla
         <input name="editorRules" spellcheck="false"
                placeholder="*.png; *.jpg = Preview | *.sql = TablePlus" />
       </label>
@@ -478,8 +487,8 @@
 
               </section>
         <section class="set-panel" data-tab="vzhled" hidden>
-      <h3>Vzhled</h3>
-      <label>Motiv
+      <h3>Motiv</h3>
+      <label>Motiv okna
         <select name="theme">
           <option value="system">Podle systému</option>
           <option value="light">Světlý</option>
@@ -489,10 +498,12 @@
       <p class="muted">„Podle systému" se přepne sám, když si Mac v noci přepne na tmavý
         vzhled. Volba platí i pro systémové dialogy a rám okna.</p>
 
+      <h3>Lišta</h3>
       <label class="check"><input type="checkbox" name="toolbarLabels" /> Popisky u tlačítek v liště</label>
       <p class="muted">Bez popisků je lišta kratší a akce prozradí tooltip. S popiskem je
         u nejčastějších tlačítek i slovo — jméno akce se tím nemění, jen přibude text.</p>
 
+      <h3>Výpisy složek</h3>
       <label class="check"><input type="checkbox" name="cacheListings" /> Pamatovat si výpisy navštívených složek</label>
       <p class="muted">Návrat do složky, kterou jste právě viděli, je pak okamžitý — na pomalé
         lince je to nejvíc znát. Záznam platí půl minuty a jakýkoliv zápis na server ho zahodí;
@@ -543,6 +554,7 @@
 
               </section>
         <section class="set-panel" data-tab="sit" hidden>
+      <h3>Spojení</h3>
       <div class="grid">
         <label>Keepalive (s)
           <input name="keepaliveSeconds" type="number" min="0" max="600" placeholder="10" />
@@ -555,6 +567,7 @@
         Některé servery ho totiž nesnesou a spojení kvůli němu naopak zavřou —
         když vám relace padá právě při nečinnosti, zkuste nulu.</p>
 
+      <h3>Diagnostika</h3>
       <label class="check"><input type="checkbox" name="sessionLog" /> Zaznamenávat komunikaci se serverem do souboru</label>
       <div class="row">
         <button type="button" id="btn-log-reveal">Otevřít složku se záznamy</button>
