@@ -104,9 +104,24 @@ pro přenos jinam. Do Aplikací se přetáhne z DMG, nebo příkazem:
 cp -R dist/mac-arm64/Charon.app /Applications/
 ```
 
-Aplikace je podepsaná jen ad-hoc, bez vývojářského certifikátu. Sestavená
-lokálně se otevře bez řečí; kdybys DMG poslal na jiný Mac, Gatekeeper ho
-zastaví a bude potřeba **pravý klik → Otevřít**.
+Aplikace je podepsaná jen sama sebou (ad-hoc); notarizovat ji bez vývojářského
+certifikátu za 99 dolarů ročně nejde. Sestavená lokálně se otevře bez řečí,
+protože si nenese karanténu. **Stažené DMG** — i vlastní, z GitHubu — ji ale
+dostane a systém první spuštění zastaví hláškou, že se Applu nepodařilo ověřit,
+jestli aplikace neobsahuje malware. Odklepne se to v **Nastavení systému →
+Soukromí a zabezpečení → Přesto otevřít**, nebo natvrdo:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Charon.app
+```
+
+Schválení platí trvale; přetažení do Aplikací Gatekeeper neřeší vůbec, blokuje
+se jen spuštění.
+
+Podpis dělá `build/adhoc-sign.js` po sestavení balíčku. Bez něj zůstane
+podepsaná jen hlavní binárka od linkeru, `_CodeSignature` celého balíčku chybí
+a stažená aplikace se ohlásí jako **poškozená** — což vypadá na rozbitý soubor,
+ale je to jen neplatný podpis, který se nedá odklepnout.
 
 Data (relace, nastavení) jsou společná pro oba způsoby spuštění, takže se
 o nic nepřijde přepnutím mezi nimi.
