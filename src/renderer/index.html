@@ -195,14 +195,14 @@
 
       <details id="site-perms">
         <summary>Práva nahraných souborů — jen pro tuhle relaci</summary>
+        <label>Práva
+          <select name="uploadPerms">
+            <option value="keep">Nechat na serveru</option>
+            <option value="fixed">Nastavit pevně</option>
+            <option value="preserve">Zachovat lokální (u složek pevně)</option>
+          </select>
+        </label>
         <div class="grid">
-          <label>Práva
-            <select name="uploadPerms">
-              <option value="keep">Nechat na serveru</option>
-              <option value="fixed">Nastavit pevně</option>
-              <option value="preserve">Zachovat lokální (u složek pevně)</option>
-            </select>
-          </label>
           <label>Práva souborů (osmičkově)
             <input name="uploadFileMode" spellcheck="false" />
           </label>
@@ -862,7 +862,7 @@
       </label>
       <p class="muted">Výluka za svislítkem má přednost. Na složky platí jen výluky —
         maska <code>*.php</code> tedy nezakáže vstup do podsložek.</p>
-      <div class="grid" id="xfer-perms">
+      <div id="xfer-perms">
         <label>Práva nahraných souborů
           <select name="uploadPerms">
             <option value="keep">Nechat na serveru</option>
@@ -870,13 +870,15 @@
             <option value="preserve">Zachovat lokální (u složek pevně)</option>
           </select>
         </label>
-        <label>Práva souborů (osmičkově)
-          <input name="uploadFileMode" spellcheck="false" />
-        </label>
+        <div class="grid">
+          <label>Práva souborů (osmičkově)
+            <input name="uploadFileMode" spellcheck="false" />
+          </label>
+        </div>
+        <label class="check" data-role="dirx-row"><input type="checkbox" name="uploadDirExec" /> Složkám přidat procházení</label>
+        <p class="muted" data-role="dirx-note"></p>
+        <p class="muted" id="xfer-perms-note"></p>
       </div>
-      <label class="check" data-role="dirx-row"><input type="checkbox" name="uploadDirExec" /> Složkám přidat procházení</label>
-      <p class="muted" data-role="dirx-note"></p>
-      <p class="muted" id="xfer-perms-note"></p>
       <label class="check"><input type="checkbox" name="onlyNewer" /> Jen nové a změněné soubory</label>
       <p class="muted">Porovná se velikost a čas změny s druhou stranou; shodné a starší
         soubory se do fronty vůbec nedostanou. Když se stav cíle nedá zjistit, soubor se

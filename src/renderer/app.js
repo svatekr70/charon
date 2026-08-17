@@ -784,7 +784,6 @@ function openTransferOptions(from) {
   // rozhoduje lokální systém a pole by jen mátla.
   const nahravani = from === 'local';
   $('#xfer-perms').hidden = !nahravani;
-  $('#xfer-perms-note').hidden = !nahravani;
   if (nahravani) renderXferPermsNote();
   refreshPermUi();
   renderProfileOptions();
