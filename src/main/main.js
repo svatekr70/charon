@@ -71,7 +71,8 @@ let settings = {
   // Písmo a přiblížení okna.
   uiFont: '', monoFont: '', listFontSize: 12.5, zoom: 1,
   // Odkud se dozvíme o nové verzi. Prázdné = nekontroluje se nic.
-  updateRepo: '',
+  // Domovský repozitář projektu; kontrola aktualizací tak funguje bez vyplňování.
+  updateRepo: 'svatekr70/charon',
   checkUpdatesOnStart: false,
 };
 

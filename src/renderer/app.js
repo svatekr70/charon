@@ -86,7 +86,7 @@ const DEFAULT_SETTINGS = {
   transferProfiles: [],
   segmentedMinMb: 0, segmentCount: 4,
   uiFont: '', monoFont: '', listFontSize: 12.5, zoom: 1,
-  updateRepo: '', checkUpdatesOnStart: false,
+  updateRepo: 'svatekr70/charon', checkUpdatesOnStart: false,
   cacheListings: true,
   theme: 'system', toolbarLabels: false,
   uploadPerms: 'keep', uploadFileMode: '644', uploadDirMode: '755',
