@@ -1083,8 +1083,12 @@ function registerIpc() {
   });
 
   handle('remote:applyProperties', async ({
-    sid, paths, fileMode, dirMode, owner, group, recursive,
+    sid, paths, fileMode, dirExec, owner, group, recursive,
   }) => {
+    // Složky se odvozují od práv souborů: buď stejná, nebo se spouštěním
+    // navíc. Dvě nezávislá čísla se ve výsledku stejně vždycky lišila jen
+    // tímhle bitem.
+    const dirMode = dirExec ? perms.addExec(fileMode) : fileMode;
     const a = browseOf(sid);
     const stats = { files: 0, dirs: 0, owners: 0 };
 

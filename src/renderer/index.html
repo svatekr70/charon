@@ -711,10 +711,13 @@
 
       <h3>Práva</h3>
       <div class="grid">
-        <label>Soubory (osmičkově)<input id="props-file-mode" placeholder="beze změny" spellcheck="false" /></label>
-        <label>Složky (osmičkově)<input id="props-dir-mode" placeholder="beze změny" spellcheck="false" /></label>
+        <label id="props-mode-label">Práva (osmičkově)<input id="props-file-mode" placeholder="beze změny" spellcheck="false" /></label>
       </div>
-      <label class="check"><input type="checkbox" id="props-recursive" /> Použít i na obsah složek</label>
+      <label class="check" id="props-dirx-row" hidden><input type="checkbox" id="props-dir-exec" checked /> Složkám přidat spouštění</label>
+      <p class="muted" id="props-dirx-note" hidden></p>
+      <label class="check" id="props-recursive-row"><input type="checkbox" id="props-recursive" /> Použít i na podsložky a soubory uvnitř</label>
+      <p class="muted" id="props-recursive-note" hidden>Práva dostane vybraná složka a s ní
+        všechno, co je v ní — jedním zadáním celý strom.</p>
 
       <h3>Vlastník a skupina</h3>
       <p class="muted">SFTP zná jen čísla (UID a GID), ne jména.</p>

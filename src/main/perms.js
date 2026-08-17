@@ -47,6 +47,22 @@ function parseMode(text) {
 }
 
 /**
+ * Práva pro složku odvozená od práv souboru — `chmod +X`.
+ *
+ * Spouštění u složky znamená „smí se do ní vstoupit". Kdyby dostala 644 jako
+ * soubory v ní, nedostane se k nim nikdo, a to bývá výsledek hromadného
+ * `chmod -R 644` na celý web. Přidává se tam, kde je čtení: 644 → 755,
+ * 640 → 750, 664 → 775.
+ *
+ * @param {number|null} mode práva souboru
+ * @returns {number|null}
+ */
+function addExec(mode) {
+  if (mode === null || mode === undefined) return null;
+  return mode | ((mode & 0o444) >> 2);
+}
+
+/**
  * Jaká práva dát nahranému souboru.
  *
  * @param {object} settings nastavení aplikace
@@ -90,5 +106,5 @@ async function apply(adapter, remotePath, mode) {
 }
 
 module.exports = {
-  parseMode, resolve, fileMode, dirMode, apply,
+  parseMode, resolve, addExec, fileMode, dirMode, apply,
 };

@@ -196,7 +196,10 @@ class FtpAdapter {
     const size = await this.client.size(remotePath);
     let mtime = null;
     try { mtime = (await this.client.lastMod(remotePath)).getTime(); } catch { /* MDTM nepodporováno */ }
-    return { size, mtime, isDirectory: false, mode: null };
+    // Typ schválně netvrdíme: `SIZE` na složce jeden server odmítne a druhý
+    // na ni vrátí číslo, takže „soubor" by byla lež. Kdo to potřebuje vědět,
+    // zeptá se výpisu (`isDir()` v session.js).
+    return { size, mtime, isDirectory: null, mode: null };
   }
 
   async exists(remotePath) {

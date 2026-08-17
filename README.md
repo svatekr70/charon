@@ -716,6 +716,17 @@ jen práva složek a práva souborů nechat na obecném nastavení; jeden přeno
 může přebít jen práva souborů. Dialog *Přenést s volbami* pod poli píše, co
 zrovna platí a odkud to je.
 
+Ve **Vlastnostech** vybrané položky na serveru se zadává jedno číslo — práva
+souborů — a složky se od něj odvozují volbou **Složkám přidat spouštění**:
+644 → 755, 640 → 750, 664 → 775. Spouštění u složky znamená „smí se do ní
+vstoupit", takže hromadné `chmod -R 644` na celý web je přesně ten způsob, jak
+si ho zamknout; proto je volba zapnutá. Se zaškrtnutím **Použít i na podsložky
+a soubory uvnitř** se tím jedním zadáním přenastaví celý strom.
+
+Pole pro složky se ukazuje jen tam, kde má co dělat: u vybraného souboru
+žádná volba pro složky není, u samotné složky bez rekurze je zadané číslo
+přímo její.
+
 Osmičkový zápis je všude doprovázený zaškrtávací mřížkou (vlastník / skupina /
 ostatní × čtení / zápis / spouštění) a pod ní zápisem, jak ho ukazuje panel —
 `rwxr-xr-x`. Obojí je tatáž hodnota: kdo umí `755`, napíše ho, kdo ne, zaškrtá.

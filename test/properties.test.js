@@ -12,6 +12,8 @@ const { startTestServer } = require('./sftp-server');
 const { SftpAdapter } = require('../src/main/adapters/sftp');
 const { FtpAdapter } = require('../src/main/adapters/ftp');
 const { remoteChmod } = require('../src/main/browse');
+const { isDir } = require('../src/main/session');
+const perms = require('../src/main/perms');
 
 let pass = 0;
 let fail = 0;
@@ -52,10 +54,26 @@ async function main() {
   check('práva složky', modeOf(path.join(root, 'www')), 0o750);
   check('práva podsložky', modeOf(path.join(root, 'www', 'sub')), 0o750);
 
+  // Práva složek se zadávají jedním číslem pro soubory a volbou „přidat
+  // spouštění"; jinak by hromadné 644 zamklo celý web.
+  check('644 pro soubory dá složkám 755', perms.addExec(0o644).toString(8), '755');
+  check('640 dá 750', perms.addExec(0o640).toString(8), '750');
+  check('664 dá 775', perms.addExec(0o664).toString(8), '775');
+  check('kde není čtení, nepřibude ani spouštění', perms.addExec(0o600).toString(8), '700');
+  check('co spouštění má, se nemění', perms.addExec(0o755).toString(8), '755');
+  check('prázdno zůstane prázdnem', perms.addExec(null), null);
+
+  const odvozene = await remoteChmod(adapter, '/www', {
+    fileMode: 0o644, dirMode: perms.addExec(0o644),
+  });
+  check('jedním zadáním se přenastaví celý strom', [odvozene.files, odvozene.dirs], [2, 2]);
+  check('soubory mají 644', modeOf(path.join(root, 'www', 'a.txt')), 0o644);
+  check('a složky 755', modeOf(path.join(root, 'www', 'sub')), 0o755);
+
   // Jen soubory, složky beze změny.
   await remoteChmod(adapter, '/www', { fileMode: 0o600, dirMode: null });
   check('jen soubory se změnily', modeOf(path.join(root, 'www', 'a.txt')), 0o600);
-  check('složka zůstala', modeOf(path.join(root, 'www')), 0o750);
+  check('složka zůstala', modeOf(path.join(root, 'www')), 0o755);
 
   // Na samotný soubor bez rekurze.
   await remoteChmod(adapter, '/www/a.txt', { fileMode: 0o644, dirMode: 0o755 });
@@ -93,6 +111,27 @@ async function main() {
   let ftpErr = null;
   try { ftp.chown('/x', 1, 1); } catch (e) { ftpErr = e; }
   truthy('změnu vlastníka FTP neumí a řekne to', ftpErr && /jen SFTP/.test(ftpErr.message));
+
+  // Typ položky se u FTP nesmí brát ze `SIZE`: jeden server ho na složce
+  // odmítne, druhý vrátí číslo — a složka by pak byla „soubor", takže by se
+  // jí nastavovala práva souborů. Rozhoduje výpis nadřazené složky.
+  const jakoFtp = {
+    stat: async () => ({ size: 96, mtime: null, isDirectory: null, mode: null }),
+    list: async (p) => {
+      if (p === '/www') return [{ name: 'assets', type: 'd' }, { name: 'index.php', type: 'f' }];
+      if (p === '/www/assets' || p === '/') return [];
+      throw new Error('550 Not a directory');
+    },
+  };
+  check('složka se pozná z výpisu, ne ze SIZE', await isDir(jakoFtp, '/www/assets'), true);
+  check('soubor zůstane souborem', await isDir(jakoFtp, '/www/index.php'), false);
+  check('na kořen výpis nadřazené složky není, zkusí se vstoupit', await isDir(jakoFtp, '/'), true);
+
+  const jakoSftp = {
+    stat: async () => ({ isDirectory: true }),
+    list: async () => { throw new Error('výpis se u SFTP volat nemá'); },
+  };
+  check('u SFTP stačí stat', await isDir(jakoSftp, '/cokoliv'), true);
 
   await adapter.disconnect();
   await server.close();

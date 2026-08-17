@@ -1304,6 +1304,50 @@ async function openWorkspace(ws) {
 
 const propsDlg = $('#dlg-props');
 let propsPaths = [];
+/** Co je ve výběru — podle toho se ukazují pole práv. */
+let propsKinds = { soubory: 0, slozky: 0 };
+
+/**
+ * Podoba oddílu s právy podle toho, co je vybrané.
+ *
+ * Zadává se jedno číslo — práva souborů. Složky se od něj odvozují
+ * spouštěním navíc, protože právě tím se od souborů liší; dvě nezávislá
+ * pole vedle sebe nutila psát 644 a 755 pokaždé znovu.
+ *
+ * Volba spouštění dává smysl jen tam, kde jsou složky i soubory. Když je
+ * vybraná jen složka a nejde se dovnitř, je zadané číslo přímo její.
+ */
+function renderPropsPerms() {
+  const { soubory, slozky } = propsKinds;
+  const doVnitrku = slozky > 0 && $('#props-recursive').checked;
+  const odvozovat = slozky > 0 && (doVnitrku || soubory > 0);
+  const input = $('#props-file-mode');
+
+  $('#props-recursive-row').hidden = slozky === 0;
+  $('#props-recursive-note').hidden = !doVnitrku;
+  $('#props-dirx-row').hidden = !odvozovat;
+  $('#props-dirx-note').hidden = !odvozovat;
+  input.closest('label').firstChild.textContent = odvozovat
+    ? 'Práva souborů (osmičkově)'
+    : 'Práva (osmičkově)';
+
+  if (odvozovat) {
+    const zadano = /^[0-7]{3,4}$/.test(input.value.trim()) ? parseInt(input.value.trim(), 8) : null;
+    const prox = $('#props-dir-exec').checked;
+    const slozkam = zadano === null ? null : (prox ? zadano | ((zadano & 0o444) >> 2) : zadano);
+    if (slozkam === null) {
+      $('#props-dirx-note').textContent = prox
+        ? 'Složky dostanou totéž se spouštěním navíc — bez něj by do nich nešlo vstoupit.'
+        : 'Složky dostanou stejná práva jako soubory.';
+    } else if (prox) {
+      $('#props-dirx-note').textContent = `Složky dostanou ${slozkam.toString(8)} — spouštění tam, kde je čtení.`;
+    } else {
+      $('#props-dirx-note').textContent = `Složky dostanou ${slozkam.toString(8)} stejně jako soubory`
+        + `${slozkam & 0o111 ? '.' : ' — do takové složky se nedá vstoupit.'}`;
+    }
+  }
+  refreshPermGrids();
+}
 
 async function openProperties(side) {
   if (side !== 'remote') return setLog('warn', 'Vlastnosti umí zatím jen serverová strana');
@@ -1338,12 +1382,14 @@ async function openProperties(side) {
   const first = data.items[0];
   const dirs = data.items.filter((i) => i.isDir);
   const files = data.items.filter((i) => !i.isDir);
-  $('#props-file-mode').value = files.length ? fmtPerm(files[0].mode) : '';
-  $('#props-dir-mode').value = dirs.length ? fmtPerm(dirs[0].mode) : '';
+  // Předvyplní se soubor; u samotné složky její vlastní práva, ať je co upravit.
+  $('#props-file-mode').value = fmtPerm((files[0] || dirs[0] || {}).mode);
+  $('#props-dir-exec').checked = true;
   $('#props-owner').value = first && first.owner !== null ? first.owner : '';
   $('#props-group').value = first && first.group !== null ? first.group : '';
   $('#props-recursive').checked = false;
-  refreshPermGrids();
+  propsKinds = { soubory: files.length, slozky: dirs.length };
+  renderPropsPerms();
   $('#props-hash').style.display = 'none';
   $('#props-hash').textContent = '';
 
@@ -1363,14 +1409,17 @@ function parseMode(value) {
   return parseInt(v, 8);
 }
 
+// Obsah složek se řídí právy souborů, takže se s tou volbou pole objeví.
+$('#props-recursive').addEventListener('change', renderPropsPerms);
+$('#props-dir-exec').addEventListener('change', renderPropsPerms);
+$('#props-file-mode').addEventListener('input', renderPropsPerms);
+
 $('#props-close').addEventListener('click', () => propsDlg.close());
 
 $('#props-apply').addEventListener('click', async () => {
   let fileMode;
-  let dirMode;
   try {
     fileMode = parseMode($('#props-file-mode').value);
-    dirMode = parseMode($('#props-dir-mode').value);
   } catch (err) {
     setLog('error', err.message);
     return;
@@ -1380,14 +1429,17 @@ $('#props-apply').addEventListener('click', async () => {
   const group = $('#props-group').value.trim() === '' ? null : Number($('#props-group').value);
   const recursive = $('#props-recursive').checked;
 
-  if (fileMode === null && dirMode === null && owner === null && group === null) {
+  if (fileMode === null && owner === null && group === null) {
     setLog('warn', 'Není co změnit — všechna pole jsou prázdná');
     return;
   }
   if (recursive && !window.confirm('Změna práv se použije i na všechen obsah vybraných složek. Pokračovat?')) return;
 
+  // Práva složek dopočítá hlavní proces — okno posílá jen volbu, ať je
+  // odvození na jednom místě a dá se otestovat.
+  const dirExec = !$('#props-dirx-row').hidden && $('#props-dir-exec').checked;
   const res = await call(window.api.remote.applyProperties(sid(), {
-    paths: propsPaths, fileMode, dirMode, owner, group, recursive,
+    paths: propsPaths, fileMode, dirExec, owner, group, recursive,
   }));
   if (!res) return;
   setLog('ok', `Změněno: ${res.files} ${plural(res.files, 'soubor', 'soubory', 'souborů')}`
@@ -3483,7 +3535,7 @@ function refreshPermGrids() {
 // Všechna místa, kde se práva zadávají: vlastnosti souboru a tři úrovně
 // nastavení práv pro nahrávání.
 for (const sel of [
-  '#props-file-mode', '#props-dir-mode',
+  '#props-file-mode',
   '#dlg-settings [name=uploadFileMode]', '#dlg-settings [name=uploadDirMode]',
   '#dlg-site [name=uploadFileMode]', '#dlg-site [name=uploadDirMode]',
   '#dlg-xfer [name=uploadFileMode]', '#dlg-xfer [name=uploadDirMode]',
