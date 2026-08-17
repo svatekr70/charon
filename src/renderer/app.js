@@ -779,9 +779,8 @@ function openTransferOptions(from) {
   xferForm.elements.target.value = to === 'local' ? state.local.path : state.remote.path;
   xferForm.elements.mask.value = state.settings.transferMask || '';
   xferForm.elements.onlyNewer.checked = false;
-  xferForm.elements.uploadPerms.value = '';
-  xferForm.elements.uploadFileMode.value = '';
-  xferForm.elements.uploadDirMode.value = '';
+  const zdedena = slozPrava(activeSite() || {}, state.settings);
+  for (const klic of PRAVA_POLE) xferForm.elements[klic].value = zdedena[klic];
   // Práva se nastavují jen tomu, co na server teprve poletí; při stahování
   // rozhoduje lokální systém a pole by jen mátla.
   const nahravani = from === 'local';
@@ -802,28 +801,48 @@ function openTransferOptions(from) {
  * Dědění po polích je popsané u `perms.resolve()` v hlavním procesu, který
  * o právech rozhoduje; tady se jen počítá, co uživateli napsat.
  */
-function zdedenaPrava() {
-  const site = activeSite() || {};
+const PRAVA_POLE = ['uploadPerms', 'uploadFileMode', 'uploadDirMode'];
+
+/**
+ * Práva, která platí bez zásahu.
+ *
+ * Zrcadlí `perms.resolve()` z hlavního procesu, který o právech rozhoduje;
+ * tady slouží jen k předvyplnění dialogů. Volbu „podle vyšší úrovně" nikde
+ * nenabízíme — vyšší úroveň se rovnou opíše a kdo ji chce přebít, přepíše
+ * hodnotu.
+ */
+function slozPrava(...vrstvy) {
   const vyplneno = (h) => h !== undefined && h !== null && String(h).trim() !== '';
-  const prvni = (klic) => [site, state.settings].find((v) => vyplneno(v[klic]))?.[klic] || '';
+  const prvni = (klic) => (vrstvy.find((v) => v && vyplneno(v[klic])) || {})[klic] || '';
   return {
     uploadPerms: prvni('uploadPerms') || 'keep',
-    uploadFileMode: prvni('uploadFileMode'),
-    uploadDirMode: prvni('uploadDirMode'),
-    zRelace: vyplneno(site.uploadPerms) || vyplneno(site.uploadFileMode) || vyplneno(site.uploadDirMode),
+    uploadFileMode: prvni('uploadFileMode').trim(),
+    uploadDirMode: prvni('uploadDirMode').trim(),
   };
 }
 
-/** Napíše pod pole, co se stane, když zůstanou prázdná. */
+/**
+ * Co z formuláře je odchylka od zděděného.
+ *
+ * Hodnota shodná s vyšší úrovní se neukládá — jinak by se v relaci zakonzervovalo
+ * to, co v ní jen bylo předvyplněné, a pozdější změna nastavení aplikace by se
+ * do ní nepropsala.
+ */
+function odchylkaPrav(pole, zaklad) {
+  const out = {};
+  for (const klic of PRAVA_POLE) {
+    const v = pole[klic].value.trim();
+    out[klic] = v === zaklad[klic] ? '' : v;
+  }
+  return out;
+}
+
+/** Odkud se pole v dialogu přenosu vzala. */
 function renderXferPermsNote() {
-  const p = zdedenaPrava();
-  const popis = {
-    keep: 'nechat na serveru',
-    fixed: `nastavit pevně (soubory ${p.uploadFileMode || '—'}, složky ${p.uploadDirMode || '—'})`,
-    preserve: `zachovat lokální (složky ${p.uploadDirMode || '—'})`,
-  }[p.uploadPerms] || p.uploadPerms;
-  const odkud = p.zRelace ? 'z relace' : 'z nastavení aplikace';
-  $('#xfer-perms-note').textContent = `Prázdné pole nechává platit, co je nastavené jinde — teď ${odkud}: ${popis}.`;
+  const site = activeSite();
+  const zRelace = site && PRAVA_POLE.some((k) => String(site[k] || '').trim());
+  $('#xfer-perms-note').textContent = `Předvyplněno ${zRelace ? `podle relace ${site.name}` : 'podle nastavení aplikace'}`
+    + ' — změna platí jen pro tenhle přenos.';
 }
 
 /** Naplní výběr profilů; vybraný zůstává, dokud existuje. */
@@ -847,9 +866,8 @@ xferForm.elements.profile.addEventListener('change', () => {
   if (!p) return;
   xferForm.elements.mask.value = p.mask || '';
   xferForm.elements.onlyNewer.checked = Boolean(p.onlyNewer);
-  xferForm.elements.uploadPerms.value = p.uploadPerms || '';
-  xferForm.elements.uploadFileMode.value = p.uploadFileMode || '';
-  xferForm.elements.uploadDirMode.value = p.uploadDirMode || '';
+  const zdedena = slozPrava(p, activeSite() || {}, state.settings);
+  for (const klic of PRAVA_POLE) xferForm.elements[klic].value = zdedena[klic];
   xferForm.elements.profileName.value = p.name;
   refreshPermGrids();
 });
@@ -866,9 +884,7 @@ $('#xfer-save-profile').addEventListener('click', async () => {
     name,
     mask: xferForm.elements.mask.value.trim(),
     onlyNewer: xferForm.elements.onlyNewer.checked,
-    uploadPerms: xferForm.elements.uploadPerms.value,
-    uploadFileMode: xferForm.elements.uploadFileMode.value.trim(),
-    uploadDirMode: xferForm.elements.uploadDirMode.value.trim(),
+    ...odchylkaPrav(xferForm.elements, slozPrava(activeSite() || {}, state.settings)),
     textMask: state.settings.textMask || '',
     serverEol: state.settings.serverEol || 'lf',
   };
@@ -904,13 +920,9 @@ xferDlg.addEventListener('close', async () => {
     const saved = await call(window.api.settings.set({ transferMask: mask }));
     if (saved) applySettings(saved);
   }
-  // Co je vyplněné v dialogu, platí; profil je jen předvyplnění, které si
-  // uživatel mohl přepsat.
-  const prava = {
-    uploadPerms: xferForm.elements.uploadPerms.value,
-    uploadFileMode: xferForm.elements.uploadFileMode.value.trim(),
-    uploadDirMode: xferForm.elements.uploadDirMode.value.trim(),
-  };
+  // Posílá se jen to, čím se dialog liší od zděděného; zbytek dořeší
+  // kaskáda v hlavním procesu.
+  const prava = odchylkaPrav(xferForm.elements, slozPrava(activeSite() || {}, state.settings));
   await transfer(from, from === 'local' ? 'remote' : 'local', {
     mask,
     target: xferForm.elements.target.value.trim(),
@@ -2853,9 +2865,10 @@ function openSiteDialog(site) {
   f.timeShiftMinutes.value = site?.timeShiftMinutes || '';
   f.color.value = site?.color || '';
   f.note.value = site?.note || '';
-  f.uploadPerms.value = site?.uploadPerms || '';
-  f.uploadFileMode.value = site?.uploadFileMode || '';
-  f.uploadDirMode.value = site?.uploadDirMode || '';
+  // Relace nemá volbu „podle nastavení" — hodnoty se opíšou a co se změní,
+  // je přebití. Uloží se pak jen ta odchylka.
+  const zdedena = slozPrava(site || {}, state.settings);
+  for (const klic of PRAVA_POLE) f[klic].value = zdedena[klic];
   f.tunnelHost.value = site?.tunnelHost || '';
   f.tunnelPort.value = site?.tunnelPort || 22;
   f.tunnelUsername.value = site?.tunnelUsername || '';
@@ -2911,9 +2924,7 @@ siteDlg.addEventListener('close', async () => {
     timeShiftMinutes: Number(f.timeShiftMinutes.value) || 0,
     color: f.color.value,
     note: f.note.value.trim(),
-    uploadPerms: f.uploadPerms.value,
-    uploadFileMode: f.uploadFileMode.value.trim(),
-    uploadDirMode: f.uploadDirMode.value.trim(),
+    ...odchylkaPrav(f, slozPrava(state.settings)),
     tunnelHost: f.tunnelHost.value.trim(),
     tunnelPort: Number(f.tunnelPort.value) || 22,
     tunnelUsername: f.tunnelUsername.value.trim(),
