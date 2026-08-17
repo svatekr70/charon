@@ -147,6 +147,31 @@ která relace je vybraná. Samostatná tlačítka *Připojit*, *＋ Relace*,
 **Duplikovat** vytvoří kopii včetně hesla — kopie se skládá v hlavním procesu,
 protože do okna se hesla nikdy neposílají.
 
+## Lišta
+
+Zleva relace, pak přenos (nahrát, stáhnout, přenést s volbami), operace se
+soubory (nová složka, přejmenovat, editor, smazat), panely (obnovit, porovnat,
+souběžné procházení, hledání) a nástroje (synchronizace, hlídání složky,
+příkazy na serveru). Vpravo nastavení.
+
+Akce míří na panel, ve kterém stojíte — kromě nahrání a stažení, kde je směr
+dán tlačítkem; kdyby se i ta ptala na aktivní panel, znamenalo by jedno
+tlačítko pokaždé něco jiného. Co zrovna nejde, je zašedlé: bez spojení
+zůstane přístupná jen lokální strana, bez výběru jen „nová složka".
+
+Ikony jsou kreslené jako maska ve stejném zápisu jako ikony souborů
+(rám 16 × 16, tah 1,4, kulaté rohy) — barvu berou z písma tlačítka, takže
+v tmavém motivu zesvětlají a na zvýrazněném tlačítku zbělají samy. Tvary
+jsou v `src/renderer/icons.css` jako proměnné `--i-*`, tlačítko si o ně
+řekne přes `class="ibtn" data-icon="…"`. Kde se tvar opakuje (ozubené kolo,
+okno terminálu), jen se přejmenuje, nekreslí podruhé.
+
+Popisky u tlačítek jsou vypnuté a akci prozradí tooltip; zapnout je jde
+v **Nastavení → Vzhled**. Do lišty se schválně nedostaly věci, které se dělají
+jednou za čas (import z WinSCP, vysypání koše, vlastnosti), a věci vázané na
+jednu stranu (zpět, vpřed, výš, domů, filtr, záložky cest) — ty zůstávají
+v hlavičkách panelů.
+
 ## Záložky
 
 Každé připojení má vlastní záložku a **nic se mezi nimi nesdílí** — vlastní

@@ -36,6 +36,55 @@
   --i-key: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Ccircle cx='5.2' cy='8' r='2.9'/%3E%3Cpath d='M8.1 8h6.2M12.6 8v2.4M10.4 8v2'/%3E%3C/svg%3E");
 }
 
+/* ------------------------------------------------------------ ikony akcí
+   Tlačítka v liště, v hlavičkách panelů a u fronty. Kreslí se stejně jako
+   ikony souborů — rám 16x16, tah 1.4, kulaté rohy — a stejnou cestou:
+   maskou, aby se barva vzala z tlačítka a nemusely existovat dvě sady.
+   Kde se tvar opakuje (ozubené kolo, okno terminálu), jen se přejmenuje. */
+:root {
+  --i-sites: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='2.3' y='2.7' width='11.4' height='4.4' rx='1.1'/%3E%3Crect x='2.3' y='8.9' width='11.4' height='4.4' rx='1.1'/%3E%3Cpath d='M4.7 4.9h1.8M4.7 11.1h1.8'/%3E%3C/svg%3E");
+  --i-connect: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M6.2 2.2v3.2M9.8 2.2v3.2'/%3E%3Cpath d='M4.6 5.4h6.8v2.3a3.4 3.4 0 0 1-6.8 0z'/%3E%3Cpath d='M8 11.1v2.7'/%3E%3C/svg%3E");
+  --i-disconnect: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M6.5 9.5l-1.1 1.1a2.3 2.3 0 0 1-3.2-3.2l1.1-1.1'/%3E%3Cpath d='M9.5 6.5l1.1-1.1a2.3 2.3 0 0 1 3.2 3.2l-1.1 1.1'/%3E%3Cpath d='M2.6 2.6l10.8 10.8'/%3E%3C/svg%3E");
+  --i-newtab: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='1.8' y='3.2' width='12.4' height='9.6' rx='1.2'/%3E%3Cpath d='M8 6.2v3.6M6.2 8h3.6'/%3E%3C/svg%3E");
+  --i-workspaces: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M8 1.9l6 2.9-6 2.9-6-2.9z'/%3E%3Cpath d='M2.4 8.2L8 10.9l5.6-2.7'/%3E%3Cpath d='M2.4 11.3L8 14l5.6-2.7'/%3E%3C/svg%3E");
+  --i-openurl: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='6.1'/%3E%3Cpath d='M1.9 8h12.2'/%3E%3Cpath d='M8 1.9c1.7 1.7 2.6 3.8 2.6 6.1S9.7 12.4 8 14.1C6.3 12.4 5.4 10.3 5.4 8s.9-4.4 2.6-6.1z'/%3E%3C/svg%3E");
+  --i-import: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='1.7' y='2.4' width='12.6' height='3.4' rx='.8'/%3E%3Cpath d='M2.9 5.8h10.2v6.9c0 .6-.4 1-1 1H3.9c-.6 0-1-.4-1-1z'/%3E%3Cpath d='M8 7.6v3.4M6.3 9.3L8 11l1.7-1.7'/%3E%3C/svg%3E");
+  --i-upload: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M8 11V2.9'/%3E%3Cpath d='M5.1 5.8L8 2.9l2.9 2.9'/%3E%3Cpath d='M2.6 13.4h10.8'/%3E%3C/svg%3E");
+  --i-download: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M8 2.9V11'/%3E%3Cpath d='M5.1 8.1L8 11l2.9-2.9'/%3E%3Cpath d='M2.6 13.4h10.8'/%3E%3C/svg%3E");
+  --i-move: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M8 11V2.9'/%3E%3Cpath d='M5.1 5.8L8 2.9l2.9 2.9'/%3E%3Cpath d='M2.6 13.4h2.8M9.4 13.4h4'/%3E%3C/svg%3E");
+  --i-transfer-opts: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.4 4.4h11.2M2.4 8h11.2M2.4 11.6h11.2'/%3E%3Ccircle cx='5.4' cy='4.4' r='1.5'/%3E%3Ccircle cx='10.2' cy='8' r='1.5'/%3E%3Ccircle cx='6.6' cy='11.6' r='1.5'/%3E%3C/svg%3E");
+  --i-queue: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.4 4.2h6.4M2.4 7.4h6.4M2.4 10.6h4.2'/%3E%3Cpath d='M11.6 5.2v6.6'/%3E%3Cpath d='M9.4 9.6l2.2 2.2 2.2-2.2'/%3E%3C/svg%3E");
+  --i-pause: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M6.2 3.4v9.2M9.8 3.4v9.2'/%3E%3C/svg%3E");
+  --i-resume: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M5.2 3.3l7.2 4.7-7.2 4.7z'/%3E%3C/svg%3E");
+  --i-cancel: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='5.9'/%3E%3Cpath d='M6 6l4 4M10 6l-4 4'/%3E%3C/svg%3E");
+  --i-newfolder: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M1.7 4.3c0-.6.5-1 1-1h3.4l1.5 1.7h6.7c.6 0 1 .4 1 1v6.4c0 .6-.4 1-1 1H2.7c-.5 0-1-.4-1-1z'/%3E%3Cpath d='M8 8v3.4M6.3 9.7h3.4'/%3E%3C/svg%3E");
+  --i-rename: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='1.8' y='4.2' width='12.4' height='7.6' rx='1.1'/%3E%3Cpath d='M6.4 6.4h3.2M8 6.4v3.2M6.4 9.6h3.2'/%3E%3C/svg%3E");
+  --i-edit: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M11.1 2.4l2.5 2.5-7.7 7.7-3.3.8.8-3.3z'/%3E%3Cpath d='M9.4 4.1l2.5 2.5'/%3E%3C/svg%3E");
+  --i-duplicate: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='2.2' y='2.2' width='7.8' height='7.8' rx='1.1'/%3E%3Crect x='6' y='6' width='7.8' height='7.8' rx='1.1'/%3E%3C/svg%3E");
+  --i-delete: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.6 4.4h10.8'/%3E%3Cpath d='M6.4 4.4V2.8h3.2v1.6'/%3E%3Cpath d='M4 4.4l.7 8.2c0 .5.5.9 1 .9h4.6c.5 0 1-.4 1-.9l.7-8.2'/%3E%3Cpath d='M6.8 6.9v4.2M9.2 6.9v4.2'/%3E%3C/svg%3E");
+  --i-properties: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='6.1'/%3E%3Cpath d='M8 7.4v3.6'/%3E%3Cpath d='M8 4.9v.8'/%3E%3C/svg%3E");
+  --i-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.6 5.6V3.6c0-.6.4-1 1-1h2M10.4 2.6h2c.6 0 1 .4 1 1v2M13.4 10.4v2c0 .6-.4 1-1 1h-2M5.6 13.4h-2c-.6 0-1-.4-1-1v-2'/%3E%3Cpath d='M8 5.9v4.2M6.2 6.9l3.6 2.2M9.8 6.9l-3.6 2.2'/%3E%3C/svg%3E");
+  --i-refresh: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M13.3 8a5.3 5.3 0 1 1-1.7-3.9'/%3E%3Cpath d='M13.5 2.2v3.5H10'/%3E%3C/svg%3E");
+  --i-compare: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.6 2.8v10.4M13.4 2.8v10.4'/%3E%3Cpath d='M5.2 6.3h5.6M9 4.7l1.8 1.6-1.8 1.6'/%3E%3Cpath d='M10.8 10.3H5.2M7 8.7l-1.8 1.6 1.8 1.6'/%3E%3C/svg%3E");
+  --i-syncbrowse: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.6 2.8v10.4M13.4 2.8v10.4'/%3E%3Cpath d='M5.2 6.3h5.6M9 4.7l1.8 1.6-1.8 1.6'/%3E%3Cpath d='M5.2 10.3h5.6M9 8.7l1.8 1.6-1.8 1.6'/%3E%3C/svg%3E");
+  --i-filter: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.2 3.4h11.6L9.4 8.6v4.3l-2.8 1.3V8.6z'/%3E%3C/svg%3E");
+  --i-find: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='4.4'/%3E%3Cpath d='M10.2 10.2l3.4 3.4'/%3E%3C/svg%3E");
+  --i-hidden: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M1.4 8s2.5-4.2 6.6-4.2S14.6 8 14.6 8s-2.5 4.2-6.6 4.2S1.4 8 1.4 8z'/%3E%3Ccircle cx='8' cy='8' r='1.9'/%3E%3C/svg%3E");
+  --i-bookmark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M3.8 3.4c0-.6.4-1 1-1h6.4c.6 0 1 .4 1 1v10.2L8 10.7l-4.2 2.9z'/%3E%3C/svg%3E");
+  --i-home: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.2 7.4L8 2.4l5.8 5'/%3E%3Cpath d='M3.8 8.6v4.2c0 .4.3.7.7.7h7c.4 0 .7-.3.7-.7V8.6'/%3E%3C/svg%3E");
+  --i-levelup: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.8 2.8h10.4'/%3E%3Cpath d='M8 13.4V5.8M4.6 9.2L8 5.8l3.4 3.4'/%3E%3C/svg%3E");
+  --i-back: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M13.2 8H3.4M7.5 3.9L3.4 8l4.1 4.1'/%3E%3C/svg%3E");
+  --i-fwd: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.8 8h9.8M8.5 3.9L12.6 8l-4.1 4.1'/%3E%3C/svg%3E");
+  --i-sync: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M1.7 4.3c0-.6.5-1 1-1h3.4l1.5 1.7h6.7c.6 0 1 .4 1 1v6.4c0 .6-.4 1-1 1H2.7c-.5 0-1-.4-1-1z'/%3E %3Cpath d='M5.4 9.1h5.2L9 7.5M10.6 11.5H5.4L7 13.1'/%3E%3C/svg%3E");
+  --i-watch: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M1.7 4.3c0-.6.5-1 1-1h3.4l1.5 1.7h6.7c.6 0 1 .4 1 1v6.4c0 .6-.4 1-1 1H2.7c-.5 0-1-.4-1-1z'/%3E %3Cpath d='M6.5 11.9a2.2 2.2 0 0 1 3 0M4.7 10.1a4.7 4.7 0 0 1 6.6 0'/%3E%3Cpath d='M8 13.1h.01'/%3E%3C/svg%3E");
+  --i-terminal: var(--i-exe);
+  --i-shell: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M13.4 8.6v3.8c0 .6-.4 1-1 1H3.6c-.6 0-1-.4-1-1V3.6c0-.6.4-1 1-1h3.8'/%3E%3Cpath d='M9.8 2.6h3.6v3.6'/%3E%3Cpath d='M13.4 2.6L8.6 7.4'/%3E%3C/svg%3E");
+  --i-commands: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='1.7' y='2.6' width='12.6' height='10.8' rx='1.2'/%3E%3Cpath d='M6.3 5.6l4 2.4-4 2.4z'/%3E%3C/svg%3E");
+  --i-emptytrash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.6 5.4h10.8'/%3E%3Cpath d='M6.4 5.4V3.8h3.2v1.6'/%3E%3Cpath d='M4 5.4l.7 7.2c0 .5.5.9 1 .9h4.6c.5 0 1-.4 1-.9l.7-7.2'/%3E%3Cpath d='M6.8 1.9l-.8 1.4M9.2 1.9l.8 1.4'/%3E%3C/svg%3E");
+  --i-settings: var(--i-config);
+  --i-caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M4.6 6.4L8 9.8l3.4-3.4'/%3E%3C/svg%3E");
+}
+
 /* Ikona je pozadí prázdného pseudoprvku; vlastní tvar dělá maska, takže
    `--icon-color` obarví cokoliv. */
 .row .name::before {
@@ -82,3 +131,63 @@
 
 /* Na zaostřeném výběru zbělá i ikona — jinak by na plné barvě zanikla. */
 .list:focus-within .row.sel .name::before { --icon-color: var(--on-accent); }
+
+/* ---------------------------------------------------- tlačítka s ikonou
+   Barvu bere ikona z písma tlačítka (`currentColor`), takže zesvětlá
+   v tmavém motivu a zbělá na zvýrazněném tlačítku sama od sebe. */
+.ibtn::before {
+  content: '';
+  display: inline-block;
+  width: 16px; height: 16px;
+  vertical-align: -3px;
+  background: var(--icon-color, currentColor);
+  mask: var(--icon, var(--i-file)) center / 16px 16px no-repeat;
+}
+
+/* Přiřazení tvaru akci. Jméno v `data-icon` je jméno proměnné. */
+[data-icon="sites"]::before { --icon: var(--i-sites); }
+[data-icon="connect"]::before { --icon: var(--i-connect); }
+[data-icon="disconnect"]::before { --icon: var(--i-disconnect); }
+[data-icon="newtab"]::before { --icon: var(--i-newtab); }
+[data-icon="workspaces"]::before { --icon: var(--i-workspaces); }
+[data-icon="openurl"]::before { --icon: var(--i-openurl); }
+[data-icon="import"]::before { --icon: var(--i-import); }
+
+[data-icon="upload"]::before { --icon: var(--i-upload); }
+[data-icon="download"]::before { --icon: var(--i-download); }
+[data-icon="move"]::before { --icon: var(--i-move); }
+[data-icon="transfer-opts"]::before { --icon: var(--i-transfer-opts); }
+[data-icon="queue"]::before { --icon: var(--i-queue); }
+[data-icon="pause"]::before { --icon: var(--i-pause); }
+[data-icon="resume"]::before { --icon: var(--i-resume); }
+[data-icon="cancel"]::before { --icon: var(--i-cancel); }
+
+[data-icon="newfolder"]::before { --icon: var(--i-newfolder); }
+[data-icon="rename"]::before { --icon: var(--i-rename); }
+[data-icon="edit"]::before { --icon: var(--i-edit); }
+[data-icon="duplicate"]::before { --icon: var(--i-duplicate); }
+[data-icon="delete"]::before { --icon: var(--i-delete); }
+[data-icon="properties"]::before { --icon: var(--i-properties); }
+[data-icon="mask"]::before { --icon: var(--i-mask); }
+[data-icon="emptytrash"]::before { --icon: var(--i-emptytrash); }
+
+[data-icon="refresh"]::before { --icon: var(--i-refresh); }
+[data-icon="compare"]::before { --icon: var(--i-compare); }
+[data-icon="syncbrowse"]::before { --icon: var(--i-syncbrowse); }
+[data-icon="filter"]::before { --icon: var(--i-filter); }
+[data-icon="find"]::before { --icon: var(--i-find); }
+[data-icon="hidden"]::before { --icon: var(--i-hidden); }
+[data-icon="bookmark"]::before { --icon: var(--i-bookmark); }
+[data-icon="home"]::before { --icon: var(--i-home); }
+[data-icon="levelup"]::before { --icon: var(--i-levelup); }
+[data-icon="back"]::before { --icon: var(--i-back); }
+[data-icon="fwd"]::before { --icon: var(--i-fwd); }
+[data-icon="browse"]::before { --icon: var(--i-folder); }
+
+[data-icon="sync"]::before { --icon: var(--i-sync); }
+[data-icon="watch"]::before { --icon: var(--i-watch); }
+[data-icon="terminal"]::before { --icon: var(--i-terminal); }
+[data-icon="shell"]::before { --icon: var(--i-shell); }
+[data-icon="commands"]::before { --icon: var(--i-commands); }
+[data-icon="settings"]::before { --icon: var(--i-settings); }
+[data-icon="caret"]::before { --icon: var(--i-caret); }

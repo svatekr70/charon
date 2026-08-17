@@ -19,13 +19,30 @@
       <select id="site-select" hidden><option value="">— vyberte relaci —</option></select>
       <!-- Připojení, zakládání, úpravy i mazání relací obstará správce relací;
            v liště proto stačí jediné tlačítko, které ho otevře. -->
-      <button id="btn-sites" class="primary" title="Relace (⌘K)"><span id="btn-sites-label">Relace</span> …</button>
+      <button id="btn-sites" class="primary ibtn" data-icon="sites" title="Relace (⌘K)"><span id="btn-sites-label">Relace</span><span class="ibtn caret" data-icon="caret"></span></button>
+      <span class="sep"></span>
+
+      <!-- Akce míří na panel, ve kterém stojíte; co zrovna nejde, je zašedlé.
+           Popisky se zapínají v Nastavení → Vzhled, jinak je nese tooltip. -->
+      <button id="tb-upload" class="ibtn" data-icon="upload" title="Nahrát na server (F5)" aria-label="Nahrát na server"><span class="lbl">Nahrát</span></button>
+      <button id="tb-download" class="ibtn" data-icon="download" title="Stáhnout (F5)" aria-label="Stáhnout"><span class="lbl">Stáhnout</span></button>
+      <button id="tb-transfer-opts" class="ibtn" data-icon="transfer-opts" title="Přenést s volbami (⇧F5)" aria-label="Přenést s volbami"></button>
+      <span class="sep"></span>
+      <button id="tb-newfolder" class="ibtn" data-icon="newfolder" title="Nová složka (F7)" aria-label="Nová složka"></button>
+      <button id="tb-rename" class="ibtn" data-icon="rename" title="Přejmenovat (F2)" aria-label="Přejmenovat"></button>
+      <button id="tb-edit" class="ibtn" data-icon="edit" title="Upravit v editoru (F4)" aria-label="Upravit v editoru"></button>
+      <button id="tb-delete" class="ibtn" data-icon="delete" title="Smazat (⌫)" aria-label="Smazat"></button>
+      <span class="sep"></span>
+      <button id="btn-refresh" class="ibtn" data-icon="refresh" title="Obnovit oba panely (⌘R)" aria-label="Obnovit"><span class="lbl">Obnovit</span></button>
+      <button id="btn-compare" class="ibtn" data-icon="compare" title="Zvýraznit rozdíly mezi panely (⌘D)" aria-label="Porovnat panely"><span class="lbl">Porovnat</span></button>
+      <button id="btn-syncbrowse" class="ibtn" data-icon="syncbrowse" title="Souběžné procházení (⌘Y)" aria-label="Souběžné procházení"></button>
+      <button id="tb-find" class="ibtn" data-icon="find" title="Najít soubory na serveru (⌘F)" aria-label="Najít na serveru"></button>
+      <span class="sep"></span>
+      <button id="btn-sync" class="ibtn" data-icon="sync" title="Synchronizace adresářů (⌘S)" aria-label="Synchronizovat adresáře"><span class="lbl">Synchronizovat</span></button>
+      <button id="tb-watch" class="ibtn" data-icon="watch" title="Hlídat složku a nahrávat změny (⌘U)" aria-label="Hlídat složku"></button>
+      <button id="tb-terminal" class="ibtn" data-icon="terminal" title="Příkazy na serveru (⌘L)" aria-label="Příkazy na serveru"></button>
       <span class="spacer"></span>
-      <button id="btn-refresh" title="Obnovit oba panely (⌘R)">⟳</button>
-      <button id="btn-compare" title="Zvýraznit rozdíly mezi panely (⌘D)">⇄ Porovnat</button>
-      <button id="btn-syncbrowse" title="Synchronizované procházení (⌘Y)">⇉</button>
-      <button id="btn-sync" title="Synchronizace adresářů (⌘S)">⇅ Sync</button>
-      <button id="btn-settings" title="Nastavení">⚙</button>
+      <button id="btn-settings" class="ibtn" data-icon="settings" title="Nastavení" aria-label="Nastavení"></button>
     </header>
 
     <nav class="tabs" id="tabs" hidden></nav>
@@ -34,13 +51,13 @@
       <section class="pane" id="pane-local" data-side="local">
         <div class="pane-head">
           <span class="pane-title">Lokální</span>
-          <button class="icon" data-act="back" title="Zpět (⌘[)" disabled>‹</button>
-          <button class="icon" data-act="fwd" title="Vpřed (⌘])" disabled>›</button>
-          <button class="icon" data-act="up" title="O úroveň výš">↑</button>
+          <button class="icon ibtn" data-icon="back" data-act="back" title="Zpět (⌘[)" aria-label="Zpět" disabled></button>
+          <button class="icon ibtn" data-icon="fwd" data-act="fwd" title="Vpřed (⌘])" aria-label="Vpřed" disabled></button>
+          <button class="icon ibtn" data-icon="levelup" data-act="up" title="O úroveň výš" aria-label="O úroveň výš"></button>
           <input class="path" data-role="path" spellcheck="false" />
-          <button class="icon" data-act="bookmark" title="Záložky cest">★</button>
-          <button class="icon" data-act="filter" title="Filtr podle masky">⌕</button>
-          <button class="icon" data-act="browse" title="Vybrat složku">…</button>
+          <button class="icon ibtn" data-icon="bookmark" data-act="bookmark" title="Záložky cest" aria-label="Záložky cest"></button>
+          <button class="icon ibtn" data-icon="filter" data-act="filter" title="Filtr podle masky" aria-label="Filtr podle masky"></button>
+          <button class="icon ibtn" data-icon="browse" data-act="browse" title="Vybrat složku" aria-label="Vybrat složku"></button>
         </div>
         <div class="filter-bar" data-role="filterbar" hidden>
           <input data-role="filter" placeholder="Maska, např. *.php; *.css | .git/" spellcheck="false" />
@@ -64,13 +81,13 @@
         <div class="pane-head">
           <span class="pane-title">Server</span>
           <span class="site-note" id="remote-note" hidden></span>
-          <button class="icon" data-act="back" title="Zpět (⌘[)" disabled>‹</button>
-          <button class="icon" data-act="fwd" title="Vpřed (⌘])" disabled>›</button>
-          <button class="icon" data-act="up" title="O úroveň výš">↑</button>
+          <button class="icon ibtn" data-icon="back" data-act="back" title="Zpět (⌘[)" aria-label="Zpět" disabled></button>
+          <button class="icon ibtn" data-icon="fwd" data-act="fwd" title="Vpřed (⌘])" aria-label="Vpřed" disabled></button>
+          <button class="icon ibtn" data-icon="levelup" data-act="up" title="O úroveň výš" aria-label="O úroveň výš"></button>
           <input class="path" data-role="path" spellcheck="false" />
-          <button class="icon" data-act="bookmark" title="Záložky cest">★</button>
-          <button class="icon" data-act="filter" title="Filtr podle masky">⌕</button>
-          <button class="icon" data-act="home" title="Domovský adresář">⌂</button>
+          <button class="icon ibtn" data-icon="bookmark" data-act="bookmark" title="Záložky cest" aria-label="Záložky cest"></button>
+          <button class="icon ibtn" data-icon="filter" data-act="filter" title="Filtr podle masky" aria-label="Filtr podle masky"></button>
+          <button class="icon ibtn" data-icon="home" data-act="home" title="Domovský adresář" aria-label="Domovský adresář"></button>
         </div>
         <div class="filter-bar" data-role="filterbar" hidden>
           <input data-role="filter" placeholder="Maska, např. *.php; *.css | .git/" spellcheck="false" />
@@ -103,9 +120,9 @@
             <option value="sleep">uspat Mac</option>
           </select>
         </label>
-        <button id="q-pause">⏸ Pauza</button>
-        <button id="q-resume" hidden>▶ Pokračovat</button>
-        <button id="q-cancel">✕ Zrušit vše</button>
+        <button id="q-pause" class="ibtn" data-icon="pause">Pauza</button>
+        <button id="q-resume" class="ibtn" data-icon="resume" hidden>Pokračovat</button>
+        <button id="q-cancel" class="ibtn" data-icon="cancel">Zrušit vše</button>
         <button id="q-clear">Vyčistit hotové</button>
         <button id="q-toggle" title="Sbalit/rozbalit">▾</button>
       </div>
@@ -444,6 +461,10 @@
       </label>
       <p class="muted">„Podle systému" se přepne sám, když si Mac v noci přepne na tmavý
         vzhled. Volba platí i pro systémové dialogy a rám okna.</p>
+
+      <label class="check"><input type="checkbox" name="toolbarLabels" /> Popisky u tlačítek v liště</label>
+      <p class="muted">Bez popisků je lišta kratší a akce prozradí tooltip. S popiskem je
+        u nejčastějších tlačítek i slovo — jméno akce se tím nemění, jen přibude text.</p>
 
       <label class="check"><input type="checkbox" name="cacheListings" /> Pamatovat si výpisy navštívených složek</label>
       <p class="muted">Návrat do složky, kterou jste právě viděli, je pak okamžitý — na pomalé

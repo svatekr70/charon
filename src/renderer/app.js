@@ -88,7 +88,7 @@ const DEFAULT_SETTINGS = {
   uiFont: '', monoFont: '', listFontSize: 12.5, zoom: 1,
   updateRepo: '', checkUpdatesOnStart: false,
   cacheListings: true,
-  theme: 'system',
+  theme: 'system', toolbarLabels: false,
   uploadPerms: 'keep', uploadFileMode: '644', uploadDirMode: '755',
   tempName: true, tempNameMinKb: 0,
 };
@@ -442,6 +442,9 @@ function updateFoot(side) {
       + `${dirs} ${plural(dirs, 'složka', 'složky', 'složek')}`
       + (hiddenByFilter > 0 ? ` · filtr skrývá ${hiddenByFilter}` : '')
       + porovnano;
+  // Patička se překresluje při každé změně výběru, takže je to nejlevnější
+  // místo, odkud udržet lištu v souladu s tím, co je vybrané.
+  renderToolbar();
 }
 
 /* ------------------------------------------------------------ interakce */
@@ -463,6 +466,7 @@ function setActive(side) {
   state.activeSide = side;
   panes.local.classList.toggle('active', side === 'local');
   panes.remote.classList.toggle('active', side === 'remote');
+  renderToolbar();
 }
 
 async function openEntry(side, entry) {
@@ -2699,12 +2703,14 @@ function applyConnState() {
   if (info && info.status === 'connecting') {
     badge.className = 'badge wait';
     badge.textContent = `Obnovuji spojení k ${info.host}…`;
+    renderToolbar();
     return;
   }
   badge.className = `badge ${state.connected ? 'on' : 'off'}`;
   badge.textContent = state.connected && info
     ? `${info.protocol.toUpperCase()} · ${info.username ? `${info.username}@` : ''}${info.host}`
     : 'Odpojeno';
+  renderToolbar();
 }
 
 /* ------------------------------------------------------- editor relace */
@@ -3329,6 +3335,7 @@ $('#btn-settings').addEventListener('click', () => {
   f.tempNameMinKb.value = cur.tempNameMinKb || 0;
   f.doubleClick.value = cur.doubleClick;
   f.theme.value = cur.theme || 'system';
+  f.toolbarLabels.checked = cur.toolbarLabels === true;
   f.sessionLog.checked = cur.sessionLog === true;
   f.updateRepo.value = cur.updateRepo || '';
   f.checkUpdatesOnStart.checked = cur.checkUpdatesOnStart === true;
@@ -3368,6 +3375,7 @@ setDlg.addEventListener('close', async () => {
     tempNameMinKb: Math.max(0, Number(f.tempNameMinKb.value) || 0),
     doubleClick: f.doubleClick.value,
     theme: f.theme.value,
+    toolbarLabels: f.toolbarLabels.checked,
     sessionLog: f.sessionLog.checked,
     updateRepo: f.updateRepo.value.trim(),
     checkUpdatesOnStart: f.checkUpdatesOnStart.checked,
@@ -3407,6 +3415,7 @@ function applySettings(next) {
   $('#app').classList.toggle('c-group', Boolean(state.settings.colGroup));
   applyTheme(state.settings.theme);
   applyFonts(state.settings);
+  $('#app').classList.toggle('tb-labels', state.settings.toolbarLabels === true);
   $('#q-after').value = state.settings.queueDoneAction || 'none';
 }
 
@@ -3600,6 +3609,60 @@ $('#btn-refresh').addEventListener('click', async () => {
   if (state.connected) await loadPane('remote', state.remote.path, { refresh: true });
 });
 $('#btn-sync').addEventListener('click', openSync);
+
+/**
+ * Akce v liště.
+ *
+ * Míří na panel, ve kterém se stojí — kromě nahrání a stažení, kde je směr
+ * dán tlačítkem samotným. Kdyby se ptaly na aktivní panel i ty, znamenalo by
+ * jedno tlačítko pokaždé něco jiného.
+ */
+$('#tb-upload').addEventListener('click', () => transfer('local', 'remote'));
+$('#tb-download').addEventListener('click', () => transfer('remote', 'local'));
+$('#tb-transfer-opts').addEventListener('click', () => openTransferOptions(state.activeSide));
+$('#tb-newfolder').addEventListener('click', () => mkdirIn(state.activeSide));
+$('#tb-rename').addEventListener('click', () => {
+  const side = state.activeSide;
+  if (selectedEntries(side).length > 1) openBulkRename(side); else renameSelected(side);
+});
+$('#tb-edit').addEventListener('click', () => {
+  const sel = selectedEntries('remote');
+  if (sel.length === 1) editRemote(fullPath('remote', sel[0]));
+});
+$('#tb-delete').addEventListener('click', () => deleteSelected(state.activeSide));
+$('#tb-find').addEventListener('click', openFind);
+$('#tb-watch').addEventListener('click', openWatch);
+$('#tb-terminal').addEventListener('click', openConsole);
+
+/**
+ * Co zrovna nejde, je zašedlé.
+ *
+ * Volá se odevšad, kde se může změnit výběr, strana nebo spojení — je to
+ * pár řádků a levnější než hlídat, které z toho se zrovna změnilo.
+ */
+function renderToolbar() {
+  const side = state.activeSide;
+  const conn = state.connected;
+  const zde = selectedEntries(side).length;
+  const naServeru = selectedEntries('remote');
+  // Lokálně jde pracovat i bez spojení; na serveru bez něj není s čím.
+  const jdeUpravovat = side === 'local' || conn;
+  const nastav = (sel, ok) => { $(sel).disabled = !ok; };
+
+  nastav('#tb-upload', conn && selectedEntries('local').length > 0);
+  nastav('#tb-download', conn && naServeru.length > 0);
+  nastav('#tb-transfer-opts', conn && zde > 0);
+  nastav('#tb-newfolder', jdeUpravovat);
+  nastav('#tb-rename', jdeUpravovat && zde > 0);
+  nastav('#tb-edit', conn && naServeru.length === 1 && naServeru[0].type !== 'd');
+  nastav('#tb-delete', jdeUpravovat && zde > 0);
+  nastav('#btn-compare', conn);
+  nastav('#btn-syncbrowse', conn);
+  nastav('#tb-find', conn);
+  nastav('#btn-sync', conn);
+  nastav('#tb-watch', conn);
+  nastav('#tb-terminal', conn);
+}
 
 /* --------------------------------------------------------------- start */
 

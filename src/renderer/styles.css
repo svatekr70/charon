@@ -102,6 +102,19 @@ button:disabled { opacity: .45; cursor: default; }
 button.primary { background: var(--accent-2); border-color: var(--accent-2); color: var(--on-accent); }
 button.primary:hover:not(:disabled) { background: var(--accent); }
 button.icon { padding: 3px 7px; }
+
+/* Tlačítko s ikonou. Tvar i barvu řeší icons.css, tady je jen rozvržení:
+   ikona vlevo, popisek volitelně vedle ní. */
+.ibtn { display: inline-flex; align-items: center; gap: 5px; }
+.ibtn::before { flex: none; }
+button.icon.ibtn { padding: 4px 6px; }
+/* Popisky v liště jsou vypnuté — akce nese tooltip. Zapínají se
+   v Nastavení → Vzhled, když si na samotné ikony někdo nezvykne. */
+.toolbar .lbl { display: none; }
+#app.tb-labels .toolbar .lbl { display: inline; }
+/* Šipka u výběru relace patří k tlačítku, ne k akci — proto menší a tlumená. */
+#btn-sites .caret { opacity: .75; margin-left: -1px; }
+#btn-sites .caret::before { width: 11px; height: 11px; mask-size: 11px 11px; }
 select { min-width: 180px; }
 input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
 
