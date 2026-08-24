@@ -706,6 +706,11 @@ function buildMenu() {
         { label: 'Další záložka', accelerator: 'Ctrl+Tab', click: () => send('menu', 'nexttab') },
         { label: 'Předchozí záložka', accelerator: 'Ctrl+Shift+Tab', click: () => send('menu', 'prevtab') },
         { type: 'separator' },
+        // Zakládání v zobrazené složce; která strana to je, řeší okno podle
+        // toho, který panel je zrovna vpředu.
+        { label: 'Nová složka…', accelerator: 'F7', click: () => send('menu', 'mkdir') },
+        { label: 'Nový soubor…', accelerator: 'Cmd+N', click: () => send('menu', 'newfile') },
+        { type: 'separator' },
         { label: 'Import z WinSCP…', click: () => send('menu', 'import') },
         { type: 'separator' },
         { label: 'Synchronizovat adresáře…', accelerator: 'Cmd+S', click: () => send('menu', 'sync') },
@@ -973,6 +978,11 @@ function registerIpc() {
     sessionOf(sid).listCache.clear();
     return true;
   });
+  handle('remote:createFile', async ({ sid, path: p }) => {
+    await browseOf(sid).createFile(p);
+    sessionOf(sid).listCache.clear();
+    return true;
+  });
   handle('remote:rename', async ({ sid, from, to }) => {
     await browseOf(sid).rename(from, to);
     sessionOf(sid).listCache.clear();
@@ -1196,6 +1206,17 @@ function registerIpc() {
   });
 
   handle('local:mkdir', async (p) => { await fsp.mkdir(p, { recursive: true }); return true; });
+  // `wx` = vytvoř, ale nepřepiš; hotový soubor stejného jména má přednost.
+  handle('local:createFile', async (p) => {
+    try {
+      await fsp.writeFile(p, '', { flag: 'wx' });
+    } catch (err) {
+      // Hlášku od systému („EEXIST: file already exists…") stejně nikdo číst nechce.
+      if (err && err.code === 'EEXIST') throw new Error('Soubor tohoto názvu tu už je');
+      throw err;
+    }
+    return true;
+  });
   handle('local:rename', async ({ from, to }) => { await fsp.rename(from, to); return true; });
   handle('local:delete', async (paths) => {
     // Do koše, ne natvrdo — omyl se dá vzít zpět.

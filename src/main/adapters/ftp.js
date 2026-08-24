@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const net = require('net');
+const { Readable } = require('stream');
 const ftp = require('basic-ftp');
 const tlscerts = require('../tlscerts');
 const { makeThrottle } = require('../throttle');
@@ -210,6 +211,19 @@ class FtpAdapter {
     await this.client.ensureDir(remotePath);
     // ensureDir nechá klienta ve vytvořeném adresáři, vracíme se na kořen
     await this.client.cd('/');
+  }
+
+  /**
+   * Založí prázdný soubor.
+   *
+   * FTP nemá „vytvoř jen když ještě není" — `STOR` na obsazený název přepíše
+   * hotovou práci bez ptaní. Proto se existence zjišťuje předem; skulina mezi
+   * dotazem a zápisem zůstává, ale nic lepšího protokol nenabízí.
+   */
+  async createFile(remotePath) {
+    await this.ensureConnected();
+    if (await this.exists(remotePath)) throw new Error('Soubor tohoto názvu na serveru už je');
+    await this.client.uploadFrom(Readable.from([]), remotePath);
   }
 
   async removeFile(remotePath) {

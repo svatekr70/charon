@@ -58,6 +58,7 @@
   --i-resume: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M5.2 3.3l7.2 4.7-7.2 4.7z'/%3E%3C/svg%3E");
   --i-cancel: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='5.9'/%3E%3Cpath d='M6 6l4 4M10 6l-4 4'/%3E%3C/svg%3E");
   --i-newfolder: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M1.7 4.3c0-.6.5-1 1-1h3.4l1.5 1.7h6.7c.6 0 1 .4 1 1v6.4c0 .6-.4 1-1 1H2.7c-.5 0-1-.4-1-1z'/%3E%3Cpath d='M8 8v3.4M6.3 9.7h3.4'/%3E%3C/svg%3E");
+  --i-newfile: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M9.1 1.9H4.3c-.6 0-1 .4-1 1v10.2c0 .6.4 1 1 1h7.4c.6 0 1-.4 1-1V5.4z'/%3E%3Cpath d='M9.1 1.9v3.5h3.6'/%3E%3Cpath d='M8 8.3v3.6M6.2 10.1h3.6'/%3E%3C/svg%3E");
   --i-rename: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='1.8' y='4.2' width='12.4' height='7.6' rx='1.1'/%3E%3Cpath d='M6.4 6.4h3.2M8 6.4v3.2M6.4 9.6h3.2'/%3E%3C/svg%3E");
   --i-edit: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M11.1 2.4l2.5 2.5-7.7 7.7-3.3.8.8-3.3z'/%3E%3Cpath d='M9.4 4.1l2.5 2.5'/%3E%3C/svg%3E");
   --i-duplicate: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='2.2' y='2.2' width='7.8' height='7.8' rx='1.1'/%3E%3Crect x='6' y='6' width='7.8' height='7.8' rx='1.1'/%3E%3C/svg%3E");
@@ -174,6 +175,7 @@
 [data-icon="cancel"]::before { --icon: var(--i-cancel); }
 
 [data-icon="newfolder"]::before { --icon: var(--i-newfolder); }
+[data-icon="newfile"]::before { --icon: var(--i-newfile); }
 [data-icon="rename"]::before { --icon: var(--i-rename); }
 [data-icon="edit"]::before { --icon: var(--i-edit); }
 [data-icon="duplicate"]::before { --icon: var(--i-duplicate); }

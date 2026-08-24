@@ -152,6 +152,25 @@ class SftpAdapter {
     await this.client.mkdir(remotePath, recursive);
   }
 
+  /**
+   * Založí prázdný soubor.
+   *
+   * Otevírá se s příznakem `wx`, tedy „vytvoř, ale jen když ještě není" —
+   * o hotovou práci se tak nedá přijít ani tehdy, když někdo mezitím soubor
+   * stejného jména nahraje. Kontrola předem by tuhle skulinu nechala otevřenou.
+   */
+  async createFile(remotePath) {
+    // Ptáme se předem jen kvůli srozumitelné hlášce; kdyby soubor vznikl až
+    // teď, zastaví to stejně `wx` níž.
+    if (await this.exists(remotePath)) throw new Error('Soubor tohoto názvu na serveru už je');
+    return new Promise((resolve, reject) => {
+      this.client.sftp.open(remotePath, 'wx', (err, handle) => {
+        if (err) return reject(err);
+        return this.client.sftp.close(handle, (e) => (e ? reject(e) : resolve()));
+      });
+    });
+  }
+
   async removeFile(remotePath) {
     await this.client.delete(remotePath, true);
   }

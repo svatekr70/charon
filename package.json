@@ -1,6 +1,6 @@
 {
   "name": "charon",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Charon — dvoupanelový SFTP/FTP klient pro macOS, náhrada WinSCP",
   "main": "src/main/main.js",
   "scripts": {

@@ -128,6 +128,21 @@ async function main() {
   await adapter.removeFile('/www/index2.html');
   check('smazání souboru', fs.existsSync(path.join(serverRoot, 'www', 'index2.html')), false);
 
+  // ------------------------------------------------------ nový prázdný soubor
+  await adapter.createFile('/www/novy.txt');
+  check('soubor vznikl', fs.existsSync(path.join(serverRoot, 'www', 'novy.txt')), true);
+  check('a je prázdný', (await fsp.stat(path.join(serverRoot, 'www', 'novy.txt'))).size, 0);
+  check('ve výpisu je jako soubor',
+    (await adapter.list('/www')).find((e) => e.name === 'novy.txt').type, 'f');
+
+  // FTP `STOR` přepisuje bez ptaní, proto se existence hlídá předem.
+  await fsp.writeFile(path.join(serverRoot, 'www', 'obsazeno.txt'), 'důležitý obsah');
+  let obsazeno = null;
+  try { await adapter.createFile('/www/obsazeno.txt'); } catch (e) { obsazeno = e; }
+  truthy('na obsazený název se soubor nezaloží', obsazeno && /už je/.test(obsazeno.message));
+  check('a původní obsah zůstal',
+    await fsp.readFile(path.join(serverRoot, 'www', 'obsazeno.txt'), 'utf8'), 'důležitý obsah');
+
   // ------------------------------------------------------------ porovnání
   const syncLocal = path.join(tmp, 'sync-local');
   await fsp.mkdir(path.join(syncLocal, 'sub'), { recursive: true });

@@ -78,6 +78,21 @@ async function main() {
   check('a ukazuje, kam má', await fsp.readlink(path.join(www, 'odkaz.php')), 'index.php');
   check('ve výpisu se pozná', (await a.list('/www')).find((e) => e.name === 'odkaz.php').type, 'l');
 
+  // ================================================ nový prázdný soubor
+  await a.createFile('/www/novy.txt');
+  check('soubor vznikl', fs.existsSync(path.join(www, 'novy.txt')), true);
+  check('a je prázdný', (await fsp.stat(path.join(www, 'novy.txt'))).size, 0);
+  check('ve výpisu je jako soubor',
+    (await a.list('/www')).find((e) => e.name === 'novy.txt').type, 'f');
+
+  // Hotovou práci nepřepisujeme — na to je nahrání nebo editace.
+  await fsp.writeFile(path.join(www, 'obsazeno.txt'), 'důležitý obsah');
+  let obsazeno = null;
+  try { await a.createFile('/www/obsazeno.txt'); } catch (e) { obsazeno = e; }
+  truthy('na obsazený název se soubor nezaloží', obsazeno, obsazeno ? obsazeno.message : '(bez chyby!)');
+  check('a původní obsah zůstal',
+    await fsp.readFile(path.join(www, 'obsazeno.txt'), 'utf8'), 'důležitý obsah');
+
   // ================================================ ruční čas
   // Adaptéry počítají v milisekundách, stejně jako `fs` — jednotky se pletou
   // snadno a chyba je vidět až jako soubor z roku 1970.

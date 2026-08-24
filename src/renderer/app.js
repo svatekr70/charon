@@ -686,6 +686,7 @@ function wirePane(side) {
     else if (act === 'move') await transfer(side, other, { move: true });
     else if (act === 'xfer-opts') openTransferOptions(side);
     else if (act === 'mkdir') await mkdirIn(side);
+    else if (act === 'newfile') await newFileIn(side);
     else if (act === 'rename') {
       if (selectedEntries(side).length > 1) openBulkRename(side); else await renameSelected(side);
     } else if (act === 'delete') await deleteSelected(side);
@@ -757,7 +758,11 @@ function wirePane(side) {
     await openEntry(side, entryAt(side, Number(row.dataset.index)));
   });
 
-  listEl.addEventListener('contextmenu', (ev) => {
+  // Nabídka patří k výpisu i k pruhu pod ním — v plné složce bývá volné místo
+  // jen tam. Lišty nahoře mají vlastní ovládání a políčka svoje systémové
+  // menu s kopírováním, těch se to netýká.
+  pane.addEventListener('contextmenu', (ev) => {
+    if (ev.target.closest('.pane-head, .pane-tools, .filter-bar')) return;
     ev.preventDefault();
     const row = ev.target.closest('.row');
     setActive(side);
@@ -769,6 +774,11 @@ function wirePane(side) {
         state[side].cursor = Number(row.dataset.index);
         paintSelection(side);
       }
+    } else {
+      // Klik vedle položek se týká složky, ne výběru — ten se proto zruší,
+      // ať nabídka nenabízí přenos nebo mazání něčeho jiného, než kam se kliklo.
+      state[side].sel.clear();
+      paintSelection(side);
     }
     showContextMenu(side, ev.clientX, ev.clientY);
   });
@@ -1243,6 +1253,7 @@ function showContextMenu(side, x, y) {
   }
   items.push(null);
   items.push({ label: 'Nová složka…', key: 'F7', fn: () => mkdirIn(side) });
+  items.push({ label: 'Nový soubor…', key: '⌘N', fn: () => newFileIn(side) });
   items.push({ label: 'Vybrat podle masky…', key: '+', fn: () => selectByMask(side, true) });
   items.push({ label: 'Odznačit podle masky…', key: '−', fn: () => selectByMask(side, false) });
   items.push({
@@ -1306,21 +1317,77 @@ function promptDialog(title, label, value = '') {
     const input = $('#prompt-input');
     input.value = value;
     dlg.returnValue = '';
+    // Enter musí potvrdit. Formulář by jinak odeslal hodnotu prvního tlačítka
+    // v pořadí, a to je „Zrušit" — napsaný název by se tím zahodil.
+    input.onkeydown = (ev) => {
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      dlg.close('ok');
+    };
     dlg.showModal();
     input.focus();
     input.select();
-    dlg.addEventListener('close', () => resolve(dlg.returnValue === 'ok' ? input.value.trim() : null), { once: true });
+    dlg.addEventListener('close', () => {
+      input.onkeydown = null;
+      resolve(dlg.returnValue === 'ok' ? input.value.trim() : null);
+    }, { once: true });
   });
+}
+
+/**
+ * Kontrola názvu pro nově zakládanou položku.
+ *
+ * Lomítko by z názvu udělalo cestu a založilo se něco jinde, než člověk čeká;
+ * tečkové názvy zase míří na tenhle a nadřazený adresář. Obojí radši odmítnout
+ * hned, než se divit výsledku.
+ *
+ * @returns {boolean} `true` když je název použitelný
+ */
+function nazevSedi(name) {
+  if (name.includes('/')) { setLog('error', 'Název nesmí obsahovat lomítko'); return false; }
+  if (name === '.' || name === '..') { setLog('error', 'Takový název nejde použít'); return false; }
+  return true;
+}
+
+/** Postaví kurzor na položku daného jména — po založení je hned vidět, co vzniklo. */
+function selectByName(side, name) {
+  const st = state[side];
+  const idx = (st.view || []).findIndex((e) => e.name === name);
+  if (idx < 0) return;
+  st.sel.clear();
+  st.sel.add(name);
+  st.cursor = idx;
+  renderPane(side);
+  scrollToCursor(side);
 }
 
 async function mkdirIn(side) {
   const name = await promptDialog('Nová složka', 'Název');
-  if (!name) return;
+  if (!name || !nazevSedi(name)) return;
   const target = side === 'local' ? localJoin(state.local.path, name) : posixJoin(state.remote.path, name);
   const ok = side === 'local'
     ? await call(window.api.local.mkdir(target))
     : await call(window.api.remote.mkdir(sid(), target));
-  if (ok !== null) await loadPane(side, state[side].path);
+  if (ok !== null) { await loadPane(side, state[side].path); selectByName(side, name); }
+}
+
+/**
+ * Založí prázdný soubor v zobrazené složce.
+ *
+ * Existující soubor se nikdy nepřepíše — na to je nahrání nebo editace.
+ * Nový soubor zůstane vybraný, takže se dá rovnou otevřít v editoru (F4).
+ */
+async function newFileIn(side) {
+  const name = await promptDialog('Nový soubor', 'Název');
+  if (!name || !nazevSedi(name)) return;
+  const target = side === 'local' ? localJoin(state.local.path, name) : posixJoin(state.remote.path, name);
+  const ok = side === 'local'
+    ? await call(window.api.local.createFile(target))
+    : await call(window.api.remote.createFile(sid(), target));
+  if (ok === null) return;
+  await loadPane(side, state[side].path);
+  selectByName(side, name);
+  setLog('ok', `Soubor ${name} je založený`);
 }
 
 async function renameSelected(side) {
@@ -2179,11 +2246,12 @@ document.addEventListener('keydown', async (ev) => {
     case 'F6': ev.preventDefault(); await transfer(side, other, { move: true }); break;
     case 'F2': ev.preventDefault(); await renameSelected(side); break;
     case 'F4': ev.preventDefault(); {
+      // Shift zakládá nový soubor — zvyk z WinSCP; totéž dělá ⌘N v nabídce.
+      if (ev.shiftKey) { await newFileIn(side); break; }
       const [e] = selectedEntries(side);
       if (side === 'remote' && e && e.type !== 'd') await editRemote(fullPath(side, e));
       break;
     }
-    case 'F7': ev.preventDefault(); await mkdirIn(side); break;
     // Shift obchází koš — stejně jako ve WinSCP a ve Finderu.
     case 'Delete': case 'Backspace': ev.preventDefault(); await deleteSelected(side, ev.shiftKey); break;
     case 'Tab': ev.preventDefault(); setActive(other); break;
@@ -4193,6 +4261,7 @@ function renderActionButtons() {
     nastav('[data-act=move]', conn && vybrano > 0, pane);
     nastav('[data-act=xfer-opts]', conn && vybrano > 0, pane);
     nastav('[data-act=mkdir]', jdeUpravovat, pane);
+    nastav('[data-act=newfile]', jdeUpravovat, pane);
     nastav('[data-act=rename]', jdeUpravovat && vybrano > 0, pane);
     nastav('[data-act=delete]', jdeUpravovat && vybrano > 0, pane);
     nastav('[data-act=terminal]', jdeUpravovat, pane);
@@ -4248,8 +4317,24 @@ function updateEditStatus() {
     ? `✎ ${list.length} otevřeno v editoru (${list.filter((e) => e.status === 'uploading').length} se nahrává)`
     : '';
 }
+/**
+ * Smí zkratka z hlavní nabídky zasáhnout do panelu?
+ *
+ * Akcelerátor v nabídce chytá klávesu i tehdy, když je otevřený dialog nebo
+ * se píše do políčka — na rozdíl od obsluhy klávesnice v okně, která si to
+ * hlídá sama. Tady se tedy hlídá totéž, ať F7 v rozepsaném názvu neotevře
+ * další dialog.
+ */
+function jdePanelovaZkratka() {
+  if (document.querySelector('dialog[open]')) return false;
+  const el = document.activeElement;
+  return !(el && el.matches && el.matches('input, select, textarea'));
+}
+
 window.api.onMenu(async (cmd) => {
-  if (cmd === 'connect') connectSelected();
+  if (cmd === 'mkdir') { if (jdePanelovaZkratka()) await mkdirIn(state.activeSide); }
+  else if (cmd === 'newfile') { if (jdePanelovaZkratka()) await newFileIn(state.activeSide); }
+  else if (cmd === 'connect') connectSelected();
   else if (cmd === 'closetab') { if (state.activeId) closeTab(state.activeId); }
   else if (cmd === 'nexttab') cycleTab(1);
   else if (cmd === 'prevtab') cycleTab(-1);

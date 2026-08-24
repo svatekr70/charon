@@ -97,7 +97,7 @@ terminálu skončí. `npm run dev` je totéž; nástroje pro vývojáře se otev
 npm run dist
 ```
 
-Vznikne `dist/mac-arm64/Charon.app` (na dvojklik) a `dist/Charon-1.0.0-arm64.dmg`
+Vznikne `dist/mac-arm64/Charon.app` (na dvojklik) a `dist/Charon-1.1.0-arm64.dmg`
 pro přenos jinam. Do Aplikací se přetáhne z DMG, nebo příkazem:
 
 ```bash
@@ -175,7 +175,7 @@ konkrétní strany:
 | | Levý (lokální) | Pravý (server) |
 | --- | --- | --- |
 | Analogické | → kopírovat, → přesunout, přenést s volbami | ← kopírovat, ← přesunout, přenést s volbami |
-| Společné | nová složka, přejmenovat, smazat, Terminál zde | totéž |
+| Společné | nová složka, nový soubor, přejmenovat, smazat, Terminál zde | totéž |
 | Vlastní | ukázat ve Finderu | editor, vlastnosti a práva, hledání |
 
 Směr přenosu je dán panelem, ne tím, který je zrovna vpředu — šipka v levé
@@ -183,8 +183,8 @@ liště míří doprava, v pravé doleva. Kopie nese plus jako táhnutí s <kbd>
 v systému: na druhé straně něco přibude. Přesun je holá šipka, nic nepřibývá.
 
 Co zrovna nejde, je zašedlé, a každý panel se řídí svým vlastním výběrem: bez
-spojení zůstane přístupná jen lokální strana, bez výběru jen „nová složka"
-a Terminál.
+spojení zůstane přístupná jen lokální strana, bez výběru jen zakládání (nová
+složka, nový soubor) a Terminál.
 
 Ikony jsou kreslené jako maska ve stejném zápisu jako ikony souborů
 (rám 16 × 16, tah 1,4, kulaté rohy) — barvu berou z písma tlačítka, takže
@@ -579,6 +579,22 @@ V kontextovém menu serverového panelu:
 - **Vytvořit odkaz** — symbolický odkaz. Jen SFTP; FTP na to nemá příkaz.
 - **Změnit čas změny** — ruční nastavení razítka, i pro víc položek naráz.
 
+## Zakládání ve zobrazené složce
+
+Nová složka (<kbd>F7</kbd>) a nový prázdný soubor (<kbd>⌘N</kbd>, případně
+<kbd>⇧F4</kbd> ze zvyku po WinSCP) vzniknou v té složce, kterou má panel právě
+otevřenou — na obou stranách stejně. Jde na ně tlačítko v liště panelu,
+položka v nabídce **Soubor** i kontextové menu.
+
+Existující soubor se nikdy nepřepíše: na SFTP se zakládá s příznakem „vytvoř,
+jen když ještě není", takže o hotovou práci nejde přijít ani tehdy, když
+soubor mezitím vznikne. FTP takový příkaz nemá, tam se existence zjišťuje
+dotazem předem. Nová položka zůstane vybraná, takže se dá rovnou otevřít
+v editoru (<kbd>F4</kbd>).
+
+Kontextové menu se otevře i vedle položek — kliknutí do volného místa pod
+výpisem výběr zruší, aby nabídka nabízela jen to, co se týká složky.
+
 ## Editor podle přípony
 
 V **Nastavení → Editor** se dají zapsat pravidla `maska = aplikace` oddělená
@@ -646,6 +662,7 @@ a nad 5 MB se odloží stranou.
 | `⇧F5` | Přenést s volbami (cíl a maska) |
 | `F6` | Přesunout vybrané do druhého panelu |
 | `F4` | Upravit vzdálený soubor v editoru |
+| `⌘N` / `⇧F4` | Nový prázdný soubor v zobrazené složce |
 | `F2` | Přejmenovat |
 | `F7` | Nová složka |
 | `⌫` | Smazat do koše (lokálního i serverového) |

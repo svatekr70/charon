@@ -175,6 +175,10 @@ function startTestServer({
               let mode = 'r';
               if (flags & OPEN_MODE.APPEND) mode = 'a';
               else if (flags & OPEN_MODE.WRITE) mode = (flags & OPEN_MODE.TRUNC) ? 'w' : 'r+';
+              // EXCL znamená „vytvoř, ale jen když ještě není". Skutečné
+              // servery ho ctí, takže ho musí ctít i tenhle — jinak by se na
+              // něm ochrana proti přepsání nedala ověřit.
+              if ((flags & OPEN_MODE.EXCL) && (mode === 'w' || mode === 'a')) mode += 'x';
               try {
                 if (mode === 'r+' && !fs.existsSync(real(filename))) mode = 'w';
                 const fd = fs.openSync(real(filename), mode);
