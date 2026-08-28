@@ -111,10 +111,25 @@ async function main() {
   const [idPrenosu] = session.queue.add([{ direction: 'up', localPath: '/x', remotePath: '/www/x', size: 1 }]);
   check('samotné zařazení paměť neruší', Boolean(session.listCache.get('/www')), true);
 
+  // Dokončení předstíráme stejně, jako ho hlásí fronta: kromě stavu položky
+  // povyskočí i počítadlo dokončených. Podle něj se paměť zahazuje, aby to
+  // fungovalo i tehdy, když se hotová položka rovnou odklidí ze seznamu.
   const polozka = session.queue.items.find((i) => i.id === idPrenosu);
   polozka.status = 'done';
+  session.queue.doneTotal += 1;
   session.queue._emitUpdate(true);
   check('dokončený přenos ji zahodí', session.listCache.get('/www'), null);
+
+  // A totéž s průběžným čištěním: položka ze seznamu zmizí, paměť přesto padá.
+  session.listCache.set('/www', [{ name: 'index.php', type: 'f' }]);
+  session.queue.setAutoClear(true);
+  const [idDruheho] = session.queue.add([{ direction: 'up', localPath: '/y', remotePath: '/www/y', size: 1 }]);
+  const druha = session.queue.items.find((i) => i.id === idDruheho);
+  druha.status = 'done';
+  session.queue.doneTotal += 1;
+  session.queue._emitUpdate(true);
+  session.queue._forget(druha);
+  check('i když se hotová položka hned odklidí', session.listCache.get('/www'), null);
 
   console.log(`\n${pass} prošlo, ${fail} selhalo`);
   process.exit(fail ? 1 : 0);

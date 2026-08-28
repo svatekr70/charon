@@ -81,6 +81,18 @@ class TransferQueue extends EventEmitter {
     this.samples = [];
     // Proběhl od posledního vyprázdnění nějaký přenos?
     this.didWork = false;
+    /**
+     * Průběžné čištění: hotová položka ze seznamu rovnou zmizí.
+     *
+     * U dávky o tisících souborech je seznam po chvíli k ničemu — hotové
+     * položky ho zaplaví a to podstatné je někde vespod. Odklízíme jen to,
+     * co dopadlo dobře; chyby a přeskočené zůstávají, ty chce člověk vidět.
+     */
+    this.autoClear = false;
+    /** Kolik hotových položek se takhle odklidilo — souhrn o nich ví dál. */
+    this.cleared = 0;
+    /** Kolik přenosů celkem doběhlo. Roste pořád, i přes čištění. */
+    this.doneTotal = 0;
     // Práva nahraných souborů; výchozí je nechat je na serveru.
     this.perms = {};
     this.backupMode = 'none';
@@ -171,6 +183,12 @@ class TransferQueue extends EventEmitter {
     this.onBackup = handler || null;
   }
 
+  /** Průběžné čištění hotových položek ze seznamu. */
+  setAutoClear(enabled) {
+    this.autoClear = Boolean(enabled);
+    this._emitUpdate(true);
+  }
+
   setTempName(enabled, minBytes = 0) {
     this.useTempName = Boolean(enabled);
     this.tempNameMinBytes = Math.max(0, Math.floor(minBytes) || 0);
@@ -242,9 +260,11 @@ class TransferQueue extends EventEmitter {
   /** Zařadí jednu položku a počká, až doběhne. Používá editor při otevření/uložení. */
   addAndWait(job) {
     const [id] = this.add([job]);
+    // Položku si držíme odkazem, ne přes id: s průběžným čištěním ji fronta
+    // po dokončení ze seznamu vyhodí a hledání podle id by nikdy neskončilo.
+    const it = this.items.find((x) => x.id === id);
     return new Promise((resolve, reject) => {
       const onUpdate = () => {
-        const it = this.items.find((x) => x.id === id);
         if (!it || ['pending', 'active', 'paused'].includes(it.status)) return;
         this.off('update', onUpdate);
         if (it.status === 'done') resolve(it);
@@ -369,6 +389,18 @@ class TransferQueue extends EventEmitter {
 
   clearFinished() {
     this.items = this.items.filter((it) => !['done', 'canceled', 'skipped'].includes(it.status));
+    // Ruční vyčištění je „od téhle chvíle znovu": co se odklidilo průběžně,
+    // se do dalšího souhrnu počítat nemá.
+    this.cleared = 0;
+    this._emitUpdate(true);
+  }
+
+  /** Odklidí dokončenou položku ze seznamu; z počtů nezmizí. */
+  _forget(item) {
+    const i = this.items.indexOf(item);
+    if (i === -1) return;
+    this.items.splice(i, 1);
+    this.cleared += 1;
     this._emitUpdate(true);
   }
 
@@ -431,6 +463,9 @@ class TransferQueue extends EventEmitter {
       pending: open.length,
       totalBytes,
       doneBytes,
+      autoClear: this.autoClear,
+      cleared: this.cleared,
+      doneTotal: this.doneTotal,
     };
   }
 
@@ -491,6 +526,7 @@ class TransferQueue extends EventEmitter {
             item.status = 'skipped';
           } else {
             item.status = 'done';
+            this.doneTotal += 1;
             item.transferred = item.size ?? item.transferred;
             // Zdroj mažeme až teď a jen při úspěchu. Kdyby se mazalo dřív
             // nebo bez ohledu na výsledek, jedna chyba by soubor ztratila.
@@ -522,14 +558,20 @@ class TransferQueue extends EventEmitter {
         this.active.delete(item.id);
         item.limiter = null;
         if (adapter) this.releaseAdapter(adapter);
+        // Nejdřív se dokončení ohlásí, teprve pak se položka odklidí. Kdo na
+        // ni čeká (editor přes addAndWait, uklízení výpisů) se tak o výsledku
+        // dozví dřív, než ze seznamu zmizí.
         this._emitUpdate(true);
+        if (this.autoClear && item.status === 'done') this._forget(item);
       }
     }
   }
 
   /** Krátký souhrn poslední dávky — do hlášky po dokončení. */
   summary() {
-    const done = this.items.filter((i) => i.status === 'done').length;
+    // Průběžně odklizené položky se do souhrnu počítají dál — jinak by po
+    // dokončení dávky přišlo hlášení „0 položek".
+    const done = this.items.filter((i) => i.status === 'done').length + this.cleared;
     const failed = this.items.filter((i) => i.status === 'error').length;
     const skipped = this.items.filter((i) => i.status === 'skipped').length;
     return { done, failed, skipped, bytes: this.moved };

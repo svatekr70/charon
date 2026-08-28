@@ -147,6 +147,10 @@
         <button id="q-resume" class="ibtn" data-icon="resume" hidden>Pokračovat</button>
         <button id="q-cancel" class="ibtn" data-icon="cancel">Zrušit vše</button>
         <button id="q-clear">Vyčistit hotové</button>
+        <!-- Volba patří k tlačítku, které dělá totéž ručně. -->
+        <label class="q-opt" title="Hotový soubor zmizí ze seznamu hned, jak se přenese. Chyby a přeskočené zůstávají.">
+          <input type="checkbox" id="q-autoclear"> průběžně
+        </label>
         <button id="q-toggle" title="Sbalit/rozbalit">▾</button>
       </div>
       <div class="queue-body" id="queue-body"></div>
@@ -1023,6 +1027,7 @@
   <script src="../common/filekind.js"></script>
   <script src="../common/rename.js"></script>
   <script src="../common/urlsession.js"></script>
+  <script src="../common/queueview.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

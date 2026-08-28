@@ -79,7 +79,7 @@ const DEFAULT_SETTINGS = {
   editor: '', doubleClick: 'edit', typeAhead: true, colOwner: false, colGroup: false,
   transferMask: '', maxConcurrent: 3, speedLimitKb: 0, commands: [], workspaces: [],
   collapsedFolders: [],
-  queueDoneAction: 'none',
+  queueDoneAction: 'none', queueAutoClear: false,
   editorRules: [], backupOverwritten: 'none',
   keepaliveSeconds: 10, connectTimeoutSeconds: 25,
   textMask: '', serverEol: 'lf', sessionLog: false,
@@ -3603,7 +3603,9 @@ $('#sync-apply').addEventListener('click', async () => {
 function renderQueue(snap) {
   state.queue = snap;
   const body = $('#queue-body');
-  const visible = snap.items.slice(-200); // starší položky nemá smysl kreslit
+  // Nahoře je to, co se právě přenáší, dole hotové; víc než dvě stě řádků
+  // stejně nikdo nepřečte. Řadí se jen zobrazení, pořadí fronty zůstává.
+  const visible = QueueView.order(snap.items, 200);
 
   body.replaceChildren(...visible.map((it) => {
     const el = document.createElement('div');
@@ -3696,7 +3698,7 @@ function renderQueue(snap) {
   $('#queue-summary').textContent = snap.pending
     ? `${snap.pending} ve frontě · ${fmtSize(snap.doneBytes)} / ${fmtSize(snap.totalBytes)} (${pct} %)`
       + `${eta}${running}${nejasne}${snap.paused ? ' · pozastaveno' : ''}`
-    : (snap.items.length ? 'hotovo' : 'prázdná');
+    : (snap.items.length || snap.cleared ? 'hotovo' : 'prázdná');
 
   const limit = snap.speedLimit ? ` (strop ${fmtSize(snap.speedLimit)}/s)` : '';
   $('#queue-speed').textContent = snap.speed ? `${fmtSpeed(snap.speed)}${limit}` : limit.trim();
@@ -4035,6 +4037,7 @@ function applySettings(next) {
   applyFonts(state.settings);
   $('#app').classList.toggle('tb-labels', state.settings.toolbarLabels === true);
   $('#q-after').value = state.settings.queueDoneAction || 'none';
+  $('#q-autoclear').checked = state.settings.queueAutoClear === true;
 }
 
 // Volba je schválně u fronty, ne schovaná v nastavení: rozhoduje se o ní
@@ -4045,6 +4048,18 @@ $('#q-after').addEventListener('change', async () => {
     state.settings = { ...state.settings, queueDoneAction: saved.queueDoneAction };
     const popis = { none: 'nic', notify: 'upozornit', disconnect: 'odpojit', sleep: 'uspat Mac' };
     setLog('ok', `Po dokončení fronty: ${popis[saved.queueDoneAction]}`);
+  }
+});
+
+// Průběžné čištění: totéž co tlačítko „Vyčistit hotové", jen bez klikání.
+$('#q-autoclear').addEventListener('change', async () => {
+  const zap = $('#q-autoclear').checked;
+  const saved = await call(window.api.settings.set({ queueAutoClear: zap }));
+  if (saved) {
+    state.settings = { ...state.settings, queueAutoClear: saved.queueAutoClear };
+    setLog('ok', zap
+      ? 'Hotové přenosy se budou ze seznamu odklízet průběžně'
+      : 'Hotové přenosy zůstanou ve frontě, dokud je nevyčistíte');
   }
 });
 

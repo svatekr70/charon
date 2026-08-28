@@ -51,6 +51,8 @@ let settings = {
   collapsedFolders: [],
   // Co udělat, až fronta dojede: 'none' | 'notify' | 'disconnect' | 'sleep'.
   queueDoneAction: 'none',
+  // Odklízet hotové položky ze seznamu už během přenosu.
+  queueAutoClear: false,
   // Čím otevřít soubor podle názvu; první sedící pravidlo vyhrává.
   editorRules: [],
   // Co s původním souborem před přepsáním: 'none' | 'suffix' | 'trash'.

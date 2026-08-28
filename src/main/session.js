@@ -72,12 +72,14 @@ class Session {
     this.queue.setBackup(settings.backupOverwritten, (a, p, mode) => this.backupBeforeOverwrite(a, p, mode));
     this.queue.setTextMode(settings.textMask, settings.serverEol);
     this.queue.setSegments((settings.segmentedMinMb || 0) * 1024 * 1024, settings.segmentCount);
+    this.queue.setAutoClear(settings.queueAutoClear === true);
     this.listCache.setEnabled(settings.cacheListings !== false);
     this.queue.on('update', (snap) => {
       // Dokončený přenos změnil obsah serveru — uložené výpisy už neplatí.
-      const hotovo = snap.items.filter((i) => i.status === 'done').length;
-      if (hotovo !== this._doneSeen) {
-        this._doneSeen = hotovo;
+      // Počítadlo je průběžné, ne počet hotových položek v seznamu: ty se
+      // při průběžném čištění hned zahazují a změny bychom si nevšimli.
+      if (snap.doneTotal !== this._doneSeen) {
+        this._doneSeen = snap.doneTotal;
         this.listCache.clear();
       }
       this.emit('queue', snap);
@@ -282,6 +284,7 @@ class Session {
     this.queue.setBackup(settings.backupOverwritten, (a, p, mode) => this.backupBeforeOverwrite(a, p, mode));
     this.queue.setTextMode(settings.textMask, settings.serverEol);
     this.queue.setSegments((settings.segmentedMinMb || 0) * 1024 * 1024, settings.segmentCount);
+    this.queue.setAutoClear(settings.queueAutoClear === true);
     this.listCache.setEnabled(settings.cacheListings !== false);
     if (this.pool && !this.pool.closed) this.pool.setMax(settings.maxConcurrent || 1);
   }

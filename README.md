@@ -16,6 +16,7 @@ předlohy vozí i zpátky.
 | Synchronizace adresářů s náhledem, co se provede | ✅ |
 | SFTP (heslo, klíč, ssh-agent) i FTP / FTPS | ✅ |
 | Fronta přenosů — průběh, pauza, navázání na přerušený přenos | ✅ |
+| Ve frontě je nahoře to, co se právě přenáší; hotové se dají uklízet průběžně | ✅ |
 | Uložené relace včetně hesel, ve složkách | ✅ |
 | Import relací z WinSCP i s hesly | ✅ |
 | Zachování času změny souboru při přenosu | ✅ |
@@ -868,6 +869,24 @@ přesun do koše na serveru.
 Záloha se dělá jen při plném nahrání; při navazování rozepsaného přenosu ne —
 tam už je stejně přepsáno. Když se nepovede, přenos kvůli tomu neselže a jen
 se to připíše k položce.
+
+## Pohled na frontu
+
+Fronta se přenáší v pořadí, v jakém do ní položky přibyly, ale **ukazuje se
+setříděná podle stavu**: nahoře to, co se právě přenáší, pod tím chyby, pak
+pozastavené a čekající, dole hotové. U dávky o tisících souborech je jinak
+běžící přenos někde uprostřed seznamu a musíte ho hledat. Uvnitř skupiny
+zůstává pořadí fronty, takže „posunout nahoru" u čekající položky je vidět
+tam, kde se čeká.
+
+Řadí se jen zobrazení. Co přijde na řadu, se tím nemění — běžící přenos
+přeskočit stejně nejde.
+
+Vedle tlačítka **Vyčistit hotové** je zaškrtávátko **průběžně**: hotový soubor
+zmizí ze seznamu hned, jak se přenese, takže v něm po celou dobu zůstává jen
+to, co se ještě neudělalo. Chyby a přeskočené položky zůstávají — ty chcete
+vidět. Odklizené položky se pořád počítají do souhrnu, který se ohlásí po
+dokončení fronty.
 
 ## Po dokončení fronty
 
