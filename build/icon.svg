@@ -5,32 +5,24 @@
     Převozník, který vozí duše přes Styx — tedy přesně to, co ta aplikace dělá
     se soubory: bere je z jednoho břehu na druhý.
 
-    Kresleno na siluetu: světlá obloha, tmavá loď s převozníkem a modrá voda
-    přes spodní půlku. Detaily, které by se ve 32 bodech stejně slily, tu
-    nejsou — v té velikosti musí stačit tvar lodi proti obloze.
+    Kreslí se na obrys, ne na siluetu. Předchozí podoba měla v lodi stojící
+    postavu v kápi a ta se v Docku slila s trupem do jedné tmavé skvrny, ve
+    které lidi poznávali spíš klobouk než člun. Teď nese význam samotná loď:
+    světlý trup proti tmavé vodě, přes něj veslo. Dva tvary, obojí čitelné.
+
+    Veslo je tu schválně šikmo. Svisle by bylo stabilnější, ale splynulo by
+    s okrajem trupu; diagonála se od srpku odliší i na 32 bodech a dodá pohyb.
+
+    Rozhoduje malá velikost — proto tu nejsou detaily, které by se ve 32
+    bodech stejně slily. Kontrolovat se to dá kontaktním listem: totéž SVG
+    vedle sebe ve 160, 96, 64, 48 a 32 bodech.
   -->
   <defs>
-    <!-- Obloha nad ránem: nahoře sytější modř, u hladiny světlá. -->
-    <linearGradient id="obloha" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#1f5f9e"/>
-      <stop offset="0.45" stop-color="#4b93cd"/>
-      <stop offset="0.78" stop-color="#8fc4e6"/>
-      <stop offset="1" stop-color="#bcdcf0"/>
-    </linearGradient>
-
+    <!-- Styx k ránu: nahoře skoro noc, u hladiny prosvětlená modř. -->
     <linearGradient id="voda" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#2e7ab5"/>
-      <stop offset="1" stop-color="#124b7c"/>
-    </linearGradient>
-
-    <!-- Dva odstíny vln, ať má hladina hloubku a nesplyne v jednu plochu. -->
-    <linearGradient id="vlna1" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#7cb8e2" stop-opacity="0.9"/>
-      <stop offset="1" stop-color="#4a92c9" stop-opacity="0.9"/>
-    </linearGradient>
-    <linearGradient id="vlna2" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#4e94cb" stop-opacity="0.95"/>
-      <stop offset="1" stop-color="#2a6ca6" stop-opacity="0.95"/>
+      <stop offset="0" stop-color="#0b2a4c"/>
+      <stop offset="0.5" stop-color="#134a76"/>
+      <stop offset="1" stop-color="#1f74a0"/>
     </linearGradient>
 
     <!-- Mřížka Apple: obsah je čtverec 824 bodů uprostřed plátna 1024,
@@ -45,48 +37,28 @@
   </defs>
 
   <g filter="url(#stin)">
-    <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="url(#obloha)"/>
+    <rect x="100" y="100" width="824" height="824" rx="185" ry="185" fill="url(#voda)"/>
   </g>
 
   <g clip-path="url(#ramecek)">
-    <rect x="100" y="100" width="824" height="824" fill="url(#obloha)"/>
+    <rect x="100" y="100" width="824" height="824" fill="url(#voda)"/>
 
-    <!-- vzdálený břeh: naznačí, že se odněkud někam pluje -->
-    <path d="M100 600 c 90 -24 150 6 232 -8 s 150 -28 246 -10 190 24 346 -10 v 46 H100 Z"
-          fill="#2a6ea8" fill-opacity="0.30"/>
-
-    <!-- hladina Styxu -->
-    <rect x="100" y="640" width="824" height="284" fill="url(#voda)"/>
-
-    <!-- silueta: převozník, veslo a loď -->
-    <g fill="#12283f">
-      <!-- veslo, opřené o dno -->
-      <path d="M690 236 l30 16 -336 546 -30 -16 Z"/>
-      <!-- postava v kápi -->
-      <path d="M604 268
-               c 46 0 74 34 74 78
-               0 40 -14 62 -14 96
-               l 26 214 -186 0 26 -214
-               c 0 -34 -14 -56 -14 -96
-               0 -44 42 -78 88 -78 Z"/>
-      <!-- ruce na vesle; jen naznačené, aby to v malém nevypadalo jako trám -->
-      <path d="M652 344 l40 20 -14 26 -40 -20 Z"/>
-      <!-- Trup lodi. Drží se uvnitř rámečku i se zvednutou přídí a zádí —
-           u okraje by se špičky uřízly a vypadalo by to jako chyba. -->
-      <path d="M196 640 h632 c -30 112 -164 172 -316 172 S 226 752 196 640 Z"/>
-      <!-- příď a záď zvednuté, jak se malovaly antické čluny -->
-      <path d="M196 640 c -24 -14 -42 -38 -50 -70 40 6 72 24 94 50 Z"/>
-      <path d="M828 640 c 24 -14 42 -38 50 -70 -40 6 -72 24 -94 50 Z"/>
+    <!-- Veslo: násada a list zabraný do vody. Kreslí se pod trupem, aby
+         vypadalo, že ho převozník drží za lodí, ne že leží přes ni. -->
+    <g fill="#e6d8ba">
+      <path d="M690 226 l60 32 -300 560 -60 -32 Z"/>
+      <path d="M436 736 c -34 40 -66 62 -96 66 6 -30 26 -64 60 -104 Z"/>
     </g>
 
-    <!-- vlny; přecházejí přes trup, aby loď na vodě seděla a neplula nad ní -->
-    <g>
-      <path d="M100 768 c 120 -26 200 22 320 4 s 200 -36 320 -12 128 28 184 -6 v 42
-               c -56 34 -128 6 -184 12 s -200 30 -320 12 -200 -30 -320 -4 Z" fill="url(#vlna1)"/>
-      <path d="M100 840 c 150 -28 250 24 400 6 s 250 -32 424 -8 v 44
-               c -174 -24 -274 30 -424 8 s -250 -32 -400 -6 Z" fill="url(#vlna2)"/>
-      <path d="M100 906 c 130 -24 230 20 360 4 s 230 -28 464 -6 v 40
-               c -234 -22 -334 28 -464 6 s -230 -28 -360 -4 Z" fill="url(#vlna1)"/>
-    </g>
+    <!-- Trup: srpek s vysoko vytaženou přídí i zádí, jak se malovaly antické
+         čluny. Mělčí oblouk by v malém splynul s miskou. -->
+    <path d="M162 470 C 192 700 336 806 512 806 C 688 806 832 700 862 470
+             C 814 574 674 624 512 624 C 350 624 210 574 162 470 Z" fill="#f4ead6"/>
+
+    <!-- Hladina. Dva tahy stačí; víc vln se ve 32 bodech slije v pruh. -->
+    <path d="M140 862 C 300 826 402 890 546 862 C 690 834 792 876 890 854" fill="none"
+          stroke="#ffffff" stroke-opacity="0.34" stroke-width="32" stroke-linecap="round"/>
+    <path d="M162 946 C 322 912 424 972 566 944 C 708 916 806 956 898 936" fill="none"
+          stroke="#ffffff" stroke-opacity="0.2" stroke-width="28" stroke-linecap="round"/>
   </g>
 </svg>

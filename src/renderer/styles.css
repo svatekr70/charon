@@ -42,6 +42,20 @@
   --err-2: light-dark(#c22c2c, #ff9098);
   --info: light-dark(#1e63d6, #7fb4ff);
 
+  /* Barvy ikon akcí. Vlastní sada, ne odstíny stavů z rozhraní: na liště
+     nese ikona význam akce, ne to, jestli něco dopadlo dobře nebo špatně.
+     Modrá se pohybuje a hledá, tyrkysová srovnává dva panely, zelená nese
+     k sobě, oranžová na server, červená ubírá, fialová mění obsah, šedá je
+     jen nářadí. Odstíny jsou o kousek sytější než barvy textu — ikona je
+     tenký tah, ne plocha, a bledší barva by na liště zmizela. */
+  --ic-blue: light-dark(#1e63d6, #62a0ff);
+  --ic-teal: light-dark(#0b93a6, #3fc3d4);
+  --ic-green: light-dark(#1c8145, #4fcb7d);
+  --ic-amber: light-dark(#b3730a, #edaa46);
+  --ic-red: light-dark(#c9342f, #ff6f6f);
+  --ic-violet: light-dark(#8034c2, #c48bf5);
+  --ic-gray: light-dark(#6b7280, #98a0b0);
+
   --soft-ok: light-dark(#dcf0e3, #1f3a2b);
   --soft-warn: light-dark(#faefd6, #3a3527);
   --soft-err: light-dark(#fbe1e1, #3d262a);
@@ -121,13 +135,39 @@ button.icon { padding: 3px 7px; }
 .ibtn { display: inline-flex; align-items: center; gap: 5px; }
 .ibtn::before { flex: none; }
 button.icon.ibtn { padding: 4px 6px; }
+
+/* Tlačítko, které nese jen ikonu, se kreslí bez rámečku. Šedý obdélník
+   kolem každé ikony dělal z lišty mřížku a držel symbol malý, aby se do
+   něj vešel; bez něj je vidět tvar, ne krabička, a vejde se o dva body
+   větší. Podklad se vrací pod myší, ať je pořád poznat, že to jde zmáčknout.
+
+   `border-color` se jen zprůhlední, nemizí — jinak by tlačítko zhublo
+   o dva body a lišta by se přeskládala.
+
+   Zapnutý přepínač (`.on`) si rámeček i výplň nechává: je to jediné, čím
+   se pozná, že souběžné procházení nebo porovnání zrovna běží, a mezi
+   tlačítky bez rámečku je teď vidět ještě líp. */
+/* Odsazení dostanou i zapnuté přepínače, jinak by tlačítko při zapnutí
+   o dva body poskočilo a lišta by sebou cukla. */
+.toolbar button.ibtn:not(.primary),
+button.icon.ibtn { padding: 5px; }
+
+.toolbar button.ibtn:not(.primary):not(.on),
+button.icon.ibtn:not(.on) { background: none; border-color: transparent; }
+.toolbar button.ibtn:not(.primary):not(.on):hover:not(:disabled),
+button.icon.ibtn:not(.on):hover:not(:disabled) { background: var(--hover); }
+
+/* Bez rámečku je pro symbol místo, tak ho dostane. Tlačítka s popiskem
+   (Pauza, Relace) zůstávají na 18 — u textu by větší ikona přebíjela slovo. */
+.toolbar button.ibtn:not(.primary)::before,
+button.icon.ibtn::before { width: 20px; height: 20px; mask-size: 20px 20px; }
 /* Popisky v liště jsou vypnuté — akce nese tooltip. Zapínají se
    v Nastavení → Vzhled, když si na samotné ikony někdo nezvykne. */
 .toolbar .lbl { display: none; }
 #app.tb-labels .toolbar .lbl { display: inline; }
 /* Šipka u výběru relace patří k tlačítku, ne k akci — proto menší a tlumená. */
 #btn-sites .caret { opacity: .75; margin-left: -1px; }
-#btn-sites .caret::before { width: 11px; height: 11px; mask-size: 11px 11px; }
+#btn-sites .caret::before { width: 13px; height: 13px; mask-size: 13px 13px; }
 select { min-width: 180px; }
 input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
 

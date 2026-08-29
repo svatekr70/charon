@@ -1,6 +1,6 @@
 {
   "name": "charon",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Charon — dvoupanelový SFTP/FTP klient pro macOS, náhrada WinSCP",
   "main": "src/main/main.js",
   "scripts": {
@@ -11,7 +11,8 @@
     "install-app": "npm run dist && rm -rf /Applications/Charon.app && cp -R dist/mac-arm64/Charon.app /Applications/ && echo \"Charon je aktualizovaný v /Applications\"",
     "servers": "node tools/test-servers.js",
     "devtools": "electron . --dev --devtools",
-    "icon": "electron tools/render-icon.js && iconutil -c icns build/icon.iconset -o build/icon.icns"
+    "icon": "electron tools/render-icon.js && iconutil -c icns build/icon.iconset -o build/icon.icns",
+    "icons": "swift tools/sf-icons.swift"
   },
   "author": "",
   "license": "MIT",

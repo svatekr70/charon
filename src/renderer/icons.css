@@ -1,116 +1,124 @@
 /**
- * Ikony souborů a složek.
+ * Ikony souborů, složek a akcí.
  *
- * Kreslí se jako maska, ne jako obrázek: tvar vezme jen průhlednost SVG
+ * Tvary jsou systémové SF Symbols vykreslené do PNG s alfa kanálem; kreslí
+ * je `tools/sf-icons.swift`, spouští se ručně přes `npm run icons`. Vektor
+ * z nich vytáhnout nejde — symboly jsou zamčené v Assets.car — a rozlišení
+ * je proto s rezervou, aby přiblížení okna (⌘+) ikony nerozmazalo.
+ *
+ * Kreslí se jako maska, ne jako obrázek: tvar vezme jen průhlednost PNG
  * a barvu určí `--icon-color`. Díky tomu ikony samy zesvětlají v tmavém
- * motivu, zbělají na vybraném řádku a nemusí existovat dvakrát. Barva uvnitř
- * SVG je proto nepodstatná.
+ * motivu, zbělají na vybraném řádku a nemusí existovat dvakrát. Barva
+ * uvnitř souboru je proto nepodstatná (je bílá).
  *
- * Vloženo přímo do stylu jako data: URI — jsou to drobné tvary, další soubory
- * na disku by u nich byly víc práce než užitku. Škatulky určuje
- * `src/common/filekind.js`.
+ * Jméno proměnné se rovná jménu souboru, takže `--i-delete` je
+ * `icons/delete.png`. Kde je tvar tentýž, stojí místo souboru zkratka na
+ * jinou proměnnou. Škatulky souborů určuje `src/common/filekind.js`.
  */
 
 :root {
-  --i-folder: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Cpath d='M1.7 4.3c0-.6.5-1 1-1h3.4l1.5 1.7h6.7c.6 0 1 .4 1 1v6.4c0 .6-.4 1-1 1H2.7c-.5 0-1-.4-1-1z'/%3E%3C/svg%3E");
-  --i-up: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M1.7 4.3c0-.6.5-1 1-1h3.4l1.5 1.7h6.7c.6 0 1 .4 1 1v6.4c0 .6-.4 1-1 1H2.7c-.5 0-1-.4-1-1z'/%3E%3Cpath d='M8 12V7.4M6.2 9.2L8 7.3l1.8 1.9'/%3E%3C/svg%3E");
-  --i-link: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round'%3E%3Cpath d='M6.4 9.6l3.2-3.2'/%3E%3Cpath d='M5.2 7.6L3.6 9.2a2.3 2.3 0 003.2 3.2l1.6-1.6'/%3E%3Cpath d='M10.8 8.4l1.6-1.6a2.3 2.3 0 00-3.2-3.2L7.6 5.2'/%3E%3C/svg%3E");
-  --i-file: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Cpath d='M3.7 1.9h5.1l3.5 3.5v8.7H3.7z'/%3E%3Cpath d='M8.8 1.9v3.5h3.5'/%3E%3C/svg%3E");
-  --i-text: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M3.7 1.9h5.1l3.5 3.5v8.7H3.7z'/%3E%3Cpath d='M8.8 1.9v3.5h3.5'/%3E%3Cpath d='M5.8 8.4h4.4M5.8 11h4.4'/%3E%3C/svg%3E");
-  --i-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Crect x='1.8' y='2.9' width='12.4' height='10.2' rx='1.2'/%3E%3Ccircle cx='5.6' cy='6.4' r='1.1'/%3E%3Cpath d='M2.2 11.6l3.3-3 2.3 2 2.4-2.6 3.6 3.9'/%3E%3C/svg%3E");
-  --i-video: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Crect x='1.6' y='3.4' width='9.2' height='9.2' rx='1.2'/%3E%3Cpath d='M10.8 8l3.6-2.4v4.8z'/%3E%3C/svg%3E");
-  --i-audio: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Cpath d='M6.1 11.6V3.9l7-1.4v7.7'/%3E%3Ccircle cx='4.4' cy='11.7' r='1.8'/%3E%3Ccircle cx='11.4' cy='10.3' r='1.8'/%3E%3C/svg%3E");
-  --i-archive: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.3 5.8h11.4v6.9c0 .6-.4 1-1 1H3.3c-.6 0-1-.4-1-1z'/%3E%3Crect x='1.7' y='2.4' width='12.6' height='3.4' rx='.8'/%3E%3Cpath d='M6.7 9.1h2.6'/%3E%3C/svg%3E");
-  --i-disk: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4'%3E%3Ccircle cx='8' cy='8' r='6.1'/%3E%3Ccircle cx='8' cy='8' r='1.7'/%3E%3C/svg%3E");
-  --i-code: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M5.6 4.3L1.9 8l3.7 3.7M10.4 4.3L14.1 8l-3.7 3.7'/%3E%3C/svg%3E");
-  --i-markup: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M6.2 3.6L3.6 8l2.6 4.4M9.8 3.6L12.4 8l-2.6 4.4'/%3E%3Cpath d='M8.9 2.9l-1.8 10.2'/%3E%3C/svg%3E");
-  --i-style: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Cpath d='M8 1.9s4.5 4.9 4.5 7.6a4.5 4.5 0 01-9 0C3.5 6.8 8 1.9 8 1.9z'/%3E%3C/svg%3E");
-  --i-data: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Cellipse cx='8' cy='4' rx='5.1' ry='2.1'/%3E%3Cpath d='M2.9 4v8c0 1.2 2.3 2.1 5.1 2.1s5.1-.9 5.1-2.1V4'/%3E%3Cpath d='M13.1 8c0 1.2-2.3 2.1-5.1 2.1S2.9 9.2 2.9 8'/%3E%3C/svg%3E");
-  --i-config: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='2.3'/%3E%3Cpath d='M8 1.6v1.9M8 12.5v1.9M14.4 8h-1.9M3.5 8H1.6M12.5 3.5l-1.3 1.3M4.8 11.2l-1.3 1.3M12.5 12.5l-1.3-1.3M4.8 4.8L3.5 3.5'/%3E%3C/svg%3E");
-  --i-pdf: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M3.7 1.9h5.1l3.5 3.5v8.7H3.7z'/%3E%3Cpath d='M8.8 1.9v3.5h3.5'/%3E%3Cpath d='M5.9 11.6c2.2-1 3.3-3 3.4-4.6.1-1-.9-1.2-1.2-.4-.4 1.1 1 4.4 2.6 5'/%3E%3C/svg%3E");
-  --i-doc: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M3.7 1.9h5.1l3.5 3.5v8.7H3.7z'/%3E%3Cpath d='M8.8 1.9v3.5h3.5'/%3E%3Cpath d='M5.8 7.3h2.4M5.8 9.6h4.4M5.8 11.9h4.4'/%3E%3C/svg%3E");
-  --i-sheet: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round'%3E%3Crect x='1.9' y='2.6' width='12.2' height='10.8' rx='1'/%3E%3Cpath d='M1.9 6.2h12.2M1.9 9.8h12.2M6.4 2.6v10.8'/%3E%3C/svg%3E");
-  --i-slides: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='1.7' y='2.4' width='12.6' height='8.6' rx='1'/%3E%3Cpath d='M8 11v2.4M5.6 13.6h4.8'/%3E%3C/svg%3E");
-  --i-font: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M3.4 13.2L8 2.8l4.6 10.4'/%3E%3Cpath d='M5.2 9.6h5.6'/%3E%3C/svg%3E");
-  --i-exe: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='1.7' y='2.6' width='12.6' height='10.8' rx='1.2'/%3E%3Cpath d='M4.4 6.3l2.2 2.1-2.2 2.1M8.4 10.9h3.2'/%3E%3C/svg%3E");
-  --i-key: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Ccircle cx='5.2' cy='8' r='2.9'/%3E%3Cpath d='M8.1 8h6.2M12.6 8v2.4M10.4 8v2'/%3E%3C/svg%3E");
+  --i-folder: url("icons/folder.png");
+  --i-up: url("icons/up.png");
+  --i-link: url("icons/link.png");
+  --i-file: url("icons/file.png");
+  --i-text: url("icons/text.png");
+  --i-image: url("icons/image.png");
+  --i-video: url("icons/video.png");
+  --i-audio: url("icons/audio.png");
+  --i-archive: url("icons/archive.png");
+  --i-disk: url("icons/disk.png");
+  --i-code: url("icons/code.png");
+  --i-markup: url("icons/markup.png");
+  --i-style: url("icons/style.png");
+  --i-data: url("icons/data.png");
+  --i-config: url("icons/config.png");
+  --i-pdf: url("icons/pdf.png");
+  --i-doc: url("icons/doc.png");
+  --i-sheet: url("icons/sheet.png");
+  --i-slides: url("icons/slides.png");
+  --i-font: url("icons/font.png");
+  --i-exe: url("icons/exe.png");
+  --i-key: url("icons/key.png");
 }
 
 /* ------------------------------------------------------------ ikony akcí
-   Tlačítka v liště, v hlavičkách panelů a u fronty. Kreslí se stejně jako
-   ikony souborů — rám 16x16, tah 1.4, kulaté rohy — a stejnou cestou:
-   maskou, aby se barva vzala z tlačítka a nemusely existovat dvě sady.
-   Kde se tvar opakuje (ozubené kolo, okno terminálu), jen se přejmenuje. */
+   Tlačítka v liště, v hlavičkách panelů a u fronty. Kreslí se stejnou
+   cestou jako ikony souborů — maskou, aby se barva vzala z tlačítka
+   a nemusely existovat dvě sady. Kde se tvar opakuje (ozubené kolo, okno
+   terminálu), jen se přejmenuje. */
 :root {
-  --i-sites: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='2.3' y='2.7' width='11.4' height='4.4' rx='1.1'/%3E%3Crect x='2.3' y='8.9' width='11.4' height='4.4' rx='1.1'/%3E%3Cpath d='M4.7 4.9h1.8M4.7 11.1h1.8'/%3E%3C/svg%3E");
-  --i-connect: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M6.2 2.2v3.2M9.8 2.2v3.2'/%3E%3Cpath d='M4.6 5.4h6.8v2.3a3.4 3.4 0 0 1-6.8 0z'/%3E%3Cpath d='M8 11.1v2.7'/%3E%3C/svg%3E");
-  --i-disconnect: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M6.5 9.5l-1.1 1.1a2.3 2.3 0 0 1-3.2-3.2l1.1-1.1'/%3E%3Cpath d='M9.5 6.5l1.1-1.1a2.3 2.3 0 0 1 3.2 3.2l-1.1 1.1'/%3E%3Cpath d='M2.6 2.6l10.8 10.8'/%3E%3C/svg%3E");
-  --i-newtab: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='1.8' y='3.2' width='12.4' height='9.6' rx='1.2'/%3E%3Cpath d='M8 6.2v3.6M6.2 8h3.6'/%3E%3C/svg%3E");
-  --i-workspaces: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M8 1.9l6 2.9-6 2.9-6-2.9z'/%3E%3Cpath d='M2.4 8.2L8 10.9l5.6-2.7'/%3E%3Cpath d='M2.4 11.3L8 14l5.6-2.7'/%3E%3C/svg%3E");
-  --i-openurl: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='6.1'/%3E%3Cpath d='M1.9 8h12.2'/%3E%3Cpath d='M8 1.9c1.7 1.7 2.6 3.8 2.6 6.1S9.7 12.4 8 14.1C6.3 12.4 5.4 10.3 5.4 8s.9-4.4 2.6-6.1z'/%3E%3C/svg%3E");
-  --i-import: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='1.7' y='2.4' width='12.6' height='3.4' rx='.8'/%3E%3Cpath d='M2.9 5.8h10.2v6.9c0 .6-.4 1-1 1H3.9c-.6 0-1-.4-1-1z'/%3E%3Cpath d='M8 7.6v3.4M6.3 9.3L8 11l1.7-1.7'/%3E%3C/svg%3E");
-  --i-upload: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M8 11V2.9'/%3E%3Cpath d='M5.1 5.8L8 2.9l2.9 2.9'/%3E%3Cpath d='M2.6 13.4h10.8'/%3E%3C/svg%3E");
-  --i-download: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M8 2.9V11'/%3E%3Cpath d='M5.1 8.1L8 11l2.9-2.9'/%3E%3Cpath d='M2.6 13.4h10.8'/%3E%3C/svg%3E");
-  --i-move: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M8 11V2.9'/%3E%3Cpath d='M5.1 5.8L8 2.9l2.9 2.9'/%3E%3Cpath d='M2.6 13.4h2.8M9.4 13.4h4'/%3E%3C/svg%3E");
-  --i-transfer-opts: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.4 4.4h11.2M2.4 8h11.2M2.4 11.6h11.2'/%3E%3Ccircle cx='5.4' cy='4.4' r='1.5'/%3E%3Ccircle cx='10.2' cy='8' r='1.5'/%3E%3Ccircle cx='6.6' cy='11.6' r='1.5'/%3E%3C/svg%3E");
-  --i-queue: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.4 4.2h6.4M2.4 7.4h6.4M2.4 10.6h4.2'/%3E%3Cpath d='M11.6 5.2v6.6'/%3E%3Cpath d='M9.4 9.6l2.2 2.2 2.2-2.2'/%3E%3C/svg%3E");
-  --i-pause: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M6.2 3.4v9.2M9.8 3.4v9.2'/%3E%3C/svg%3E");
-  --i-resume: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M5.2 3.3l7.2 4.7-7.2 4.7z'/%3E%3C/svg%3E");
-  --i-cancel: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='5.9'/%3E%3Cpath d='M6 6l4 4M10 6l-4 4'/%3E%3C/svg%3E");
-  --i-newfolder: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M1.7 4.3c0-.6.5-1 1-1h3.4l1.5 1.7h6.7c.6 0 1 .4 1 1v6.4c0 .6-.4 1-1 1H2.7c-.5 0-1-.4-1-1z'/%3E%3Cpath d='M8 8v3.4M6.3 9.7h3.4'/%3E%3C/svg%3E");
-  --i-newfile: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M9.1 1.9H4.3c-.6 0-1 .4-1 1v10.2c0 .6.4 1 1 1h7.4c.6 0 1-.4 1-1V5.4z'/%3E%3Cpath d='M9.1 1.9v3.5h3.6'/%3E%3Cpath d='M8 8.3v3.6M6.2 10.1h3.6'/%3E%3C/svg%3E");
-  --i-rename: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='1.8' y='4.2' width='12.4' height='7.6' rx='1.1'/%3E%3Cpath d='M6.4 6.4h3.2M8 6.4v3.2M6.4 9.6h3.2'/%3E%3C/svg%3E");
-  --i-edit: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M11.1 2.4l2.5 2.5-7.7 7.7-3.3.8.8-3.3z'/%3E%3Cpath d='M9.4 4.1l2.5 2.5'/%3E%3C/svg%3E");
-  --i-duplicate: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='2.2' y='2.2' width='7.8' height='7.8' rx='1.1'/%3E%3Crect x='6' y='6' width='7.8' height='7.8' rx='1.1'/%3E%3C/svg%3E");
-  --i-delete: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.6 4.4h10.8'/%3E%3Cpath d='M6.4 4.4V2.8h3.2v1.6'/%3E%3Cpath d='M4 4.4l.7 8.2c0 .5.5.9 1 .9h4.6c.5 0 1-.4 1-.9l.7-8.2'/%3E%3Cpath d='M6.8 6.9v4.2M9.2 6.9v4.2'/%3E%3C/svg%3E");
-  --i-properties: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Ccircle cx='8' cy='8' r='6.1'/%3E%3Cpath d='M8 7.4v3.6'/%3E%3Cpath d='M8 4.9v.8'/%3E%3C/svg%3E");
-  --i-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.6 5.6V3.6c0-.6.4-1 1-1h2M10.4 2.6h2c.6 0 1 .4 1 1v2M13.4 10.4v2c0 .6-.4 1-1 1h-2M5.6 13.4h-2c-.6 0-1-.4-1-1v-2'/%3E%3Cpath d='M8 5.9v4.2M6.2 6.9l3.6 2.2M9.8 6.9l-3.6 2.2'/%3E%3C/svg%3E");
-  --i-refresh: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M13.3 8a5.3 5.3 0 1 1-1.7-3.9'/%3E%3Cpath d='M13.5 2.2v3.5H10'/%3E%3C/svg%3E");
-  --i-compare: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.6 2.8v10.4M13.4 2.8v10.4'/%3E%3Cpath d='M5.2 6.3h5.6M9 4.7l1.8 1.6-1.8 1.6'/%3E%3Cpath d='M10.8 10.3H5.2M7 8.7l-1.8 1.6 1.8 1.6'/%3E%3C/svg%3E");
-  --i-syncbrowse: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.6 2.8v10.4M13.4 2.8v10.4'/%3E%3Cpath d='M5.2 6.3h5.6M9 4.7l1.8 1.6-1.8 1.6'/%3E%3Cpath d='M5.2 10.3h5.6M9 8.7l1.8 1.6-1.8 1.6'/%3E%3C/svg%3E");
-  --i-filter: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.2 3.4h11.6L9.4 8.6v4.3l-2.8 1.3V8.6z'/%3E%3C/svg%3E");
-  --i-find: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='4.4'/%3E%3Cpath d='M10.2 10.2l3.4 3.4'/%3E%3C/svg%3E");
-  --i-hidden: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M1.4 8s2.5-4.2 6.6-4.2S14.6 8 14.6 8s-2.5 4.2-6.6 4.2S1.4 8 1.4 8z'/%3E%3Ccircle cx='8' cy='8' r='1.9'/%3E%3C/svg%3E");
-  --i-bookmark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M3.8 3.4c0-.6.4-1 1-1h6.4c.6 0 1 .4 1 1v10.2L8 10.7l-4.2 2.9z'/%3E%3C/svg%3E");
-  --i-home: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.2 7.4L8 2.4l5.8 5'/%3E%3Cpath d='M3.8 8.6v4.2c0 .4.3.7.7.7h7c.4 0 .7-.3.7-.7V8.6'/%3E%3C/svg%3E");
-  --i-levelup: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.8 2.8h10.4'/%3E%3Cpath d='M8 13.4V5.8M4.6 9.2L8 5.8l3.4 3.4'/%3E%3C/svg%3E");
-  --i-back: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M13.2 8H3.4M7.5 3.9L3.4 8l4.1 4.1'/%3E%3C/svg%3E");
-  --i-fwd: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.8 8h9.8M8.5 3.9L12.6 8l-4.1 4.1'/%3E%3C/svg%3E");
-  --i-sync: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M1.7 4.3c0-.6.5-1 1-1h3.4l1.5 1.7h6.7c.6 0 1 .4 1 1v6.4c0 .6-.4 1-1 1H2.7c-.5 0-1-.4-1-1z'/%3E %3Cpath d='M5.4 9.1h5.2L9 7.5M10.6 11.5H5.4L7 13.1'/%3E%3C/svg%3E");
-  --i-watch: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M1.7 4.3c0-.6.5-1 1-1h3.4l1.5 1.7h6.7c.6 0 1 .4 1 1v6.4c0 .6-.4 1-1 1H2.7c-.5 0-1-.4-1-1z'/%3E %3Cpath d='M6.5 11.9a2.2 2.2 0 0 1 3 0M4.7 10.1a4.7 4.7 0 0 1 6.6 0'/%3E%3Cpath d='M8 13.1h.01'/%3E%3C/svg%3E");
+  --i-sites: url("icons/sites.png");
+  --i-connect: url("icons/connect.png");
+  --i-disconnect: url("icons/disconnect.png");
+  --i-newtab: url("icons/newtab.png");
+  --i-workspaces: url("icons/workspaces.png");
+  --i-openurl: url("icons/openurl.png");
+  --i-import: url("icons/import.png");
+  --i-upload: url("icons/upload.png");
+  --i-download: url("icons/download.png");
+  --i-move: url("icons/move.png");
+  --i-transfer-opts: url("icons/transfer-opts.png");
+  --i-queue: url("icons/queue.png");
+  --i-pause: url("icons/pause.png");
+  --i-resume: url("icons/resume.png");
+  --i-cancel: url("icons/cancel.png");
+  --i-newfolder: url("icons/newfolder.png");
+  --i-newfile: url("icons/newfile.png");
+  --i-rename: url("icons/rename.png");
+  --i-edit: url("icons/edit.png");
+  --i-duplicate: url("icons/duplicate.png");
+  --i-delete: url("icons/delete.png");
+  --i-properties: url("icons/properties.png");
+  --i-mask: url("icons/mask.png");
+  --i-refresh: url("icons/refresh.png");
+  --i-compare: url("icons/compare.png");
+  --i-syncbrowse: url("icons/syncbrowse.png");
+  --i-filter: url("icons/filter.png");
+  --i-find: url("icons/find.png");
+  --i-hidden: url("icons/hidden.png");
+  --i-bookmark: url("icons/bookmark.png");
+  --i-home: url("icons/home.png");
+  --i-levelup: url("icons/levelup.png");
+  --i-back: url("icons/back.png");
+  --i-fwd: url("icons/fwd.png");
+  --i-sync: url("icons/sync.png");
+  --i-watch: url("icons/watch.png");
   --i-terminal: var(--i-exe);
-  --i-shell: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M13.4 8.6v3.8c0 .6-.4 1-1 1H3.6c-.6 0-1-.4-1-1V3.6c0-.6.4-1 1-1h3.8'/%3E%3Cpath d='M9.8 2.6h3.6v3.6'/%3E%3Cpath d='M13.4 2.6L8.6 7.4'/%3E%3C/svg%3E");
-  --i-commands: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Crect x='1.7' y='2.6' width='12.6' height='10.8' rx='1.2'/%3E%3Cpath d='M6.3 5.6l4 2.4-4 2.4z'/%3E%3C/svg%3E");
-  --i-emptytrash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.6 5.4h10.8'/%3E%3Cpath d='M6.4 5.4V3.8h3.2v1.6'/%3E%3Cpath d='M4 5.4l.7 7.2c0 .5.5.9 1 .9h4.6c.5 0 1-.4 1-.9l.7-7.2'/%3E%3Cpath d='M6.8 1.9l-.8 1.4M9.2 1.9l.8 1.4'/%3E%3C/svg%3E");
+  --i-shell: url("icons/shell.png");
+  --i-commands: url("icons/commands.png");
+  --i-emptytrash: url("icons/emptytrash.png");
   --i-settings: var(--i-config);
   /* Přenos mezi panely. Svislice je protější panel, hrot míří k němu;
      přerušená čára u přesunu znamená, že zdroj po sobě nic nenechá. */
-  --i-copy-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M3.9 2.3v3.2M2.3 3.9h3.2'/%3E%3Cpath d='M2.6 9.6h8.2'/%3E%3Cpath d='M8.2 7L10.8 9.6l-2.6 2.6'/%3E%3Cpath d='M13.6 3.6v9'/%3E%3C/svg%3E");
-  --i-copy-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M12.1 2.3v3.2M10.5 3.9h3.2'/%3E%3Cpath d='M13.4 9.6H5.2'/%3E%3Cpath d='M7.8 7L5.2 9.6l2.6 2.6'/%3E%3Cpath d='M2.4 3.6v9'/%3E%3C/svg%3E");
-  --i-move-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M2.6 8h8.2'/%3E%3Cpath d='M8.2 5.4L10.8 8l-2.6 2.6'/%3E%3Cpath d='M13.6 2.9v10.2'/%3E%3C/svg%3E");
-  --i-move-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M13.4 8H5.2'/%3E%3Cpath d='M7.8 5.4L5.2 8l2.6 2.6'/%3E%3Cpath d='M2.4 2.9v10.2'/%3E%3C/svg%3E");
-  --i-reveal: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M1.7 4.3c0-.6.5-1 1-1h3.4l1.5 1.7h6.7c.6 0 1 .4 1 1v6.4c0 .6-.4 1-1 1H2.7c-.5 0-1-.4-1-1z'/%3E%3Cpath d='M6.4 9.6l3.4-3.4M6.8 6.2h3v3'/%3E%3C/svg%3E");
+  --i-copy-right: url("icons/copy-right.png");
+  --i-copy-left: url("icons/copy-left.png");
+  --i-move-right: url("icons/move-right.png");
+  --i-move-left: url("icons/move-left.png");
+  --i-reveal: url("icons/reveal.png");
   /* Oko u hesla. Tvar je tentýž jako u skrytých souborů, jen pod jiným jménem —
      a přeškrtnuté pro „schovat zpátky". */
   --i-eye: var(--i-hidden);
-  --i-eye-off: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M1.4 8s2.5-4.2 6.6-4.2S14.6 8 14.6 8s-2.5 4.2-6.6 4.2S1.4 8 1.4 8z'/%3E%3Ccircle cx='8' cy='8' r='1.9'/%3E%3Cpath d='M2.6 2.6l10.8 10.8'/%3E%3C/svg%3E");
-  --i-caret: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='M4.6 6.4L8 9.8l3.4-3.4'/%3E%3C/svg%3E");
+  --i-eye-off: url("icons/eye-off.png");
+  --i-caret: url("icons/caret.png");
 }
 
 /* Ikona je pozadí prázdného pseudoprvku; vlastní tvar dělá maska, takže
    `--icon-color` obarví cokoliv. */
+/* Rámeček je o dva body větší, než býval u ručně kreslených tvarů: symboly
+   se do svého čtverce vejdou s rezervou po stranách, takže při 14 px by
+   vyšly drobné. Kreslený tvar má i tak zhruba stejnou velikost jako dřív. */
 .row .name::before {
   content: '';
   display: inline-block;
-  width: 14px; height: 14px;
-  margin-right: 6px;
-  vertical-align: -2.5px;
+  width: 16px; height: 16px;
+  margin-right: 5px;
+  vertical-align: -3.5px;
   background: var(--icon-color, var(--fg-dim));
-  mask: var(--icon, var(--i-file)) center / 14px 14px no-repeat;
+  mask: var(--icon, var(--i-file)) center / 16px 16px no-repeat;
 }
 
 /* Hlavička sloupce se posune o stejný kus, ať názvy začínají pod ní. */
-.list-head .col-name { padding-left: 20px; }
+.list-head .col-name { padding-left: 21px; }
 
 /* Nadřazená složka je pořád složka, jen se jde nahoru. */
 .row[data-up] .name::before { --icon: var(--i-up); --icon-color: var(--dir); }
@@ -134,10 +142,12 @@
 .row[data-kind="key"] .name::before { --icon: var(--i-key); --icon-color: var(--warn); }
 .row[data-kind="config"] .name::before { --icon: var(--i-config); --icon-color: var(--warn); }
 
-.row[data-kind="pdf"] .name::before { --icon: var(--i-pdf); }
-.row[data-kind="doc"] .name::before { --icon: var(--i-doc); }
+/* Kancelářské formáty drží barvy, na které je člověk zvyklý odjinud —
+   tabulka zelená, prezentace oranžová, PDF červené. */
+.row[data-kind="pdf"] .name::before { --icon: var(--i-pdf); --icon-color: var(--ic-red); }
+.row[data-kind="doc"] .name::before { --icon: var(--i-doc); --icon-color: var(--ic-blue); }
 .row[data-kind="sheet"] .name::before { --icon: var(--i-sheet); --icon-color: var(--ok); }
-.row[data-kind="slides"] .name::before { --icon: var(--i-slides); }
+.row[data-kind="slides"] .name::before { --icon: var(--i-slides); --icon-color: var(--ic-amber); }
 .row[data-kind="text"] .name::before { --icon: var(--i-text); }
 .row[data-kind="binary"] .name::before { --icon: var(--i-file); }
 
@@ -150,10 +160,10 @@
 .ibtn::before {
   content: '';
   display: inline-block;
-  width: 16px; height: 16px;
-  vertical-align: -3px;
+  width: 18px; height: 18px;
+  vertical-align: -4px;
   background: var(--icon-color, currentColor);
-  mask: var(--icon, var(--i-file)) center / 16px 16px no-repeat;
+  mask: var(--icon, var(--i-file)) center / 18px 18px no-repeat;
 }
 
 /* Přiřazení tvaru akci. Jméno v `data-icon` je jméno proměnné. */
@@ -211,3 +221,85 @@
 [data-icon="eye"]::before { --icon: var(--i-eye); }
 [data-icon="eye-off"]::before { --icon: var(--i-eye-off); }
 [data-icon="caret"]::before { --icon: var(--i-caret); }
+
+/* --------------------------------------------------- barva ikon akcí
+   Ikona bere barvu podle toho, co akce dělá, ne podle toho, kde tlačítko
+   stojí. Nejvíc se to vyplatí u dvojic, které mají stejný tvar a liší se
+   jen směrem: „k sobě" je vždycky zelená, „na server" oranžová, takže se
+   pozná dřív, než si člověk přečte tooltip.
+
+   Tvary se nemění — kreslí se pořád maskou, takže stačilo doplnit
+   `--icon-color`. Barvy jsou v styles.css, tady je jen přiřazení. */
+
+/* Pohyb, hledání a otvírání — nic to nemění, jen se to někam dívá. */
+[data-icon="back"]::before,
+[data-icon="fwd"]::before,
+[data-icon="levelup"]::before,
+[data-icon="home"]::before,
+[data-icon="browse"]::before,
+[data-icon="refresh"]::before,
+[data-icon="find"]::before,
+[data-icon="properties"]::before,
+[data-icon="reveal"]::before,
+[data-icon="openurl"]::before,
+[data-icon="newtab"]::before,
+[data-icon="workspaces"]::before,
+[data-icon="sites"]::before,
+[data-icon="queue"]::before { --icon-color: var(--ic-blue); }
+
+/* Práce s oběma panely naráz — porovnat, srovnat, projít souběžně. */
+[data-icon="compare"]::before,
+[data-icon="syncbrowse"]::before,
+[data-icon="sync"]::before,
+[data-icon="transfer-opts"]::before,
+[data-icon="filter"]::before,
+[data-icon="mask"]::before { --icon-color: var(--ic-teal); }
+
+/* Směrem k sobě: stažení, připojení, rozjetí fronty. */
+[data-icon="copy-left"]::before,
+[data-icon="move-left"]::before,
+[data-icon="download"]::before,
+[data-icon="connect"]::before,
+[data-icon="import"]::before,
+[data-icon="resume"]::before { --icon-color: var(--ic-green); }
+
+/* Směrem na server, a všechno, co si zaslouží chvilku zaváhání. */
+[data-icon="copy-right"]::before,
+[data-icon="move-right"]::before,
+[data-icon="move"]::before,
+[data-icon="upload"]::before,
+[data-icon="watch"]::before,
+[data-icon="bookmark"]::before,
+[data-icon="pause"]::before { --icon-color: var(--ic-amber); }
+
+/* Ubírá: maže, ruší, odpojuje. */
+[data-icon="delete"]::before,
+[data-icon="emptytrash"]::before,
+[data-icon="cancel"]::before,
+[data-icon="disconnect"]::before { --icon-color: var(--ic-red); }
+
+/* Zakládá, přejmenovává, upravuje — všechno, co sahá na obsah složky.
+   Drží pohromadě schválně: v liště panelu tvoří jednu skupinu se `delete`,
+   a ta z ní červeně vyčnívá právě proto, že jako jediná ubírá. */
+[data-icon="newfolder"]::before,
+[data-icon="newfile"]::before,
+[data-icon="duplicate"]::before,
+[data-icon="rename"]::before,
+[data-icon="edit"]::before { --icon-color: var(--ic-violet); }
+
+/* Nářadí. Barvu nepotřebuje — spíš by na sebe zbytečně strhávalo pozornost. */
+[data-icon="terminal"]::before,
+[data-icon="shell"]::before,
+[data-icon="commands"]::before,
+[data-icon="settings"]::before,
+[data-icon="hidden"]::before,
+[data-icon="eye"]::before,
+[data-icon="eye-off"]::before { --icon-color: var(--ic-gray); }
+
+/* Kde si barvu určuje stav, ikona svou vlastní pouští: na modrém podkladu
+   by modrá zmizela a na zakázaném tlačítku má být vidět, že je zakázané,
+   ne co dělá. `caret` u výběru relace zůstává bez barvy schválně — patří
+   k tlačítku, ne k akci. */
+button.primary[data-icon]::before,
+button.on[data-icon]::before,
+button:disabled[data-icon]::before { --icon-color: currentColor; }

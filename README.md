@@ -187,12 +187,25 @@ Co zrovna nejde, je zašedlé, a každý panel se řídí svým vlastním výbě
 spojení zůstane přístupná jen lokální strana, bez výběru jen zakládání (nová
 složka, nový soubor) a Terminál.
 
-Ikony jsou kreslené jako maska ve stejném zápisu jako ikony souborů
-(rám 16 × 16, tah 1,4, kulaté rohy) — barvu berou z písma tlačítka, takže
-v tmavém motivu zesvětlají a na zvýrazněném tlačítku zbělají samy. Tvary
-jsou v `src/renderer/icons.css` jako proměnné `--i-*`, tlačítko si o ně
-řekne přes `class="ibtn" data-icon="…"`. Kde se tvar opakuje (ozubené kolo,
-okno terminálu), jen se přejmenuje, nekreslí podruhé.
+Ikony jsou systémové **SF Symbols** a kreslí se jako maska: tvar vezmou
+z obrázku a barvu dostanou z palety. Tvary jsou v `src/renderer/icons.css`
+jako proměnné `--i-*`, tlačítko si o ně řekne přes `class="ibtn"
+data-icon="…"`. Kde se tvar opakuje (ozubené kolo, okno terminálu), jen se
+přejmenuje, nekreslí podruhé.
+
+**Barvu nese význam akce, ne umístění tlačítka.** Modrá se pohybuje a hledá,
+tyrkysová srovnává dva panely, zelená nese k sobě, oranžová na server,
+fialová tvoří a mění, červená ubírá, šedá je nářadí. Nejvíc se to vyplatí
+u dvojic, které mají stejný tvar a liší se jen směrem: „k sobě" je vždycky
+zelená, „na server" oranžová, takže se to pozná dřív, než si člověk přečte
+tooltip. Kde si barvu určuje stav — zapnutý přepínač, zakázané tlačítko —
+ikona tu svou pouští, protože tam má být vidět stav, ne akce.
+
+**Tlačítko, které nese jen ikonu, nemá rámeček.** Šedý obdélník kolem každé
+z nich dělal z lišty mřížku a držel symbol malý, aby se do něj vešel. Bez
+něj je vidět tvar, ne krabička. Podklad se vrací pod myší, ať je pořád
+poznat, že to jde zmáčknout, a zapnutý přepínač si výplň nechává — je to
+jediné, čím se pozná, že souběžné procházení nebo porovnání zrovna běží.
 
 Popisky u tlačítek jsou vypnuté a akci prozradí tooltip; zapnout je jde
 v **Nastavení → Vzhled**. Do lišty se schválně nedostaly věci, které se dělají
@@ -428,9 +441,14 @@ jinam a nechcete kvůli tomu do Keychainu.
 
 Vlastní, kreslená v `build/icon.svg`. Charon je převozník, který vozí duše přes
 Styx — tedy přesně to, co aplikace dělá se soubory: bere je z jednoho břehu na
-druhý. Proto loďka s postavou v kápi proti světlé obloze a modrá voda přes
-spodní půlku. Všechno na siluetu, aby to bylo čitelné i ve 32 bodech, kde
-z detailů stejně zbude jen tvar.
+druhý. Význam nese samotná loď: světlý trup proti tmavé vodě, přes něj veslo.
+
+Postava v kápi, která v lodi stávala, je pryč. Ve 32 bodech se slila s trupem
+do jedné tmavé skvrny, ve které lidi poznávali spíš klobouk než člun. Veslo je
+schválně šikmo — svisle by splynulo s okrajem trupu, takhle se od srpku odliší
+i v malém a dodá pohyb. Rozhoduje malá velikost, takže v ikoně nejsou detaily,
+které by se ve 32 bodech stejně slily; zkontrolovat se to dá kontaktním listem,
+totéž SVG vedle sebe ve 128, 64, 48 a 32 bodech.
 
 ```bash
 npm run icon
@@ -524,11 +542,32 @@ mate:
 Stejný modul plní sloupec **Typ** v dialogu vlastností, kde je vidět i celý
 MIME. Panel a vlastnosti se tak nemůžou rozejít v tom, co je co.
 
-Ikony se kreslí jako maska, ne jako obrázek: tvar vezme z SVG a barvu dostane
-z palety. Proto samy zesvětlají v tmavém motivu a zbělají na vybraném řádku,
-aniž by musely existovat dvakrát. Na 924 položkách je vykreslení stejně rychlé
-jako bez nich (16,5 vs. 16,6 ms) — dvacet různých tvarů si prohlížeč
+Ikony se kreslí jako maska, ne jako obrázek: tvar vezme z obrázku a barvu
+dostane z palety. Proto samy zesvětlají v tmavém motivu a zbělají na vybraném
+řádku, aniž by musely existovat dvakrát. Na 924 položkách je vykreslení stejně
+rychlé jako bez nich (16,5 vs. 16,6 ms) — dvacet různých tvarů si prohlížeč
 dekóduje jednou.
+
+Tvary jsou systémové **SF Symbols**, vykreslené do PNG s alfa kanálem:
+
+```bash
+npm run icons
+```
+
+Kreslí je `tools/sf-icons.swift`, spouští se ručně a hotové soubory leží
+v `src/renderer/icons/`. K sestavení aplikace Swift potřeba není.
+
+Vektor z SF Symbols ven nevede: symboly jsou zamčené v `Assets.car` a i
+`NSImage.draw` do PDF z nich udělá bitmapu. Kreslí se proto s velkou rezervou
+(hrana 128 px na ikonu zobrazovanou ve 20), aby zůstaly ostré i po přiblížení
+okna. Masce barevný kanál nevadí — čte se jen průhlednost.
+
+Všechny symboly jdou do stejně velkého čtverce a při stejné velikosti písma.
+Kdyby se každý ořízl na svůj vlastní obrys, tenká šipka by se roztáhla na
+velikost složky; takhle zůstanou poměry, jak je Apple navrhl. Rámeček je
+proto o kus větší než běžný symbol a zbylé volno se dorovná až v CSS. Nástroj
+hlídá, že se do něj vejde i ten největší — po zvýšení váhy tahu na `semibold`
+symboly povyrostly a rámeček se musel zvětšit s nimi.
 
 ## Rozlišení relací
 
