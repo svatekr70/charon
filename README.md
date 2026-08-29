@@ -439,26 +439,40 @@ jinam a nechcete kvůli tomu do Keychainu.
 
 ## Ikona
 
-Vlastní, kreslená v `build/icon.svg`. Charon je převozník, který vozí duše přes
+Kreslená, leží v `build/icon.png`. Charon je převozník, který vozí duše přes
 Styx — tedy přesně to, co aplikace dělá se soubory: bere je z jednoho břehu na
-druhý. Význam nese samotná loď: světlý trup proti tmavé vodě, přes něj veslo.
-
-Postava v kápi, která v lodi stávala, je pryč. Ve 32 bodech se slila s trupem
-do jedné tmavé skvrny, ve které lidi poznávali spíš klobouk než člun. Veslo je
-schválně šikmo — svisle by splynulo s okrajem trupu, takhle se od srpku odliší
-i v malém a dodá pohyb. Rozhoduje malá velikost, takže v ikoně nejsou detaily,
-které by se ve 32 bodech stejně slily; zkontrolovat se to dá kontaktním listem,
-totéž SVG vedle sebe ve 128, 64, 48 a 32 bodech.
+druhý. Proto postava v kápi s bidlem ve dřevěném člunu na vlnách.
 
 ```bash
 npm run icon
 ```
 
-Vykreslí SVG do všech velikostí, které macOS chce, a složí `build/icon.icns`.
-Rasterizérem je Chromium z Electronu — přidávat kvůli jedné ikoně další
-závislost by bylo víc práce než užitku. Na Retině vrací snímek dvojnásobek
-bodů, takže se výsledek ještě srovnává na přesnou velikost; `iconutil` na ní
-trvá.
+Vykreslí předlohu do všech velikostí, které macOS chce, a složí
+`build/icon.icns`. Rasterizérem je Chromium z Electronu — přidávat kvůli jedné
+ikoně další závislost by bylo víc práce než užitku. Na Retině vrací snímek
+dvojnásobek bodů, takže se výsledek ještě srovnává na přesnou velikost;
+`iconutil` na ni trvá.
+
+Předloha může být obrázek (`icon.png`) nebo kresba (`icon.svg`); PNG má
+přednost, aby šlo dodanou grafiku nasadit, aniž by se přepisovala kresba.
+Formát není podmínka — `.icns` je stejně jen sada PNG a SVG v tom řetězci
+bylo vždycky jen zdrojem. Ať má předloha aspoň 1024 × 1024, jinak se největší
+velikost roztáhne a rozmaže.
+
+Rámeček si kresba v SVG nese sama, dodaný obrázek ne — ten se orámuje až při
+vykreslení, na Applovu mřížku: obsah je čtverec 824 bodů uprostřed plátna
+1024 se zaoblením 185 a zbytek nechává místo na stín. Bez toho by v Docku mezi
+zaoblenými dlaždicemi svítil hranatý čtverec.
+
+Obrázek se v dlaždici ještě o 12 % přiblíží. Kreslí se obvykle s rezervou
+kolem — u téhle předlohy zabírá kresba 86 % šířky a 78 % výšky — a v malých
+velikostech se pak motiv scvrkne do nečitelna. Hodnota je spočítaná tak, aby
+se krajní tahy ještě vešly dovnitř; kdyby se předloha vyměnila za jinak
+zarámovanou, patří přepočítat.
+
+Rozhoduje malá velikost: v 32 bodech z ikony zbude jen silueta. Zkontrolovat
+se to dá kontaktním listem — hotová PNG z `build/icon.iconset/` vedle sebe
+ve 256, 128, 64, 48 a 32 bodech.
 
 ## Písmo a velikost
 
