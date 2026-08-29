@@ -677,8 +677,13 @@ function wirePane(side) {
     else if (act === 'browse') {
       const dir = await call(window.api.local.pickDir());
       if (dir) await loadPane('local', dir);
-    } else if (act === 'bookmark') showBookmarkMenu(side, ev.currentTarget);
-    else if (act === 'filter') toggleFilter(side);
+    } else if (act === 'bookmark') {
+      // Kliknutí nesmí doběhnout až k dokumentu — tam sedí posluchač, který
+      // nabídku zavírá při kliknutí mimo ni, a zavřel by ji hned po otevření.
+      // Ostatní nabídky vyskakují na pravé tlačítko, tenhle problém nemají.
+      ev.stopPropagation();
+      showBookmarkMenu(side, btn);
+    } else if (act === 'filter') toggleFilter(side);
     else if (act === 'filter-clear') setFilter(side, '');
     // Lišta panelu: co dělá, se týká téhle strany. Směr přenosu je dán
     // panelem, ne tím, který je zrovna vpředu.
