@@ -2878,8 +2878,11 @@ async function connectSelected() {
   $('#conn-status').textContent = 'Připojuji…';
 
   // Nová záložka převezme lokální cestu z té, ve které stojíme — obvykle
-  // se pracuje na jednom projektu a jen se střídají servery.
-  const carryLocal = active().local.path;
+  // se pracuje na jednom projektu a jen se střídají servery. Relace, která
+  // má vlastní lokální adresář uložený, si ale prosadí ten svůj: je to
+  // výslovné přání uživatele, kdežto přebírání je jen pohodlná domněnka.
+  const site = (state.sites || []).find((x) => x.id === id);
+  const carryLocal = site && site.localDir ? '' : active().local.path;
 
   const r = await call(window.api.sessions.open({ siteId: id }));
   if (!r) {
