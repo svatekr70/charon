@@ -189,30 +189,73 @@ async function expandRemote(adapter, remotePath, localBase, out = [], mask = nul
 }
 
 /**
+ * Zjistí, jestli vzdálená cesta ukazuje na složku.
+ *
+ * SFTP to řekne rovnou. FTP ne — `SIZE` na složce na jednom serveru selže
+ * a na druhém vrátí číslo, takže se na jeho odpověď nedá spolehnout. Proto
+ * se ptáme výpisu nadřazené složky, kde je typ položky vidět; teprve když
+ * ani to nevyjde (kořen), zkusíme do cesty vstoupit.
+ */
+async function isDir(adapter, remotePath) {
+  try {
+    const st = await adapter.stat(remotePath);
+    if (typeof st.isDirectory === 'boolean') return st.isDirectory;
+  } catch { /* FTP na složce SIZE neumí */ }
+
+  const parent = posix.dirname(remotePath);
+  const name = posix.basename(remotePath);
+  if (name && parent !== remotePath) {
+    try {
+      const entry = (await adapter.list(parent)).find((e) => e.name === name);
+      if (entry) return entry.type === 'd';
+    } catch { /* na nadřazenou složku nevidíme, zkusíme to jinak */ }
+  }
+  try {
+    await adapter.list(remotePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Rekurzivní změna práv na serveru.
  *
  * Složky a soubory dostávají jiná práva — 755 a 644 dávají smysl vedle sebe,
  * 644 na složce by ji znepřístupnilo. Proto se předávají obě hodnoty.
+ *
+ * Typ položky se nesmí hádat z toho, jestli výpis projde: FTP na `LIST soubor`
+ * ochotně vrátí řádek toho souboru, takže by se soubor tvářil jako složka,
+ * dostal by práva složky a pak by se do něj lezlo — a `SITE CHMOD` na
+ * neexistující cestě uvnitř souboru skončí chybou 550. Uvnitř stromu typ
+ * známe z výpisu nadřazené složky, u zadané cesty ho zjistí `isDir`.
+ *
+ * Složka se přenastavuje až po svém obsahu; kdyby nová práva vzala právo
+ * procházení, do už hotového vnitřku bychom se nedostali.
  */
-async function remoteChmod(adapter, target, { fileMode, dirMode, depth = 0 }, stats = { files: 0, dirs: 0 }) {
+async function remoteChmod(adapter, target, opts, stats = { files: 0, dirs: 0 }) {
+  const {
+    fileMode, dirMode, depth = 0, isDirectory = null,
+  } = opts;
   if (depth > MAX_DEPTH) return stats;
 
-  let entries = null;
-  try { entries = await adapter.list(target); } catch { /* není složka */ }
+  const dir = isDirectory === null ? await isDir(adapter, target) : isDirectory;
 
-  if (entries === null) {
+  if (!dir) {
     if (fileMode !== null) { await adapter.chmod(target, fileMode); stats.files += 1; }
     return stats;
   }
 
-  if (dirMode !== null) { await adapter.chmod(target, dirMode); stats.dirs += 1; }
-  for (const e of entries) {
+  for (const e of await adapter.list(target)) {
     if (e.name === '.' || e.name === '..' || e.type === 'l') continue;
-    await remoteChmod(adapter, posix.join(target, e.name), { fileMode, dirMode, depth: depth + 1 }, stats);
+    await remoteChmod(adapter, posix.join(target, e.name), {
+      fileMode, dirMode, depth: depth + 1, isDirectory: e.type === 'd',
+    }, stats);
   }
+  if (dirMode !== null) { await adapter.chmod(target, dirMode); stats.dirs += 1; }
   return stats;
 }
 
 module.exports = {
-  localDirSize, remoteDirSize, Finder, expandLocal, expandRemote, remoteChmod, MAX_DEPTH,
+  localDirSize, remoteDirSize, Finder, expandLocal, expandRemote, isDir, remoteChmod, MAX_DEPTH,
 };

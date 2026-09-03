@@ -6,13 +6,14 @@ const fs = require('fs');
 const fsp = fs.promises;
 const os = require('os');
 const path = require('path');
+
+const posix = path.posix;
 const crypto = require('crypto');
 
 const { startTestServer } = require('./sftp-server');
 const { SftpAdapter } = require('../src/main/adapters/sftp');
 const { FtpAdapter } = require('../src/main/adapters/ftp');
-const { remoteChmod } = require('../src/main/browse');
-const { isDir } = require('../src/main/session');
+const { remoteChmod, isDir } = require('../src/main/browse');
 const perms = require('../src/main/perms');
 const { hostKeyPath } = require('./fixtures');
 
@@ -133,6 +134,36 @@ async function main() {
     list: async () => { throw new Error('výpis se u SFTP volat nemá'); },
   };
   check('u SFTP stačí stat', await isDir(jakoSftp, '/cokoliv'), true);
+
+  // A totéž musí platit v rekurzi: `LIST soubor` u FTP vrátí řádek toho
+  // souboru, takže by se soubor tvářil jako složka a lezlo by se „dovnitř"
+  // něj — `SITE CHMOD` na takové cestě skončí chybou 550.
+  const volane = [];
+  const ftpStrom = {
+    stat: async () => ({ size: 96, mtime: null, isDirectory: null, mode: null }),
+    list: async (p) => {
+      if (p === '/www') return [{ name: 'index.php', type: 'f' }, { name: 'sub', type: 'd' }];
+      if (p === '/www/sub') return [{ name: 'b.txt', type: 'f' }];
+      // Server na výpis souboru vrátí jeho vlastní řádek.
+      const jmeno = posix.basename(p);
+      if (p === '/www/index.php' || p === '/www/sub/b.txt') return [{ name: jmeno, type: 'f' }];
+      throw new Error('550 Failed to change directory.');
+    },
+    chmod: async (p, mode) => {
+      if (!['/www', '/www/index.php', '/www/sub', '/www/sub/b.txt'].includes(p)) {
+        throw new Error(`550 SITE CHMOD command failed. (${p})`);
+      }
+      volane.push([p, mode.toString(8)]);
+    },
+  };
+  const ftpStats = await remoteChmod(ftpStrom, '/www', { fileMode: 0o644, dirMode: 0o755 });
+  check('rekurze u FTP nespadne na 550', [ftpStats.files, ftpStats.dirs], [2, 2]);
+  check('a nastaví, co má, obsah dřív než složku', volane, [
+    ['/www/index.php', '644'],
+    ['/www/sub/b.txt', '644'],
+    ['/www/sub', '755'],
+    ['/www', '755'],
+  ]);
 
   await adapter.disconnect();
   await server.close();

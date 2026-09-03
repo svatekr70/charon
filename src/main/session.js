@@ -1,14 +1,11 @@
 'use strict';
 
-const path = require('path');
-
-const posix = path.posix;
 const { TransferQueue } = require('./queue');
 const { EditWatcher } = require('./editor-watch');
 const { FolderWatcher } = require('./watcher');
 const { AdapterPool } = require('./pool');
 const { RemoteTrash } = require('./trash');
-const { Finder } = require('./browse');
+const { Finder, isDir } = require('./browse');
 const { ListCache } = require('./listcache');
 const perms = require('./perms');
 
@@ -307,36 +304,6 @@ class Session {
 
 function wait(ms) {
   return new Promise((resolve) => { setTimeout(resolve, ms); });
-}
-
-/**
- * Zjistí, jestli vzdálená cesta ukazuje na složku.
- *
- * SFTP to řekne rovnou. FTP ne — `SIZE` na složce na jednom serveru selže
- * a na druhém vrátí číslo, takže se na jeho odpověď nedá spolehnout. Proto
- * se ptáme výpisu nadřazené složky, kde je typ položky vidět; teprve když
- * ani to nevyjde (kořen), zkusíme do cesty vstoupit.
- */
-async function isDir(adapter, remotePath) {
-  try {
-    const st = await adapter.stat(remotePath);
-    if (typeof st.isDirectory === 'boolean') return st.isDirectory;
-  } catch { /* FTP na složce SIZE neumí */ }
-
-  const parent = posix.dirname(remotePath);
-  const name = posix.basename(remotePath);
-  if (name && parent !== remotePath) {
-    try {
-      const entry = (await adapter.list(parent)).find((e) => e.name === name);
-      if (entry) return entry.type === 'd';
-    } catch { /* na nadřazenou složku nevidíme, zkusíme to jinak */ }
-  }
-  try {
-    await adapter.list(remotePath);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**
